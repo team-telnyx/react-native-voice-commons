@@ -14,8 +14,9 @@ class VoicePnBridge: NSObject {
     
     @objc
     func getPendingPushAction(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
-        let action = UserDefaults.standard.string(forKey: "pending_push_action")
-        let metadata = UserDefaults.standard.string(forKey: "pending_push_metadata")
+        let snapshot = TelnyxCallKitManager.shared.pendingPushSnapshot()
+        let action = snapshot.action
+        let metadata = snapshot.metadata
         
         NSLog("[VoicePnBridge] getPendingPushAction - action: \(action ?? "nil"), metadata: \(metadata ?? "nil")")
         
@@ -29,9 +30,7 @@ class VoicePnBridge: NSObject {
     
     @objc
     func setPendingPushAction(_ action: String, metadata: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
-        UserDefaults.standard.set(action, forKey: "pending_push_action")
-        UserDefaults.standard.set(metadata, forKey: "pending_push_metadata")
-        UserDefaults.standard.synchronize()
+        TelnyxCallKitManager.shared.replacePendingPushAction(action: action, metadata: metadata)
         
         NSLog("[VoicePnBridge] setPendingPushAction - action: \(action), metadata: \(metadata)")
         resolve(true)
@@ -39,11 +38,11 @@ class VoicePnBridge: NSObject {
     
     @objc
     func clearPendingPushAction(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
-        UserDefaults.standard.removeObject(forKey: "pending_push_action")
-        UserDefaults.standard.removeObject(forKey: "pending_push_metadata")
-        UserDefaults.standard.synchronize()
+        // Drop the action a JavaScript consumer just handled. A VoIP payload that is still
+        // owned by a ringing CallKit call keeps its own lease so it can answer that push.
+        TelnyxCallKitManager.shared.clearPendingPushAction()
         
-        NSLog("[VoicePnBridge] clearPendingPushAction - cleared pending push data")
+        NSLog("[VoicePnBridge] clearPendingPushAction - cleared pending push action")
         resolve(true)
     }
     
@@ -58,7 +57,7 @@ class VoicePnBridge: NSObject {
     
     @objc
     func getPendingVoipPush(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
-        let pending = UserDefaults.standard.string(forKey: "pending_voip_push")
+        let pending = TelnyxCallKitManager.shared.pendingPushSnapshot().voipPush
         NSLog("[VoicePnBridge] getPendingVoipPush called. pending=\(pending ?? "(nil)")")
         resolve(pending)
     }

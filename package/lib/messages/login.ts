@@ -94,13 +94,18 @@ export function createPasswordLoginMessage({
     console.log('[Login] Adding from_push parameter to login message');
   }
 
-  // Always create loginParams since we always include attach_call
-  params.loginParams = {
-    attach_call: 'true', // iOS SDK uses true.description which converts to string
-  };
-  console.log('[Login] Adding attach_call parameter to login message');
+  // Only advertise pending-call attachment for a push or a reconnect that
+  // owns calls to reclaim. A fresh login must not ask the gateway to attach
+  // calls from an unrelated session.
+  if (attachCall) {
+    params.loginParams = {
+      attach_call: 'true', // iOS SDK uses true.description which converts to string
+    };
+    console.log('[Login] Adding attach_call parameter to login message');
+  }
 
-  // Include existing session id when provided (useful for reconnection scenarios)
+  // Include an existing session id only when explicitly reattaching or
+  // reconnecting that session. Fresh logins must not inherit stale identity.
   if (sessid) {
     params.sessid = sessid;
     console.log('[Login] Including existing sessid in params:', sessid);
@@ -138,12 +143,18 @@ export function createTokenLoginMessage({
     console.log('[Login] Adding from_push parameter to token login message');
   }
 
-  // Always create loginParams since we always include attach_call
-  params.loginParams = {
-    attach_call: 'true', // iOS SDK uses true.description which converts to string
-  };
-  console.log('[Login] Adding attach_call parameter to token login message');
+  // Only advertise pending-call attachment for a push or a reconnect that
+  // owns calls to reclaim. A fresh login must not ask the gateway to attach
+  // calls from an unrelated session.
+  if (attachCall) {
+    params.loginParams = {
+      attach_call: 'true', // iOS SDK uses true.description which converts to string
+    };
+    console.log('[Login] Adding attach_call parameter to token login message');
+  }
 
+  // Include an existing session id only when explicitly reattaching or
+  // reconnecting that session. Fresh logins must not inherit stale identity.
   if (sessid) {
     params.sessid = sessid;
     console.log('[Login] Including existing sessid in token login params:', sessid);

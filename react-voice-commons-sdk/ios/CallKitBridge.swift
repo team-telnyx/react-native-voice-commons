@@ -1,6 +1,43 @@
 import Foundation
 import React
 
+/// Keys and lifetime for push data that is consumed by the connection answering a VoIP push.
+///
+/// A push payload carries routing hints (`voice_sdk_id`) and the attach metadata for the
+/// pending call. Those values belong to the CallKit call that is answering that push, so
+/// they are stored together with the owning call ID and an issuance timestamp. Readers
+/// ignore expired leases and cleanup only removes the lease owned by the call being
+/// finished. This keeps a later ordinary login from inheriting a stale push identity.
+enum TelnyxPushLease {
+    static let actionKey = "pending_push_action"
+    static let metadataKey = "pending_push_metadata"
+    static let voipPushKey = "pending_voip_push"
+    static let voipActionKey = "pending_voip_action"
+    static let ownerKey = "pending_push_owner_call_id"
+    static let pushCallIdKey = "pending_push_call_id"
+    static let issuedAtKey = "pending_push_issued_at"
+    static let callKitUUIDKey = "@pending_callkit_uuid"
+    static let callKitAnswerKey = "pending_callkit_answer"
+
+    /// Upper bound for a push lease that never reaches a terminal CallKit outcome. Normal
+    /// flows are cleared explicitly when the push-answer connection completes, ends, is
+    /// rejected, times out, or fails; this only prevents an abandoned lease from surviving
+    /// indefinitely across app restarts.
+    static let ttl: TimeInterval = 600
+
+    static let allKeys = [
+        actionKey,
+        metadataKey,
+        voipPushKey,
+        voipActionKey,
+        ownerKey,
+        pushCallIdKey,
+        issuedAtKey,
+        callKitUUIDKey,
+        callKitAnswerKey,
+    ]
+}
+
 #if os(iOS)
     import CallKit
     import AVFoundation
@@ -402,6 +439,7 @@ import React
 
             callController.request(transaction) { error in
                 if let error = error {
+                    manager.clearPendingPushData(for: callUUID)
                     reject("ANSWER_CALL_ERROR", error.localizedDescription, error)
                 } else {
                     resolve(["success": true, "callUUID": callUUID])
@@ -450,6 +488,9 @@ import React
                 manager.verifyAudioAfterConnection(for: uuid)
             }
 
+            // The push-answer connection has consumed its push metadata.
+            manager.clearPendingPushData(for: callUUID)
+
             resolve(["success": true])
         }
 
@@ -493,6 +534,7 @@ import React
             manager.activeCalls.removeValue(forKey: uuid)
             manager.pendingAnswerActions.removeValue(forKey: uuid)?.fail()
             manager.pendingHeldActions.removeValue(forKey: uuid)?.fail()
+            manager.clearPendingPushData(for: callUUID)
             resolve(["success": true])
         }
 
@@ -1249,42 +1291,167 @@ import React
             return true
         }
 
-        fileprivate func clearPendingPushData(for callId: String?) {
+        func clearPendingPushData(for callId: String?) {
+            pendingVoipPushLock.lock()
+            defer { pendingVoipPushLock.unlock() }
+
             if hasPendingPushData(forDifferentCallThan: callId) {
-                NSLog("TelnyxVoice: Skipping pending push cleanup for missed call; pending data belongs to a different call")
+                NSLog(
+                    "TelnyxVoice: Skipping pending push cleanup; pending data belongs to a different call"
+                )
                 return
             }
 
-            UserDefaults.standard.removeObject(forKey: "pending_push_action")
-            UserDefaults.standard.removeObject(forKey: "pending_push_metadata")
-            UserDefaults.standard.removeObject(forKey: "pending_voip_push")
-            UserDefaults.standard.removeObject(forKey: "pending_voip_action")
-            UserDefaults.standard.removeObject(forKey: "@pending_callkit_uuid")
+            clearPendingPushKeysLocked()
+        }
+
+        /// Caller must hold `pendingVoipPushLock`.
+        private func clearPendingPushKeysLocked() {
+            TelnyxPushLease.allKeys.forEach {
+                UserDefaults.standard.removeObject(forKey: $0)
+            }
             UserDefaults.standard.synchronize()
         }
 
-        private func hasPendingPushData(forDifferentCallThan missedCallId: String?) -> Bool {
-            guard let missedCallId = missedCallId, !missedCallId.isEmpty else {
+        private func hasPendingPushData(forDifferentCallThan callId: String?) -> Bool {
+            guard let callId = callId, !callId.isEmpty else {
                 return false
             }
 
-            let pendingIds = [
-                pendingCallId(fromJsonForKey: "pending_push_metadata"),
-                pendingCallId(fromJsonForKey: "pending_voip_push"),
-                UserDefaults.standard.string(forKey: "@pending_callkit_uuid"),
+            let pendingIds = pendingPushIdentitiesLocked()
+            guard !pendingIds.isEmpty else {
+                return false
+            }
+
+            // A push lease is known by the CallKit UUID of the call answering it and by the
+            // Telnyx call id carried in its payload. It belongs to `callId` when any of those
+            // identities matches; only a lease with no matching identity is foreign.
+            return !pendingIds.contains(where: {
+                $0.caseInsensitiveCompare(callId) == .orderedSame
+            })
+        }
+
+        /// Every identity a stored push is known by. Caller must hold `pendingVoipPushLock`.
+        private func pendingPushIdentitiesLocked() -> [String] {
+            let identities = [
+                UserDefaults.standard.string(forKey: TelnyxPushLease.ownerKey),
+                UserDefaults.standard.string(forKey: TelnyxPushLease.pushCallIdKey),
+                UserDefaults.standard.string(forKey: TelnyxPushLease.callKitUUIDKey),
+                pendingCallId(fromJsonForKey: TelnyxPushLease.metadataKey),
+                pendingCallId(fromJsonForKey: TelnyxPushLease.voipPushKey),
             ].compactMap { $0 }
 
-            return pendingIds.contains {
-                !$0.isEmpty && $0.caseInsensitiveCompare(missedCallId) != .orderedSame
-            }
+            return identities.filter { !$0.isEmpty }
         }
 
         /// Stores a push under the lock that `clearPendingVoipPush(ifMatches:)` holds, so a new push
         /// can't land between that method's check and its delete.
-        fileprivate func writePendingVoipPush(_ json: String) {
+        fileprivate func storePendingPushAction(
+            action: String = "incoming_call",
+            metadata: String,
+            ownerCallId: String,
+            pushCallId: String?
+        ) {
             pendingVoipPushLock.lock()
             defer { pendingVoipPushLock.unlock() }
+
+            UserDefaults.standard.set(action, forKey: TelnyxPushLease.actionKey)
+            UserDefaults.standard.set(metadata, forKey: TelnyxPushLease.metadataKey)
+            recordPendingPushLeaseLocked(ownerCallId: ownerCallId, pushCallId: pushCallId)
+        }
+
+        /// Replaces push data supplied by JavaScript. The caller has no CallKit identity to
+        /// attach, so any previous owner is dropped and the new lease is timestamped.
+        func replacePendingPushAction(action: String, metadata: String) {
+            pendingVoipPushLock.lock()
+            defer { pendingVoipPushLock.unlock() }
+
+            UserDefaults.standard.set(action, forKey: TelnyxPushLease.actionKey)
+            UserDefaults.standard.set(metadata, forKey: TelnyxPushLease.metadataKey)
+            recordPendingPushLeaseLocked(ownerCallId: nil, pushCallId: nil)
+        }
+
+        /// Drops the action a JavaScript consumer just handled. The VoIP payload of a
+        /// still-answering call is left alone so it can keep owning its CallKit identity.
+        func clearPendingPushAction() {
+            pendingVoipPushLock.lock()
+            defer { pendingVoipPushLock.unlock() }
+
+            UserDefaults.standard.removeObject(forKey: TelnyxPushLease.actionKey)
+            UserDefaults.standard.removeObject(forKey: TelnyxPushLease.metadataKey)
+
+            // Keep a VoIP payload that still belongs to a ringing CallKit call; its owner
+            // bookkeeping must survive until that call finishes. With no payload left the
+            // lease has been fully consumed, so drop the remaining bookkeeping too.
+            if UserDefaults.standard.string(forKey: TelnyxPushLease.voipPushKey) == nil {
+                UserDefaults.standard.removeObject(forKey: TelnyxPushLease.ownerKey)
+                UserDefaults.standard.removeObject(forKey: TelnyxPushLease.pushCallIdKey)
+                UserDefaults.standard.removeObject(forKey: TelnyxPushLease.issuedAtKey)
+            }
+            UserDefaults.standard.synchronize()
+        }
+
+        /// Persists the VoIP payload and records it as the current push lease.
+        fileprivate func writePendingVoipPush(
+            _ json: String, ownerCallId: String, pushCallId: String?
+        ) {
+            pendingVoipPushLock.lock()
+            defer { pendingVoipPushLock.unlock() }
+
             UserDefaults.standard.set(json, forKey: "pending_voip_push")
+            recordPendingPushLeaseLocked(ownerCallId: ownerCallId, pushCallId: pushCallId)
+        }
+
+        /// Caller must hold `pendingVoipPushLock`.
+        private func recordPendingPushLeaseLocked(ownerCallId: String?, pushCallId: String?) {
+            if let ownerCallId = ownerCallId, !ownerCallId.isEmpty {
+                UserDefaults.standard.set(ownerCallId, forKey: TelnyxPushLease.ownerKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: TelnyxPushLease.ownerKey)
+            }
+            if let pushCallId = pushCallId, !pushCallId.isEmpty {
+                UserDefaults.standard.set(pushCallId, forKey: TelnyxPushLease.pushCallIdKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: TelnyxPushLease.pushCallIdKey)
+            }
+            UserDefaults.standard.set(
+                Date().timeIntervalSince1970, forKey: TelnyxPushLease.issuedAtKey)
+            UserDefaults.standard.synchronize()
+        }
+
+        struct PendingPushSnapshot {
+            let action: String?
+            let metadata: String?
+            let voipPush: String?
+        }
+
+        /// Returns the push data for the push-answer connection. An expired lease is cleared
+        /// instead of being handed to a later, unrelated connection.
+        func pendingPushSnapshot() -> PendingPushSnapshot {
+            pendingVoipPushLock.lock()
+            defer { pendingVoipPushLock.unlock() }
+
+            if pendingPushLeaseExpiredLocked() {
+                NSLog("TelnyxVoice: Discarding expired pending push data")
+                clearPendingPushKeysLocked()
+                return PendingPushSnapshot(action: nil, metadata: nil, voipPush: nil)
+            }
+
+            return PendingPushSnapshot(
+                action: UserDefaults.standard.string(forKey: TelnyxPushLease.actionKey),
+                metadata: UserDefaults.standard.string(forKey: TelnyxPushLease.metadataKey),
+                voipPush: UserDefaults.standard.string(forKey: TelnyxPushLease.voipPushKey)
+            )
+        }
+
+        /// Caller must hold `pendingVoipPushLock`.
+        private func pendingPushLeaseExpiredLocked(now: Date = Date()) -> Bool {
+            let issuedAt = UserDefaults.standard.double(forKey: TelnyxPushLease.issuedAtKey)
+            guard issuedAt > 0 else {
+                return false
+            }
+
+            return now.timeIntervalSince1970 - issuedAt > TelnyxPushLease.ttl
         }
 
         /// Clears the stored push only if it still belongs to `callId`. Checking and deleting in
@@ -1297,8 +1464,11 @@ import React
             guard UserDefaults.standard.string(forKey: "pending_voip_push") != nil else {
                 return false
             }
-            if let pendingId = pendingCallId(fromJsonForKey: "pending_voip_push"),
-                pendingId.caseInsensitiveCompare(callId) != .orderedSame
+            let pendingIds = pendingPushIdentitiesLocked()
+            if !pendingIds.isEmpty,
+                !pendingIds.contains(where: {
+                    $0.caseInsensitiveCompare(callId) == .orderedSame
+                })
             {
                 return false
             }
@@ -1461,22 +1631,6 @@ import React
                 return
             }
 
-            // Store the VoIP push data for VoicePnBridge (same format as AppDelegate was using)
-            do {
-                let jsonData = try JSONSerialization.data(withJSONObject: payload.dictionaryPayload)
-                let jsonString = String(data: jsonData, encoding: .utf8) ?? ""
-
-                UserDefaults.standard.set("incoming_call", forKey: "pending_push_action")
-                UserDefaults.standard.set(jsonString, forKey: "pending_push_metadata")
-                UserDefaults.standard.synchronize()
-                NSLog("TelnyxVoice: Stored VoIP push data for VoicePnBridge")
-            } catch {
-                NSLog("TelnyxVoice: Error converting VoIP payload to JSON: \(error)")
-                UserDefaults.standard.set("incoming_call", forKey: "pending_push_action")
-                UserDefaults.standard.set("{}", forKey: "pending_push_metadata")
-                UserDefaults.standard.synchronize()
-            }
-
             let callUUID = UUID()
             var caller = "Unknown Caller"
             var callId: String?
@@ -1493,6 +1647,29 @@ import React
                 callId =
                     payload.dictionaryPayload["call_id"] as? String ?? payload.dictionaryPayload[
                         "callId"] as? String
+            }
+
+            // Scope the push payload to the CallKit call that answers it. The stored
+            // voice_sdk_id/attach metadata must not outlive this push-answer connection.
+            do {
+                let jsonData = try JSONSerialization.data(withJSONObject: payload.dictionaryPayload)
+                let jsonString = String(data: jsonData, encoding: .utf8) ?? ""
+
+                storePendingPushAction(
+                    action: "incoming_call",
+                    metadata: jsonString,
+                    ownerCallId: callUUID.uuidString,
+                    pushCallId: callId
+                )
+                NSLog("TelnyxVoice: Stored VoIP push data for VoicePnBridge")
+            } catch {
+                NSLog("TelnyxVoice: Error converting VoIP payload to JSON: \(error)")
+                storePendingPushAction(
+                    action: "incoming_call",
+                    metadata: "{}",
+                    ownerCallId: callUUID.uuidString,
+                    pushCallId: callId
+                )
             }
 
             activeCalls[callUUID] = [
@@ -1517,6 +1694,7 @@ import React
                 if let error = error {
                     NSLog("TelnyxVoice: CallKit error: \(error.localizedDescription)")
                     self?.activeCalls.removeValue(forKey: callUUID)
+                    self?.clearPendingPushData(for: callUUID.uuidString)
                 } else {
                     self?.markCallKitRegistered(callUUID)
                     NSLog("TelnyxVoice: CallKit incoming call reported successfully")
@@ -1537,6 +1715,7 @@ import React
             pendingAnswerActions.removeAll()
             pendingHeldActions.values.forEach { $0.fail() }
             pendingHeldActions.removeAll()
+            clearPendingPushData(for: nil)
         }
 
         public func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
@@ -1657,6 +1836,7 @@ import React
             activeCalls.removeValue(forKey: action.callUUID)
             pendingAnswerActions.removeValue(forKey: action.callUUID)?.fail()
             pendingHeldActions.removeValue(forKey: action.callUUID)?.fail()
+            clearPendingPushData(for: action.callUUID.uuidString)
             NSLog("📞 TelnyxVoice: Fulfilling CXEndCallAction for call UUID: \(action.callUUID)")
             action.fulfill()
             NSLog("📞 TelnyxVoice: ✅ CXEndCallAction fulfilled successfully")
@@ -1686,6 +1866,7 @@ import React
         public func provider(_ provider: CXProvider, timedOutPerforming action: CXAction) {
             if let answerAction = action as? CXAnswerCallAction {
                 pendingAnswerActions.removeValue(forKey: answerAction.callUUID)
+                clearPendingPushData(for: answerAction.callUUID.uuidString)
             } else if let heldAction = action as? CXSetHeldCallAction {
                 pendingHeldActions.removeValue(forKey: heldAction.callUUID)
             }
@@ -1757,29 +1938,70 @@ import React
         }
 
         private func storePendingVoipPush(_ payload: [AnyHashable: Any]) {
+            // `@pending_callkit_uuid` is written immediately before this call when
+            // CallKit accepts the incoming registration; it is the push-answer
+            // connection that owns the payload.
+            let ownerCallId =
+                UserDefaults.standard.string(forKey: TelnyxPushLease.callKitUUIDKey) ?? ""
+            storePendingVoipPush(
+                payload, ownerCallId: ownerCallId, pushCallId: Self.callId(from: payload))
+        }
+
+        /// Telnyx call id carried by the push payload, alongside the CallKit UUID that owns it.
+        private static func callId(from payload: [AnyHashable: Any]) -> String? {
+            if let metadata = payload["metadata"] as? [String: Any] {
+                for key in ["call_id", "callId", "telnyx_call_id"] {
+                    if let value = metadata[key] as? String, !value.isEmpty {
+                        return value
+                    }
+                }
+            }
+
+            for key in ["call_id", "callId", "telnyx_call_id"] {
+                if let value = payload[key] as? String, !value.isEmpty {
+                    return value
+                }
+            }
+
+            return nil
+        }
+
+        private func storePendingVoipPush(
+            _ payload: [AnyHashable: Any], ownerCallId: String, pushCallId: String?
+        ) {
             do {
                 let jsonData = try JSONSerialization.data(withJSONObject: payload)
                 let jsonString = String(data: jsonData, encoding: .utf8) ?? ""
 
-                UserDefaults.standard.set("incoming_call", forKey: "pending_push_action")
-                UserDefaults.standard.set(jsonString, forKey: "pending_push_metadata")
+                let callKitManager = TelnyxCallKitManager.shared
+                callKitManager.storePendingPushAction(
+                    action: "incoming_call",
+                    metadata: jsonString,
+                    ownerCallId: ownerCallId,
+                    pushCallId: pushCallId
+                )
 
                 let voipPushData = [
                     "payload": payload
                 ]
                 let voipJsonData = try JSONSerialization.data(withJSONObject: voipPushData)
                 let voipJsonString = String(data: voipJsonData, encoding: .utf8) ?? ""
-                TelnyxCallKitManager.shared.writePendingVoipPush(voipJsonString)
-                UserDefaults.standard.synchronize()
+                callKitManager.writePendingVoipPush(
+                    voipJsonString, ownerCallId: ownerCallId, pushCallId: pushCallId)
                 NSLog(
                     "[TelnyxVoipPushHandler] Stored VoIP push data after CallKit registration succeeded"
                 )
             } catch {
                 NSLog("[TelnyxVoipPushHandler] Error converting VoIP payload to JSON: \(error)")
-                UserDefaults.standard.set("incoming_call", forKey: "pending_push_action")
-                UserDefaults.standard.set("{}", forKey: "pending_push_metadata")
-                TelnyxCallKitManager.shared.writePendingVoipPush("{\"payload\":{}}")
-                UserDefaults.standard.synchronize()
+                let callKitManager = TelnyxCallKitManager.shared
+                callKitManager.storePendingPushAction(
+                    action: "incoming_call",
+                    metadata: "{}",
+                    ownerCallId: ownerCallId,
+                    pushCallId: pushCallId
+                )
+                callKitManager.writePendingVoipPush(
+                    "{\"payload\":{}}", ownerCallId: ownerCallId, pushCallId: pushCallId)
             }
         }
 
@@ -1923,16 +2145,18 @@ import React
                         )
 
                         callKitManager.markCallKitRegistered(callUUID)
-                        self.storePendingVoipPush(payload.dictionaryPayload)
 
                         // CRITICAL: Store the CallKit UUID for the React Native CallKitCoordinator
-                        // This allows the coordinator to find the existing CallKit call instead of creating a duplicate
+                        // This allows the coordinator to find the existing CallKit call instead of creating a duplicate.
+                        // It is also the owner of the push lease stored below.
                         UserDefaults.standard.set(
                             callUUID.uuidString, forKey: "@pending_callkit_uuid")
                         UserDefaults.standard.synchronize()
                         NSLog(
                             "[TelnyxVoipPushHandler] ✅ Stored CallKit UUID for React Native coordinator: \(callUUID.uuidString)"
                         )
+
+                        self.storePendingVoipPush(payload.dictionaryPayload)
 
                         // Try to emit push received event if CallKit bridge is available
                         if let callKitBridge = CallKitBridge.shared {
