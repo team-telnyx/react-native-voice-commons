@@ -1,6 +1,7 @@
 package com.telnyx.rn_voice_sdk_demo
 import expo.modules.splashscreen.SplashScreenManager
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 
@@ -10,6 +11,7 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 
 import expo.modules.ReactActivityDelegateWrapper
 import com.telnyx.react_voice_commons.TelnyxMainActivity
+import com.telnyx.react_voice_commons.VoicePnManager
 
 class MainActivity : TelnyxMainActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,5 +63,14 @@ class MainActivity : TelnyxMainActivity() {
       // Use the default back button implementation on Android S
       // because it's doing more than [Activity.moveTaskToBack] in fact.
       super.invokeDefaultOnBackPressed()
+  }
+
+  /**
+   * After the base activity stores any action carried by this intent, prune
+   * push flows that timed out while the app was not running.
+   */
+  override fun onHandleIntent(intent: Intent) {
+    super.onHandleIntent(intent)
+    VoicePnManager.expireStalePendingPushActions(this)
   }
 }

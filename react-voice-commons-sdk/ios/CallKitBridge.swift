@@ -64,6 +64,11 @@ import React
 
             // Explicitly initialize the CallKit manager when React Native bridge loads
             TelnyxCallKitManager.shared.setup()
+            // A killed process can leave push-only UserDefaults behind with no
+            // CallKit call left to consume or clear them. Drop that state before
+            // a fresh login can mistake it for a pending push. A live push has
+            // already registered its call, so its metadata is preserved.
+            TelnyxCallKitManager.shared.purgePendingPushStateIfNoActiveCalls()
             NSLog("TelnyxVoice: CallKitBridge initialized with TelnyxCallKitManager active")
         }
 
@@ -211,6 +216,7 @@ import React
             provider.reportNewIncomingCall(with: uuid, update: callUpdate) { error in
                 if let error = error {
                     manager.activeCalls.removeValue(forKey: uuid)
+                    manager.clearPendingPushData(for: nil, callUUID: uuid)
                     reject("INCOMING_CALL_ERROR", error.localizedDescription, error)
                 } else {
                     manager.markCallKitRegistered(uuid)
@@ -450,6 +456,13 @@ import React
                 manager.verifyAudioAfterConnection(for: uuid)
             }
 
+            // The push has been consumed by a connected call. Drop its routing
+            // metadata so it cannot be replayed into a later login/connection.
+            manager.clearPendingPushData(
+                for: manager.pendingPushCallId(for: uuid),
+                callUUID: uuid
+            )
+
             resolve(["success": true])
         }
 
@@ -490,6 +503,10 @@ import React
 
             let endReason = CXCallEndedReason(rawValue: reason.intValue) ?? .remoteEnded
             provider.reportCall(with: uuid, endedAt: Date(), reason: endReason)
+            manager.clearPendingPushData(
+                for: manager.activeCalls[uuid]?["callId"] as? String,
+                callUUID: uuid
+            )
             manager.activeCalls.removeValue(forKey: uuid)
             manager.pendingAnswerActions.removeValue(forKey: uuid)?.fail()
             manager.pendingHeldActions.removeValue(forKey: uuid)?.fail()
@@ -748,7 +765,21 @@ import React
         public var callKitProvider: CXProvider?
         public var callKitController: CXCallController?
         private let stateLock = NSRecursiveLock()
-        private let pendingVoipPushLock = NSLock()
+        private let pendingVoipPushLock = NSRecursiveLock()
+
+        /// Keys carrying one incoming push's routing metadata. They are shared
+        /// with the React Native layer, so each write also records which call
+        /// owns them and each terminal CallKit event clears only that call.
+        private enum PendingPushKey {
+            static let action = "pending_push_action"
+            static let metadata = "pending_push_metadata"
+            static let voipPush = "pending_voip_push"
+            static let voipAction = "pending_voip_action"
+            static let callKitUUID = "@pending_callkit_uuid"
+            static let callKitAnswer = "pending_callkit_answer"
+            /// Call id of the push that currently owns the shared keys above.
+            static let owner = "telnyx_pending_push_call_id"
+        }
         // Keep terminal missed-call invalidation atomic with registration side effects so a
         // delayed CallKit completion cannot restore an already-ended incoming call.
         private let incomingRegistrationQueue = DispatchQueue(
@@ -1249,34 +1280,67 @@ import React
             return true
         }
 
-        fileprivate func clearPendingPushData(for callId: String?) {
-            if hasPendingPushData(forDifferentCallThan: callId) {
-                NSLog("TelnyxVoice: Skipping pending push cleanup for missed call; pending data belongs to a different call")
-                return
-            }
+        // MARK: - Pending push ownership
 
-            UserDefaults.standard.removeObject(forKey: "pending_push_action")
-            UserDefaults.standard.removeObject(forKey: "pending_push_metadata")
-            UserDefaults.standard.removeObject(forKey: "pending_voip_push")
-            UserDefaults.standard.removeObject(forKey: "pending_voip_action")
-            UserDefaults.standard.removeObject(forKey: "@pending_callkit_uuid")
-            UserDefaults.standard.synchronize()
+        /// Every key that can belong to one incoming push. They are read and
+        /// written by both this manager and VoicePnBridge, so ownership is
+        /// tracked in `PendingPushKey.owner` and a terminal CallKit event clears
+        /// the whole bundle only when it belongs to that call.
+        private static let pendingPushKeys = [
+            PendingPushKey.action,
+            PendingPushKey.metadata,
+            PendingPushKey.voipPush,
+            PendingPushKey.voipAction,
+            PendingPushKey.callKitUUID,
+            PendingPushKey.callKitAnswer,
+            PendingPushKey.owner,
+        ]
+
+        private func normalizedCallId(_ callId: String?) -> String? {
+            guard let callId = callId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                !callId.isEmpty
+            else {
+                return nil
+            }
+            return callId.lowercased()
         }
 
-        private func hasPendingPushData(forDifferentCallThan missedCallId: String?) -> Bool {
-            guard let missedCallId = missedCallId, !missedCallId.isEmpty else {
+        private func callIdsMatch(_ lhs: String?, _ rhs: String?) -> Bool {
+            guard let lhs = normalizedCallId(lhs), let rhs = normalizedCallId(rhs) else {
                 return false
             }
+            return lhs == rhs
+        }
 
-            let pendingIds = [
-                pendingCallId(fromJsonForKey: "pending_push_metadata"),
-                pendingCallId(fromJsonForKey: "pending_voip_push"),
-                UserDefaults.standard.string(forKey: "@pending_callkit_uuid"),
-            ].compactMap { $0 }
-
-            return pendingIds.contains {
-                !$0.isEmpty && $0.caseInsensitiveCompare(missedCallId) != .orderedSame
+        /// Every value that can identify one push flow. A push is stored under
+        /// its signaling call_id, but a CallKit action may know the same flow by
+        /// a different UUID, so both are accepted when matching.
+        private func pendingPushIdentifiers(callId: String?, callUUID: UUID?) -> Set<String> {
+            var identifiers = Set<String>()
+            if let callId = normalizedCallId(callId) {
+                identifiers.insert(callId)
             }
+            if let callUUID = callUUID {
+                identifiers.insert(callUUID.uuidString.lowercased())
+            }
+            return identifiers
+        }
+
+        private func storedPendingPushIdentifiers() -> Set<String> {
+            var identifiers = Set<String>()
+            let sources: [String?] = [
+                UserDefaults.standard.string(forKey: PendingPushKey.owner),
+                pendingCallId(fromJsonForKey: PendingPushKey.metadata),
+                pendingCallId(fromJsonForKey: PendingPushKey.voipPush),
+                UserDefaults.standard.string(forKey: PendingPushKey.callKitUUID),
+                UserDefaults.standard.string(forKey: PendingPushKey.callKitAnswer),
+            ]
+            for source in sources {
+                if let identifier = normalizedCallId(source) {
+                    identifiers.insert(identifier)
+                }
+            }
+            return identifiers
         }
 
         /// Stores a push under the lock that `clearPendingVoipPush(ifMatches:)` holds, so a new push
@@ -1287,9 +1351,223 @@ import React
             UserDefaults.standard.set(json, forKey: "pending_voip_push")
         }
 
-        /// Clears the stored push only if it still belongs to `callId`. Checking and deleting in
-        /// separate bridge calls could delete a newer push for a different call. A push without a
-        /// call ID can't belong to a different call, so it's cleared too.
+        /// Stores one push together with the call that owns it. `ownerCallId`
+        /// should be the push's call_id, or the CallKit UUID when the payload
+        /// does not carry one, so a later terminal event can clear exactly this
+        /// flow without touching a newer push that arrived in the meantime.
+        /// The newest push wins: the shared keys can only hold one flow, and
+        /// `clearPendingVoipPush(ifMatches:)` exists so an older flow can't
+        /// delete the newer flow's metadata when it ends.
+        @discardableResult
+        fileprivate func storePendingPush(
+            _ payload: [AnyHashable: Any], ownerCallId: String?
+        ) -> Bool {
+            pendingVoipPushLock.lock()
+            defer { pendingVoipPushLock.unlock() }
+
+            let owner = normalizedCallId(ownerCallId)
+
+            let metadataJson = TelnyxCallKitManager.jsonString(from: payload, fallback: "{}")
+            let voipPushJson = TelnyxCallKitManager.jsonString(
+                from: ["payload": payload],
+                fallback: "{\"payload\":{}}"
+            )
+
+            UserDefaults.standard.set("incoming_call", forKey: PendingPushKey.action)
+            UserDefaults.standard.set(metadataJson, forKey: PendingPushKey.metadata)
+            writePendingVoipPush(voipPushJson)
+            // CallKit identifiers from a previous flow would otherwise keep
+            // matching this bundle and make a stale answer/end clear it.
+            for key in [PendingPushKey.callKitAnswer, PendingPushKey.callKitUUID] {
+                let existing = normalizedCallId(UserDefaults.standard.string(forKey: key))
+                if existing != nil, existing != owner {
+                    UserDefaults.standard.removeObject(forKey: key)
+                }
+            }
+            if let owner = owner {
+                UserDefaults.standard.set(owner, forKey: PendingPushKey.owner)
+            } else {
+                UserDefaults.standard.removeObject(forKey: PendingPushKey.owner)
+            }
+            UserDefaults.standard.synchronize()
+            NSLog("TelnyxVoice: Stored pending push for call \(ownerCallId ?? "unknown")")
+            return true
+        }
+
+        /// Used by VoicePnBridge when React Native supplies the metadata. The
+        /// owner is derived from the payload so a later terminal event can
+        /// clear it, and an already-active push is never replaced.
+        @discardableResult
+        func setPendingPushAction(_ action: String, metadata: String) -> Bool {
+            pendingVoipPushLock.lock()
+            defer { pendingVoipPushLock.unlock() }
+
+            let metadataCallId = normalizedCallId(pendingCallId(fromJsonString: metadata))
+            let existingOwner = normalizedCallId(
+                UserDefaults.standard.string(forKey: PendingPushKey.owner))
+            if let existingOwner = existingOwner,
+                let metadataCallId = metadataCallId,
+                existingOwner != metadataCallId,
+                hasActiveCall(withCallId: existingOwner)
+            {
+                NSLog(
+                    "TelnyxVoice: Keeping pending push for active call \(existingOwner); ignoring metadata for \(metadataCallId)"
+                )
+                return false
+            }
+
+            UserDefaults.standard.set(action, forKey: PendingPushKey.action)
+            UserDefaults.standard.set(metadata, forKey: PendingPushKey.metadata)
+            // Keep the previous owner only while its call is still live;
+            // otherwise it would pin this metadata to an ended call.
+            let retainedOwner = existingOwner.flatMap {
+                hasActiveCall(withCallId: $0) ? $0 : nil
+            }
+            if let owner = metadataCallId ?? retainedOwner {
+                UserDefaults.standard.set(owner, forKey: PendingPushKey.owner)
+            } else {
+                UserDefaults.standard.removeObject(forKey: PendingPushKey.owner)
+            }
+            UserDefaults.standard.synchronize()
+            return true
+        }
+
+        /// Clears the push state that belongs to `callId`/`callUUID`. Without
+        /// an identifier the terminal event can't prove it owns the shared
+        /// keys, so nothing is cleared; callers that mean "clear everything"
+        /// (`providerDidReset`, bridge init) use `clearPendingVoipPush()`.
+        fileprivate func clearPendingPushData(for callId: String?, callUUID: UUID? = nil) {
+            let targets = pendingPushIdentifiers(callId: callId, callUUID: callUUID)
+            guard !targets.isEmpty else {
+                return
+            }
+
+            pendingVoipPushLock.lock()
+            defer { pendingVoipPushLock.unlock() }
+            _ = clearPendingPushDataLocked(targets: targets)
+        }
+
+        /// Clears stored push state only when it cannot belong to the answered
+        /// call. This stops a connection from consuming another push's metadata
+        /// when the two flows overlap.
+        fileprivate func clearPendingPushData(mismatching callId: String?, callUUID: UUID?) {
+            let targets = pendingPushIdentifiers(callId: callId, callUUID: callUUID)
+            guard !targets.isEmpty else {
+                return
+            }
+
+            pendingVoipPushLock.lock()
+            defer { pendingVoipPushLock.unlock() }
+
+            let stored = storedPendingPushIdentifiers()
+            guard !stored.isEmpty, stored.isDisjoint(with: targets) else {
+                return
+            }
+
+            // A bundle still owned by another live call is that call's to
+            // consume or clear. Only drop push state nobody can claim anymore.
+            guard !stored.contains(where: { hasActiveCall(withCallId: $0) }) else {
+                return
+            }
+
+            NSLog(
+                "TelnyxVoice: Dropping pending push owned by \(stored.sorted().joined(separator: ",")) while answering \(targets.sorted().joined(separator: ","))"
+            )
+            _ = clearPendingPushDataLocked(targets: [])
+        }
+
+        @discardableResult
+        private func clearPendingPushDataLocked(targets: Set<String>) -> Bool {
+            let stored = storedPendingPushIdentifiers()
+            let shouldClear = targets.isEmpty || !stored.isDisjoint(with: targets)
+            guard shouldClear else {
+                return false
+            }
+
+            var cleared = false
+            for key in TelnyxCallKitManager.pendingPushKeys {
+                if UserDefaults.standard.object(forKey: key) != nil {
+                    UserDefaults.standard.removeObject(forKey: key)
+                    cleared = true
+                }
+            }
+
+            if cleared {
+                UserDefaults.standard.synchronize()
+                let description =
+                    targets.isEmpty
+                    ? "all calls" : targets.sorted().joined(separator: ",")
+                NSLog("TelnyxVoice: Cleared pending push state for \(description)")
+            }
+            return cleared
+        }
+
+        /// Explicit React Native cleanup after it consumed or rejected a push.
+        /// The bundle is cleared as a unit so a leftover voice_sdk_id can never
+        /// be attached to the next connection.
+        func clearPendingVoipPush() -> Bool {
+            pendingVoipPushLock.lock()
+            defer { pendingVoipPushLock.unlock() }
+            return clearPendingPushDataLocked(targets: [])
+        }
+
+        /// Explicit React Native cleanup of the action/metadata pair. The VoIP
+        /// push payload is left alone because it is cleared by its own method.
+        func clearPendingPushAction() -> Bool {
+            pendingVoipPushLock.lock()
+            defer { pendingVoipPushLock.unlock() }
+
+            let hadData =
+                UserDefaults.standard.object(forKey: PendingPushKey.action) != nil
+                || UserDefaults.standard.object(forKey: PendingPushKey.metadata) != nil
+                || UserDefaults.standard.object(forKey: PendingPushKey.owner) != nil
+            UserDefaults.standard.removeObject(forKey: PendingPushKey.action)
+            UserDefaults.standard.removeObject(forKey: PendingPushKey.metadata)
+            UserDefaults.standard.removeObject(forKey: PendingPushKey.owner)
+            if hadData {
+                UserDefaults.standard.synchronize()
+                NSLog("TelnyxVoice: Cleared pending push action")
+            }
+            return hadData
+        }
+
+        private func hasActiveCall(withCallId callId: String) -> Bool {
+            let target = normalizedCallId(callId)
+            return activeCalls.values.contains { callData in
+                let identifiers = [
+                    callData["callId"] as? String,
+                    callData["uuid"] as? String,
+                ].compactMap { $0 }
+                return identifiers.contains { callIdsMatch($0, target) }
+            }
+        }
+
+        /// Maps a CallKit UUID to the call id that owns its pending push.
+        fileprivate func pendingPushCallId(for callUUID: UUID) -> String {
+            if let callId = activeCalls[callUUID]?["callId"] as? String,
+                normalizedCallId(callId) != nil
+            {
+                return callId
+            }
+            return callUUID.uuidString
+        }
+
+        /// A force-quit or crash can leave push-only state behind with no live
+        /// CallKit call to consume it. Drop it before a fresh login can reuse it.
+        fileprivate func purgePendingPushStateIfNoActiveCalls() {
+            guard activeCalls.values.isEmpty else {
+                return
+            }
+
+            pendingVoipPushLock.lock()
+            defer { pendingVoipPushLock.unlock() }
+            _ = clearPendingPushDataLocked(targets: [])
+        }
+
+        /// Clears the stored push only if it still belongs to `callId`. Checking
+        /// and deleting in separate bridge calls could delete a newer push for a
+        /// different call. A push without a call ID can't belong to a different
+        /// call, so it's cleared too.
         func clearPendingVoipPush(ifMatches callId: String) -> Bool {
             pendingVoipPushLock.lock()
             defer { pendingVoipPushLock.unlock() }
@@ -1297,19 +1575,33 @@ import React
             guard UserDefaults.standard.string(forKey: "pending_voip_push") != nil else {
                 return false
             }
-            if let pendingId = pendingCallId(fromJsonForKey: "pending_voip_push"),
+            if let pendingId = pendingCallId(fromJsonForKey: PendingPushKey.voipPush),
                 pendingId.caseInsensitiveCompare(callId) != .orderedSame
             {
                 return false
             }
 
             UserDefaults.standard.removeObject(forKey: "pending_voip_push")
-            UserDefaults.standard.synchronize()
-            return true
+            // The matching voip push identifies the whole bundle, so clear the
+            // metadata that would otherwise be replayed into the next login.
+            return clearPendingPushDataLocked(targets: [])
+        }
+
+        private static func jsonString(from object: Any, fallback: String) -> String {
+            guard let data = try? JSONSerialization.data(withJSONObject: object),
+                let json = String(data: data, encoding: .utf8)
+            else {
+                return fallback
+            }
+            return json
         }
 
         private func pendingCallId(fromJsonForKey key: String) -> String? {
-            guard let jsonString = UserDefaults.standard.string(forKey: key),
+            return pendingCallId(fromJsonString: UserDefaults.standard.string(forKey: key))
+        }
+
+        private func pendingCallId(fromJsonString jsonString: String?) -> String? {
+            guard let jsonString = jsonString,
                 let data = jsonString.data(using: .utf8),
                 let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             else {
@@ -1461,22 +1753,6 @@ import React
                 return
             }
 
-            // Store the VoIP push data for VoicePnBridge (same format as AppDelegate was using)
-            do {
-                let jsonData = try JSONSerialization.data(withJSONObject: payload.dictionaryPayload)
-                let jsonString = String(data: jsonData, encoding: .utf8) ?? ""
-
-                UserDefaults.standard.set("incoming_call", forKey: "pending_push_action")
-                UserDefaults.standard.set(jsonString, forKey: "pending_push_metadata")
-                UserDefaults.standard.synchronize()
-                NSLog("TelnyxVoice: Stored VoIP push data for VoicePnBridge")
-            } catch {
-                NSLog("TelnyxVoice: Error converting VoIP payload to JSON: \(error)")
-                UserDefaults.standard.set("incoming_call", forKey: "pending_push_action")
-                UserDefaults.standard.set("{}", forKey: "pending_push_metadata")
-                UserDefaults.standard.synchronize()
-            }
-
             let callUUID = UUID()
             var caller = "Unknown Caller"
             var callId: String?
@@ -1494,6 +1770,13 @@ import React
                     payload.dictionaryPayload["call_id"] as? String ?? payload.dictionaryPayload[
                         "callId"] as? String
             }
+
+            // Store the VoIP push data for VoicePnBridge (same format as AppDelegate was using).
+            // Ownership is recorded so this call's terminal event clears exactly this push.
+            storePendingPush(
+                payload.dictionaryPayload,
+                ownerCallId: callId ?? callUUID.uuidString
+            )
 
             activeCalls[callUUID] = [
                 "caller": caller,
@@ -1517,6 +1800,7 @@ import React
                 if let error = error {
                     NSLog("TelnyxVoice: CallKit error: \(error.localizedDescription)")
                     self?.activeCalls.removeValue(forKey: callUUID)
+                    self?.clearPendingPushData(for: callId, callUUID: callUUID)
                 } else {
                     self?.markCallKitRegistered(callUUID)
                     NSLog("TelnyxVoice: CallKit incoming call reported successfully")
@@ -1537,6 +1821,9 @@ import React
             pendingAnswerActions.removeAll()
             pendingHeldActions.values.forEach { $0.fail() }
             pendingHeldActions.removeAll()
+            // No call survives a provider reset, so no pending push metadata
+            // should survive either.
+            _ = clearPendingVoipPush()
         }
 
         public func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
@@ -1561,6 +1848,13 @@ import React
                 action.fail()
                 return
             }
+
+            // The answer belongs to this CallKit call. Never let it consume an
+            // overlapping push's metadata or voice_sdk_id.
+            clearPendingPushData(
+                mismatching: activeCalls[action.callUUID]?["callId"] as? String,
+                callUUID: action.callUUID
+            )
 
             configureCallAudioSession(reason: "CXAnswerCallAction")
 
@@ -1643,10 +1937,13 @@ import React
                 action.fail()
                 return
             }
-            if UserDefaults.standard.string(forKey: "pending_callkit_answer") == action.callUUID.uuidString {
-                UserDefaults.standard.removeObject(forKey: "pending_callkit_answer")
-                UserDefaults.standard.synchronize()
-            }
+
+            // Clear this call's push metadata before the call disappears, so a
+            // later login can't pick up a stale voice_sdk_id/attach context.
+            clearPendingPushData(
+                for: callData["callId"] as? String,
+                callUUID: action.callUUID
+            )
 
             // Notify React Native via CallKit bridge
             CallKitBridge.shared?.emitCallEvent(
@@ -1686,6 +1983,10 @@ import React
         public func provider(_ provider: CXProvider, timedOutPerforming action: CXAction) {
             if let answerAction = action as? CXAnswerCallAction {
                 pendingAnswerActions.removeValue(forKey: answerAction.callUUID)
+                clearPendingPushData(
+                    for: pendingPushCallId(for: answerAction.callUUID),
+                    callUUID: answerAction.callUUID
+                )
             } else if let heldAction = action as? CXSetHeldCallAction {
                 pendingHeldActions.removeValue(forKey: heldAction.callUUID)
             }
@@ -1757,30 +2058,22 @@ import React
         }
 
         private func storePendingVoipPush(_ payload: [AnyHashable: Any]) {
-            do {
-                let jsonData = try JSONSerialization.data(withJSONObject: payload)
-                let jsonString = String(data: jsonData, encoding: .utf8) ?? ""
-
-                UserDefaults.standard.set("incoming_call", forKey: "pending_push_action")
-                UserDefaults.standard.set(jsonString, forKey: "pending_push_metadata")
-
-                let voipPushData = [
-                    "payload": payload
-                ]
-                let voipJsonData = try JSONSerialization.data(withJSONObject: voipPushData)
-                let voipJsonString = String(data: voipJsonData, encoding: .utf8) ?? ""
-                TelnyxCallKitManager.shared.writePendingVoipPush(voipJsonString)
-                UserDefaults.standard.synchronize()
-                NSLog(
-                    "[TelnyxVoipPushHandler] Stored VoIP push data after CallKit registration succeeded"
-                )
-            } catch {
-                NSLog("[TelnyxVoipPushHandler] Error converting VoIP payload to JSON: \(error)")
-                UserDefaults.standard.set("incoming_call", forKey: "pending_push_action")
-                UserDefaults.standard.set("{}", forKey: "pending_push_metadata")
-                TelnyxCallKitManager.shared.writePendingVoipPush("{\"payload\":{}}")
-                UserDefaults.standard.synchronize()
+            var ownerCallId: String?
+            if let metadata = payload["metadata"] as? [String: Any] {
+                ownerCallId = metadata["call_id"] as? String
+            } else {
+                ownerCallId = payload["call_id"] as? String ?? payload["callId"] as? String
             }
+
+            // Record the owning call alongside the payload so the terminal
+            // CallKit event for this call clears exactly this push context.
+            TelnyxCallKitManager.shared.storePendingPush(
+                payload,
+                ownerCallId: ownerCallId
+            )
+            NSLog(
+                "[TelnyxVoipPushHandler] Stored VoIP push data after CallKit registration succeeded"
+            )
         }
 
         /**
@@ -1885,6 +2178,7 @@ import React
             callKitManager.activeCalls[callUUID] = [
                 "caller": callerName,
                 "handle": callerNumber,
+                "callId": callIdString,
                 "payload": payload.dictionaryPayload,
                 "uuid": callUUID.uuidString,
                 "direction": "incoming",

@@ -16,6 +16,7 @@ import com.facebook.soloader.SoLoader
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 import com.telnyx.react_voice_commons.VoicePnBridgePackage
+import com.telnyx.react_voice_commons.VoicePnManager
 
 class MainApplication : Application(), ReactApplication {
 
@@ -48,6 +49,9 @@ class MainApplication : Application(), ReactApplication {
       // If you opted-in for the New Architecture, we load the native entry point for this app.
       load()
     }
+    // Drop push flows that outlived their handling window so a new process
+    // cannot inherit a previous push's voice_sdk_id or attach metadata.
+    VoicePnManager.expireStalePendingPushActions(this)
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
   }
 

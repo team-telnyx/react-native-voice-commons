@@ -16,7 +16,11 @@ import {
   resolveStoredEnvironment,
 } from './internal/signaling-environment';
 import { CallStateController, type CustomHeaders } from './internal/calls/call-state-controller';
-import { VoicePnBridge } from './internal/voice-pn-bridge';
+import {
+  VoicePnBridge,
+  completeAndroidPushFlow,
+  isTerminalPushAction,
+} from './internal/voice-pn-bridge';
 import { ICE_SERVERS_STORAGE_KEY, parseStoredIceServers } from './internal/ice-servers-storage';
 
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
@@ -24,6 +28,11 @@ const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
 const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
 const QUALITY_METRICS_STORAGE_KEY = '@enable_quality_metrics';
 const LEGACY_CALLKIT_ANSWER_KEY = '__legacy_callkit_answer__';
+
+// Persisted push-flow state owned by the underlying TelnyxRTC client. It is
+// restored on every connect so a cold-launched push can complete, which also
+// means an abandoned push would otherwise be inherited by the next login.
+const PUSH_STATE_STORAGE_KEY = '@telnyx_push_state';
 
 interface PendingCallKitAnswer {
   callKitUUIDOrHeaders?: string | Record<string, string>;
@@ -328,6 +337,10 @@ export class TelnyxVoipClient {
     // Store credentials for future reconnection
     await this._storeCredentials(loginConfig);
 
+    // An explicit login starts a new session; it must not inherit the voice
+    // routing id or pending-call attach metadata persisted by an earlier push.
+    await this._clearAbandonedPushContext();
+
     await this._sessionManager.connectWithCredential(loginConfig);
   }
 
@@ -362,6 +375,10 @@ export class TelnyxVoipClient {
 
     // Store token for future reconnection
     await this._storeToken(loginConfig);
+
+    // An explicit login starts a new session; it must not inherit the voice
+    // routing id or pending-call attach metadata persisted by an earlier push.
+    await this._clearAbandonedPushContext();
 
     await this._sessionManager.connectWithToken(loginConfig);
   }
@@ -557,7 +574,17 @@ export class TelnyxVoipClient {
       // gateway then has to `punt` once the SessionManager-driven session
       // also registers, dropping the active call.
       await this._sessionManager.handlePushNotification(payload);
+
+      // A rejection/decline ends the flow without attaching a call. Clear only
+      // this call's native push state; answer flows stay until the pending
+      // INVITE is attached and the call itself ends.
+      if (isTerminalPushAction(payload?.action)) {
+        await completeAndroidPushFlow(payload, payload.action);
+      }
     } catch (error) {
+      // The push flow failed before it could attach its call. Remove exactly
+      // this flow's native state so a later connection cannot reuse it.
+      await completeAndroidPushFlow(payload, 'failure');
       console.error('TelnyxVoipClient: Error handling push notification:', error);
       throw error;
     }
@@ -756,6 +783,41 @@ export class TelnyxVoipClient {
       ...config,
       pushNotificationDeviceToken: nativePushToken,
     };
+  }
+
+  /**
+   * Drop push-flow state left behind by a push that was never consumed.
+   *
+   * The underlying client persists the push `voice_sdk_id` and pending-call
+   * attach metadata so a cold launch can finish the push, and restores it on
+   * every connect for a short window. If the flow was rejected, timed out, or
+   * otherwise abandoned, an explicit login is a fresh session and must not
+   * reuse that routing identity or attach request.
+   */
+  private async _clearAbandonedPushContext(): Promise<void> {
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      await AsyncStorage.removeItem(PUSH_STATE_STORAGE_KEY);
+    } catch (error) {
+      if (this._options.debug) {
+        console.log('TelnyxVoipClient: Failed to clear abandoned push context:', error);
+      }
+    }
+
+    // Android keeps its own per-call push store (voice_sdk_id + pending attach
+    // metadata). A fresh login must clear it for the same reason. This is a
+    // genuine new session, so a reconnect path deliberately does not call it.
+    try {
+      await VoicePnBridge.resetPushStateForFreshLogin();
+    } catch (error) {
+      if (this._options.debug) {
+        console.log('TelnyxVoipClient: Failed to reset native push state:', error);
+      }
+    }
+
+    if (this._options.debug) {
+      console.log('TelnyxVoipClient: Cleared abandoned push context before fresh login');
+    }
   }
 
   /**

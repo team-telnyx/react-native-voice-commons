@@ -28,19 +28,102 @@ class VoicePnBridgeModule(reactContext: ReactApplicationContext) : ReactContextB
     fun getPendingPushAction(promise: Promise) {
         try {
             val (action, metadata) = VoicePnManager.getPendingPushAction(reactApplicationContext)
+            val callId = VoicePnManager.extractCallIdFromMetadata(metadata)
             
             Log.d(TAG, "Retrieved pending action: '$action'")
-            Log.d(TAG, "Retrieved metadata: '$metadata'")
+            Log.d(TAG, "Retrieved metadata for call: '$callId'")
             Log.d(TAG, "Metadata length: ${metadata?.length ?: 0}")
             
             val result = Arguments.createMap()
             result.putString("action", action)
             result.putString("metadata", metadata)
+            result.putString("callId", callId)
             
             promise.resolve(result)
         } catch (e: Exception) {
             Log.e(TAG, "Error getting pending push action", e)
             promise.reject("GET_PENDING_PUSH_ACTION_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Read the pending action for one call without deleting it. The push-answer
+     * connection can read it again until it explicitly consumes the flow.
+     */
+    @ReactMethod
+    fun getPendingPushActionForCall(callId: String?, promise: Promise) {
+        try {
+            val resolvedCallId = callId ?: ""
+            val (action, metadata) = VoicePnManager.getPendingPushActionForCall(
+                reactApplicationContext,
+                resolvedCallId
+            )
+            val result = Arguments.createMap()
+            result.putString("action", action)
+            result.putString("metadata", metadata)
+            result.putString("callId", resolvedCallId)
+            result.putBoolean("found", action != null && metadata != null)
+            promise.resolve(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting pending push action for call: $callId", e)
+            promise.reject("GET_PENDING_PUSH_ACTION_FOR_CALL_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * The push-carried voice_sdk_id for one call, or null. Never falls back to
+     * another call's push so a fresh login cannot inherit stale routing.
+     */
+    @ReactMethod
+    fun getPendingVoiceSdkIdForCall(callId: String?, promise: Promise) {
+        try {
+            val voiceSdkId = if (callId.isNullOrEmpty()) {
+                null
+            } else {
+                VoicePnManager.getPendingVoiceSdkIdForCall(reactApplicationContext, callId)
+            }
+            promise.resolve(voiceSdkId)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting pending voice_sdk_id for call: $callId", e)
+            promise.reject("GET_PENDING_VOICE_SDK_ID_FOR_CALL_ERROR", e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun hasPendingPushActionForCall(callId: String?, promise: Promise) {
+        try {
+            val hasPending = if (callId.isNullOrEmpty()) {
+                false
+            } else {
+                VoicePnManager.hasPendingPushActionForCall(reactApplicationContext, callId)
+            }
+            promise.resolve(hasPending)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking pending push action for call: $callId", e)
+            promise.reject("HAS_PENDING_PUSH_ACTION_FOR_CALL_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Atomic get-and-remove for the flow handling this push. When [callId] is
+     * null the currently delivered flow is consumed.
+     */
+    @ReactMethod
+    fun consumePendingPushAction(callId: String?, promise: Promise) {
+        try {
+            val snapshot = VoicePnManager.consumePendingPushAction(
+                reactApplicationContext,
+                callId
+            )
+            val result = Arguments.createMap()
+            result.putString("action", snapshot.action)
+            result.putString("metadata", snapshot.metadata)
+            result.putString("callId", snapshot.callId)
+            result.putBoolean("consumed", snapshot.action != null && snapshot.metadata != null)
+            promise.resolve(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error consuming pending push action", e)
+            promise.reject("CONSUME_PENDING_PUSH_ACTION_ERROR", e.message, e)
         }
     }
     
@@ -55,6 +138,31 @@ class VoicePnBridgeModule(reactContext: ReactApplicationContext) : ReactContextB
             promise.reject("SET_PENDING_PUSH_ACTION_ERROR", e.message, e)
         }
     }
+
+    /**
+     * Scope an action to an explicit call, e.g. when the notification action
+     * intent carries a call_id but the metadata came from a different flow.
+     */
+    @ReactMethod
+    fun setPendingPushActionForCall(
+        action: String,
+        metadata: String,
+        callId: String?,
+        promise: Promise
+    ) {
+        try {
+            VoicePnManager.setPendingPushActionForCall(
+                reactApplicationContext,
+                action,
+                metadata,
+                callId
+            )
+            promise.resolve(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting pending push action for call: $callId", e)
+            promise.reject("SET_PENDING_PUSH_ACTION_FOR_CALL_ERROR", e.message, e)
+        }
+    }
     
     @ReactMethod
     fun clearPendingPushAction(promise: Promise) {
@@ -63,6 +171,95 @@ class VoicePnBridgeModule(reactContext: ReactApplicationContext) : ReactContextB
             promise.resolve(result)
         } catch (e: Exception) {
             promise.reject("CLEAR_PENDING_PUSH_ACTION_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Clear only the push flow for [callId]; other active flows survive.
+     */
+    @ReactMethod
+    fun clearPendingPushActionForCall(callId: String?, promise: Promise) {
+        try {
+            val result = if (callId.isNullOrEmpty()) {
+                false
+            } else {
+                VoicePnManager.clearPendingPushActionForCall(reactApplicationContext, callId)
+            }
+            promise.resolve(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing pending push action for call: $callId", e)
+            promise.reject("CLEAR_PENDING_PUSH_ACTION_FOR_CALL_ERROR", e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun clearAllPendingPushActions(promise: Promise) {
+        try {
+            val result = VoicePnManager.clearAllPendingPushActions(reactApplicationContext)
+            promise.resolve(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing all pending push actions", e)
+            promise.reject("CLEAR_ALL_PENDING_PUSH_ACTIONS_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Called before a fresh, non-reconnecting login so no previous push's
+     * voice_sdk_id or pending-call attach state can be reused.
+     */
+    @ReactMethod
+    fun resetPushStateForFreshLogin(promise: Promise) {
+        try {
+            val result = VoicePnManager.resetPushStateForFreshLogin(reactApplicationContext)
+            promise.resolve(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error resetting push state for fresh login", e)
+            promise.reject("RESET_PUSH_STATE_FOR_FRESH_LOGIN_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Explicit end-of-flow hook for rejection, timeout, failure or cancellation.
+     */
+    @ReactMethod
+    fun completePushFlow(callId: String?, reason: String?, promise: Promise) {
+        try {
+            Log.d(TAG, "Completing push flow for call: $callId, reason: $reason")
+            if (callId.isNullOrEmpty()) {
+                VoicePnManager.consumePendingPushAction(reactApplicationContext, null)
+            } else {
+                VoicePnManager.clearPendingPushActionForCall(reactApplicationContext, callId)
+            }
+            promise.resolve(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error completing push flow for call: $callId", e)
+            promise.reject("COMPLETE_PUSH_FLOW_ERROR", e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun expireStalePendingPushActions(promise: Promise) {
+        try {
+            promise.resolve(
+                VoicePnManager.expireStalePendingPushActions(reactApplicationContext)
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error expiring stale push state", e)
+            promise.reject("EXPIRE_PENDING_PUSH_ACTIONS_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Verification hook for Android-side sequential-push and fresh-login checks.
+     * Returns a JSON snapshot of the scoped store.
+     */
+    @ReactMethod
+    fun getPendingPushState(promise: Promise) {
+        try {
+            promise.resolve(VoicePnManager.getPendingPushState(reactApplicationContext))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading pending push state", e)
+            promise.reject("GET_PENDING_PUSH_STATE_ERROR", e.message, e)
         }
     }
 
@@ -128,6 +325,14 @@ class VoicePnBridgeModule(reactContext: ReactApplicationContext) : ReactContextB
             
             // Store the call action for any listeners (using same pattern)
             VoicePnManager.setPendingCallAction(reactApplicationContext, "call_ended_from_rn", callId, System.currentTimeMillis())
+
+            // The push flow that established this call is complete. Clear only
+            // that flow so another active push keeps its metadata.
+            if (callId.isNullOrEmpty()) {
+                VoicePnManager.consumePendingPushAction(reactApplicationContext, null)
+            } else {
+                VoicePnManager.clearPendingPushActionForCall(reactApplicationContext, callId)
+            }
             
             promise.resolve(true)
         } catch (e: Exception) {

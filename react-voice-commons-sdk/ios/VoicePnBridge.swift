@@ -29,22 +29,16 @@ class VoicePnBridge: NSObject {
     
     @objc
     func setPendingPushAction(_ action: String, metadata: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
-        UserDefaults.standard.set(action, forKey: "pending_push_action")
-        UserDefaults.standard.set(metadata, forKey: "pending_push_metadata")
-        UserDefaults.standard.synchronize()
-        
-        NSLog("[VoicePnBridge] setPendingPushAction - action: \(action), metadata: \(metadata)")
-        resolve(true)
+        let stored = TelnyxCallKitManager.shared.setPendingPushAction(action, metadata: metadata)
+        NSLog("[VoicePnBridge] setPendingPushAction - action: \(action), metadata: \(metadata), stored: \(stored)")
+        resolve(stored)
     }
     
     @objc
     func clearPendingPushAction(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
-        UserDefaults.standard.removeObject(forKey: "pending_push_action")
-        UserDefaults.standard.removeObject(forKey: "pending_push_metadata")
-        UserDefaults.standard.synchronize()
-        
-        NSLog("[VoicePnBridge] clearPendingPushAction - cleared pending push data")
-        resolve(true)
+        let cleared = TelnyxCallKitManager.shared.clearPendingPushAction()
+        NSLog("[VoicePnBridge] clearPendingPushAction - cleared: \(cleared)")
+        resolve(cleared)
     }
     
     // MARK: - Additional UserDefaults methods from UserDefaultsModule
@@ -65,10 +59,9 @@ class VoicePnBridge: NSObject {
     
     @objc
     func clearPendingVoipPush(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
-        UserDefaults.standard.removeObject(forKey: "pending_voip_push")
-        UserDefaults.standard.synchronize()
-        NSLog("[VoicePnBridge] clearPendingVoipPush called. Cleared key pending_voip_push")
-        resolve(true)
+        let cleared = TelnyxCallKitManager.shared.clearPendingVoipPush()
+        NSLog("[VoicePnBridge] clearPendingVoipPush called. cleared: \(cleared)")
+        resolve(cleared)
     }
     
     @objc

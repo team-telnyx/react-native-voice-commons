@@ -5,6 +5,11 @@ import { TelnyxConnectionState } from './models/connection-state';
 import { Call } from './models/call';
 import { TelnyxCallState } from './models/call-state';
 import { TelnyxVoiceProvider } from './context/TelnyxVoiceContext';
+import {
+  completeAndroidPushFlow,
+  isTerminalPushAction,
+  readPendingAndroidPush,
+} from './internal/voice-pn-bridge';
 
 let sharedBackgroundClient: TelnyxVoipClient | null = null;
 let sharedBackgroundDisposePromise: Promise<void> | null = null;
@@ -89,6 +94,76 @@ export interface TelnyxVoiceAppComponent extends React.FC<TelnyxVoiceAppProps> {
 
   handleBackgroundPush: (message: any) => Promise<void>;
 }
+
+type AndroidPushDataResult = {
+  pushData: Record<string, any> | null;
+  earlyReturn: boolean;
+};
+
+/**
+ * Read launch push data from the Android native bridge.
+ *
+ * Exported so the push-launch contract (scope every read to the call that owns
+ * it, never clear a flow on read) is testable without mounting the component.
+ */
+export const getAndroidPushData = async (
+  voipClient: Pick<TelnyxVoipClient, 'currentActiveCall'>,
+  log: (...args: any[]) => void
+): Promise<AndroidPushDataResult> => {
+  try {
+    const { NativeModules } = require('react-native');
+    const nativeBridge = NativeModules.VoicePnBridge;
+
+    if (!nativeBridge) {
+      log('VoicePnBridge not available on Android');
+      return { pushData: null, earlyReturn: false };
+    }
+
+    log('Checking for pending push actions via VoicePnBridge');
+
+    // Check for pending call actions (notification button taps like hangup/answer)
+    const pendingCallAction = await nativeBridge.getPendingCallAction();
+    log('Raw pending call action response:', pendingCallAction);
+
+    if (pendingCallAction?.action === 'hangup' && pendingCallAction.callId) {
+      log('Processing hangup action from notification for call:', pendingCallAction.callId);
+
+      const activeCall = voipClient.currentActiveCall;
+      if (activeCall && activeCall.callId === pendingCallAction.callId) {
+        log('Hanging up active call from notification action');
+        try {
+          await activeCall.hangup();
+          log('Call hung up successfully from notification action');
+        } catch (error) {
+          log('Error hanging up call from notification action:', error);
+        }
+      } else {
+        log('No matching active call found for hangup action');
+      }
+
+      await nativeBridge.clearPendingCallAction();
+      // Hangup ends this call's push flow. Other pending pushes are left
+      // untouched because the hook is scoped to the call id.
+      await completeAndroidPushFlow({ callId: pendingCallAction.callId }, 'hangup');
+      return { pushData: null, earlyReturn: true };
+    }
+
+    // Read the launch push without consuming it. The push-answer connection
+    // still needs this metadata to attach the pending INVITE, and clearing
+    // here would destroy a different flow's metadata in sequential pushes.
+    const pushData = await readPendingAndroidPush();
+    if (pushData) {
+      log('Found pending push action:', pushData);
+      return { pushData, earlyReturn: false };
+    }
+
+    log('No pending push actions found');
+    return { pushData: null, earlyReturn: false };
+  } catch (bridgeError) {
+    log('Error accessing VoicePnBridge on Android:', bridgeError);
+    return { pushData: null, earlyReturn: false };
+  }
+};
 
 /**
  * A comprehensive wrapper component that handles all Telnyx SDK lifecycle management.
@@ -308,78 +383,6 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
     }
   }, [voipClient, log]);
 
-  // Retrieve pending push data from the Android native bridge
-  const getAndroidPushData = async (): Promise<{
-    pushData: Record<string, any> | null;
-    earlyReturn: boolean;
-  }> => {
-    try {
-      const { NativeModules } = require('react-native');
-      const VoicePnBridge = NativeModules.VoicePnBridge;
-
-      if (!VoicePnBridge) {
-        log('VoicePnBridge not available on Android');
-        return { pushData: null, earlyReturn: false };
-      }
-
-      log('Checking for pending push actions via VoicePnBridge');
-
-      // Check for pending call actions (notification button taps like hangup/answer)
-      const pendingCallAction = await VoicePnBridge.getPendingCallAction();
-      log('Raw pending call action response:', pendingCallAction);
-
-      if (pendingCallAction?.action === 'hangup' && pendingCallAction.callId) {
-        log('Processing hangup action from notification for call:', pendingCallAction.callId);
-
-        const activeCall = voipClient.currentActiveCall;
-        if (activeCall && activeCall.callId === pendingCallAction.callId) {
-          log('Hanging up active call from notification action');
-          try {
-            await activeCall.hangup();
-            log('Call hung up successfully from notification action');
-          } catch (error) {
-            log('Error hanging up call from notification action:', error);
-          }
-        } else {
-          log('No matching active call found for hangup action');
-        }
-
-        await VoicePnBridge.clearPendingCallAction();
-        return { pushData: null, earlyReturn: true };
-      }
-
-      // Check for regular push notification data
-      const pendingAction = await VoicePnBridge.getPendingPushAction();
-      log('Raw pending action response:', pendingAction);
-
-      if (pendingAction?.action != null && pendingAction?.metadata != null) {
-        log('Found pending push action:', pendingAction);
-
-        let metadata = pendingAction.metadata;
-        try {
-          metadata = JSON.parse(metadata);
-          log('Parsed metadata as JSON:', metadata);
-        } catch (e) {
-          log('JSON parse failed, trying Android key-value format');
-        }
-
-        await VoicePnBridge.clearPendingPushAction();
-        log('Cleared pending push action after retrieval');
-
-        return {
-          pushData: { action: pendingAction.action, metadata, from_notification: true },
-          earlyReturn: false,
-        };
-      }
-
-      log('No pending push actions found');
-      return { pushData: null, earlyReturn: false };
-    } catch (bridgeError) {
-      log('Error accessing VoicePnBridge on Android:', bridgeError);
-      return { pushData: null, earlyReturn: false };
-    }
-  };
-
   // Retrieve pending push data from the iOS native bridge
   const getIOSPushData = async (): Promise<Record<string, any> | null> => {
     try {
@@ -448,12 +451,14 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
       }
       onPushNotificationProcessingStarted?.();
 
+      let activePushData: Record<string, any> | null = null;
+
       try {
         // Retrieve pending push data from the native layer
         let pushData: Record<string, any> | null = null;
 
         if (Platform.OS === 'android') {
-          const result = await getAndroidPushData();
+          const result = await getAndroidPushData(voipClient, log);
           if (result.earlyReturn) return;
           pushData = result.pushData;
         } else if (Platform.OS === 'ios') {
@@ -467,6 +472,7 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
           return;
         }
 
+        activePushData = pushData;
         log('Processing initial push notification...');
 
         // Prevent duplicate processing if already connected or connecting.
@@ -529,8 +535,18 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
         }
 
         log('Initial push notification processed');
+
+        // A rejection/decline is a terminal outcome: the flow never attaches a
+        // call, so clear only this call's native push state. Answer flows stay
+        // until the pending INVITE is attached and the call ends.
+        if (isTerminalPushAction(pushData.action)) {
+          await completeAndroidPushFlow(pushData, pushData.action);
+        }
       } catch (e) {
         log('Error processing initial push notification:', e);
+        // A failed launch cannot attach its call. Clear the native flow that
+        // this attempt owned, leaving any newer sequential push untouched.
+        await completeAndroidPushFlow(activePushData, 'failure');
         setIsHandlingForegroundCall(false);
         isHandlingForegroundCallRef.current = false;
       } finally {

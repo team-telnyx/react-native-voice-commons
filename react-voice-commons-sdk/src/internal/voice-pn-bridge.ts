@@ -12,13 +12,58 @@ export interface CallActionEvent {
   timestamp: number;
 }
 
+export interface PendingPushActionSnapshot {
+  action?: string;
+  metadata?: string;
+  callId?: string;
+}
+
+export interface PendingPushActionLookup extends PendingPushActionSnapshot {
+  /** True when the native store found a flow for the requested call. */
+  found: boolean;
+}
+
+export interface ConsumedPushActionSnapshot extends PendingPushActionSnapshot {
+  /** True when the native store removed a flow and returned it. */
+  consumed: boolean;
+}
+
 export interface VoicePnBridgeInterface {
   getPendingPushAction(): Promise<{
     action: string | null;
     metadata: string | null;
+    callId?: string | null;
   }>;
   setPendingPushAction(action: string, metadata: string): Promise<boolean>;
   clearPendingPushAction(): Promise<boolean>;
+
+  // Per-call pending push store (Android). Each incoming push owns its own
+  // action, metadata and voice_sdk_id so sequential pushes stay isolated.
+  getPendingPushActionForCall(callId: string | null): Promise<{
+    action: string | null;
+    metadata: string | null;
+    callId?: string | null;
+    found: boolean;
+  }>;
+  getPendingVoiceSdkIdForCall(callId: string | null): Promise<string | null>;
+  hasPendingPushActionForCall(callId: string | null): Promise<boolean>;
+  consumePendingPushAction(callId: string | null): Promise<{
+    action: string | null;
+    metadata: string | null;
+    callId?: string | null;
+    consumed: boolean;
+  }>;
+  setPendingPushActionForCall(
+    action: string,
+    metadata: string,
+    callId: string | null
+  ): Promise<boolean>;
+  clearPendingPushActionForCall(callId: string | null): Promise<boolean>;
+  clearAllPendingPushActions(): Promise<boolean>;
+  resetPushStateForFreshLogin(): Promise<boolean>;
+  completePushFlow(callId: string | null, reason: string | null): Promise<boolean>;
+  expireStalePendingPushActions(): Promise<number>;
+  getPendingPushState(): Promise<string>;
 
   // Call action methods (reliable @ReactMethod pattern)
   getPendingCallAction(): Promise<{
@@ -65,12 +110,13 @@ export class VoicePnBridge {
   /**
    * Get any pending push notification action from native side
    */
-  static async getPendingPushAction(): Promise<{ action?: string; metadata?: string }> {
+  static async getPendingPushAction(): Promise<PendingPushActionSnapshot> {
     try {
       const result = await NativeBridge.getPendingPushAction();
       return {
         action: result?.action || undefined,
         metadata: result?.metadata || undefined,
+        callId: result?.callId || undefined,
       };
     } catch (error) {
       console.error('VoicePnBridge: Error getting pending push action:', error);
@@ -132,6 +178,176 @@ export class VoicePnBridge {
     } catch (error) {
       console.error('VoicePnBridge: Error clearing pending push action:', error);
       return false;
+    }
+  }
+
+  /**
+   * Read the pending push flow that belongs to `callId` without consuming it.
+   * Reading is deliberately side-effect free so the push-answer connection can
+   * still attach the pending INVITE after the launch read.
+   */
+  static async getPendingPushActionForCall(callId?: string): Promise<PendingPushActionLookup> {
+    if (Platform.OS !== 'android') return { found: false };
+    if (!callId) return { found: false };
+    try {
+      const result = await NativeBridge.getPendingPushActionForCall(callId);
+      return {
+        action: result?.action || undefined,
+        metadata: result?.metadata || undefined,
+        callId: result?.callId || callId,
+        found: Boolean(result?.found),
+      };
+    } catch (error) {
+      console.error('VoicePnBridge: Error getting pending push action for call:', error);
+      return { found: false };
+    }
+  }
+
+  /**
+   * Push-carried voice_sdk_id for one call, or null. Never falls back to
+   * another call's push flow.
+   */
+  static async getPendingVoiceSdkIdForCall(callId?: string): Promise<string | null> {
+    if (Platform.OS !== 'android') return null;
+    if (!callId) return null;
+    try {
+      return (await NativeBridge.getPendingVoiceSdkIdForCall(callId)) || null;
+    } catch (error) {
+      console.error('VoicePnBridge: Error getting pending voice_sdk_id for call:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Whether one specific call still owns a pending push flow.
+   */
+  static async hasPendingPushActionForCall(callId?: string): Promise<boolean> {
+    if (Platform.OS !== 'android') return false;
+    if (!callId) return false;
+    try {
+      return Boolean(await NativeBridge.hasPendingPushActionForCall(callId));
+    } catch (error) {
+      console.error('VoicePnBridge: Error checking pending push action for call:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Atomically remove and return the push flow for one call. When `callId` is
+   * omitted the native side consumes the currently delivered flow.
+   */
+  static async consumePendingPushAction(callId?: string): Promise<ConsumedPushActionSnapshot> {
+    if (Platform.OS !== 'android') return { consumed: false };
+    try {
+      const result = await NativeBridge.consumePendingPushAction(callId || null);
+      return {
+        action: result?.action || undefined,
+        metadata: result?.metadata || undefined,
+        callId: result?.callId || undefined,
+        consumed: Boolean(result?.consumed),
+      };
+    } catch (error) {
+      console.error('VoicePnBridge: Error consuming pending push action:', error);
+      return { consumed: false };
+    }
+  }
+
+  /**
+   * Scope an action to an explicit call, e.g. when a notification action intent
+   * carries a call_id that must not borrow another flow's metadata.
+   */
+  static async setPendingPushActionForCall(
+    action: string,
+    metadata: string,
+    callId?: string
+  ): Promise<boolean> {
+    if (Platform.OS !== 'android') return false;
+    try {
+      return await NativeBridge.setPendingPushActionForCall(action, metadata, callId || null);
+    } catch (error) {
+      console.error('VoicePnBridge: Error setting pending push action for call:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Clear only the flow owned by `callId`; other pending pushes survive.
+   */
+  static async clearPendingPushActionForCall(callId?: string): Promise<boolean> {
+    if (Platform.OS !== 'android') return false;
+    if (!callId) return false;
+    try {
+      return await NativeBridge.clearPendingPushActionForCall(callId);
+    } catch (error) {
+      console.error('VoicePnBridge: Error clearing pending push action for call:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Clear every pending push flow. Reserved for an explicit fresh session.
+   */
+  static async clearAllPendingPushActions(): Promise<boolean> {
+    if (Platform.OS !== 'android') return false;
+    try {
+      return await NativeBridge.clearAllPendingPushActions();
+    } catch (error) {
+      console.error('VoicePnBridge: Error clearing all pending push actions:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Reset the native push store before a fresh (non-reconnecting) login so no
+   * previous push's voice_sdk_id or pending-call attach state is reused.
+   */
+  static async resetPushStateForFreshLogin(): Promise<boolean> {
+    if (Platform.OS !== 'android') return false;
+    try {
+      return await NativeBridge.resetPushStateForFreshLogin();
+    } catch (error) {
+      console.error('VoicePnBridge: Error resetting push state for fresh login:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Explicit end-of-flow hook for rejection, timeout, failure or cancellation.
+   * Only the flow for `callId` is cleared, so a newer sequential push survives.
+   */
+  static async completePushFlow(callId?: string, reason?: string): Promise<boolean> {
+    if (Platform.OS !== 'android') return false;
+    try {
+      return await NativeBridge.completePushFlow(callId || null, reason || null);
+    } catch (error) {
+      console.error('VoicePnBridge: Error completing push flow:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Remove push flows that outlived their handling window.
+   */
+  static async expireStalePendingPushActions(): Promise<number> {
+    if (Platform.OS !== 'android') return 0;
+    try {
+      return (await NativeBridge.expireStalePendingPushActions()) || 0;
+    } catch (error) {
+      console.error('VoicePnBridge: Error expiring stale pending push actions:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Diagnostic snapshot of the scoped native push store.
+   */
+  static async getPendingPushState(): Promise<string | null> {
+    if (Platform.OS !== 'android') return null;
+    try {
+      return (await NativeBridge.getPendingPushState()) || null;
+    } catch (error) {
+      console.error('VoicePnBridge: Error reading pending push state:', error);
+      return null;
     }
   }
 
@@ -420,3 +636,167 @@ export class VoicePnBridge {
 
 // Export the native bridge for direct access if needed
 export { NativeBridge as VoicePnBridgeNative };
+
+// ===========================================================================
+// Push-flow helpers
+//
+// These keep the Android push flow scoped to the call that owns it. Reading a
+// launch push must not consume it (the push-answer connection still needs the
+// metadata to attach the pending INVITE), and ending one flow must never clear
+// a newer sequential push that arrived in the meantime.
+// ===========================================================================
+
+/**
+ * Push data that a wake/launch path hands to `TelnyxVoipClient`.
+ *
+ * `callId` is carried explicitly so every later cleanup can target exactly the
+ * flow this push owns instead of whichever flow happens to be current.
+ */
+export interface WakePushData {
+  action: string;
+  metadata: any;
+  from_notification: true;
+  callId?: string;
+}
+
+const TERMINAL_PUSH_ACTIONS = new Set(['reject', 'decline', 'hangup', 'end', 'endCall']);
+
+/**
+ * Metadata can arrive as an object or as a JSON string depending on the push
+ * provider. Parse it to an object when possible without throwing.
+ */
+export function parsePushMetadata(metadata: unknown): any {
+  if (typeof metadata !== 'string') {
+    return metadata;
+  }
+
+  try {
+    return JSON.parse(metadata);
+  } catch {
+    return metadata;
+  }
+}
+
+/**
+ * Resolve the call a push payload belongs to, either from an explicit
+ * `callId` or from `metadata.call_id`.
+ */
+export function extractPushCallId(
+  payload: Record<string, any> | null | undefined
+): string | undefined {
+  if (!payload) {
+    return undefined;
+  }
+
+  if (typeof payload.callId === 'string' && payload.callId) {
+    return payload.callId;
+  }
+
+  const metadata = parsePushMetadata(payload.metadata);
+  if (metadata && typeof metadata === 'object') {
+    const metadataCallId = metadata.call_id;
+    if (typeof metadataCallId === 'string' && metadataCallId) {
+      return metadataCallId;
+    }
+  }
+
+  if (typeof payload.call_id === 'string' && payload.call_id) {
+    return payload.call_id;
+  }
+
+  return undefined;
+}
+
+/**
+ * Convert a native pending-action snapshot into the wake payload consumed by
+ * `handlePushNotification`, preserving the call scope.
+ */
+export function toWakePushData(snapshot: PendingPushActionSnapshot): WakePushData | null {
+  if (!snapshot?.action || snapshot.metadata == null) {
+    return null;
+  }
+
+  const metadata = parsePushMetadata(snapshot.metadata);
+  const callId = snapshot.callId || extractPushCallId({ metadata });
+
+  return {
+    action: snapshot.action,
+    metadata,
+    from_notification: true,
+    callId,
+  };
+}
+
+/**
+ * Read the launch push without consuming it.
+ *
+ * Reading one call's flow must not clear another call's pending push, and it
+ * must not clear this flow either: the push-answer connection still needs the
+ * metadata to attach the pending INVITE. Completion/rejection/failure clears
+ * it through `completeAndroidPushFlow`.
+ */
+export async function readPendingAndroidPush(
+  bridge: Pick<
+    typeof VoicePnBridge,
+    'getPendingPushAction' | 'getPendingPushActionForCall' | 'getPendingVoiceSdkIdForCall'
+  > = VoicePnBridge
+): Promise<WakePushData | null> {
+  const pending = await bridge.getPendingPushAction();
+  const wake = toWakePushData(pending);
+  if (!wake) {
+    return null;
+  }
+
+  let resolved = wake;
+
+  if (wake.callId) {
+    // Re-read the flow scoped to its own call. This keeps a newer sequential
+    // push from being selected as "current" and confirms the metadata belongs
+    // to the call we are about to connect for.
+    const scoped = await bridge.getPendingPushActionForCall(wake.callId);
+    if (scoped?.found) {
+      const scopedWake = toWakePushData({
+        action: scoped.action,
+        metadata: scoped.metadata,
+        callId: scoped.callId || wake.callId,
+      });
+      if (scopedWake) {
+        resolved = scopedWake;
+      }
+    }
+  }
+
+  // Ensure the connection is stamped with the voice_sdk_id that belongs to
+  // this call's push, even if the metadata lost it on the way through.
+  const { callId, metadata } = resolved;
+  if (callId && metadata && typeof metadata === 'object' && !metadata.voice_sdk_id) {
+    const scopedVoiceSdkId = await bridge.getPendingVoiceSdkIdForCall(callId);
+    if (scopedVoiceSdkId) {
+      return { ...resolved, metadata: { ...metadata, voice_sdk_id: scopedVoiceSdkId } };
+    }
+  }
+
+  return resolved;
+}
+
+/**
+ * End the push flow for one call after its terminal outcome. Only that call's
+ * flow is removed, so a sequential push that arrived in the meantime survives.
+ */
+export async function completeAndroidPushFlow(
+  payload: Record<string, any> | null | undefined,
+  reason: string
+): Promise<boolean> {
+  if (Platform.OS !== 'android') {
+    return false;
+  }
+
+  return VoicePnBridge.completePushFlow(extractPushCallId(payload), reason);
+}
+
+/**
+ * Whether an action ends the push flow rather than leaving a call to attach.
+ */
+export function isTerminalPushAction(action?: string): boolean {
+  return typeof action === 'string' && TERMINAL_PUSH_ACTIONS.has(action);
+}
