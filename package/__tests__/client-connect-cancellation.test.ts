@@ -49,6 +49,7 @@ jest.mock('../lib/login-handler', () => ({
     ),
     setAttachCall: jest.fn(),
     setFromPush: jest.fn(),
+    setReconnecting: jest.fn(),
     cancelPendingLogin: jest.fn(),
   })),
 }));
