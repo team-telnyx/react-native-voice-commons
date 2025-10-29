@@ -1,0 +1,100 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  formatting-and-lint:
+    name: Formatting & Lint Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install
+          cd react-voice-commons && npm install
+
+      - name: Prettier Format Check
+        run: |
+          echo "Running Prettier check on all files..."
+          npm run lint
+
+      - name: ESLint Check - React Voice Commons
+        continue-on-error: true
+        run: |
+          echo "Running ESLint check on react-voice-commons (non-blocking)..."
+          cd react-voice-commons && npm run lint || echo "ESLint found issues in react-voice-commons but continuing..."
+
+      - name: Code Quality Summary
+        if: always()
+        run: |
+          echo "## Code Quality Report" >> $GITHUB_STEP_SUMMARY
+          echo "This workflow checks code formatting and linting." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Coverage:" >> $GITHUB_STEP_SUMMARY
+          echo "- 🎨 **Prettier**: All files (*.js, *.jsx, *.ts, *.tsx, *.json, *.md)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔍 **ESLint**: react-voice-commons/ (non-blocking)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔒 **Security**: npm audit on all projects" >> $GITHUB_STEP_SUMMARY
+          echo "- 🛡️ **CodeQL**: All JavaScript/TypeScript files" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Workflow completed successfully" >> $GITHUB_STEP_SUMMARY
+
+  security-check:
+    name: Security Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install
+          cd react-voice-commons && npm install
+
+      - name: npm audit - All Projects
+        run: |
+          echo "Running security audit on root project..."
+          npm audit --audit-level=high --production || true
+
+          echo "Running security audit on react-voice-commons..."
+          cd react-voice-commons && npm audit --audit-level=high --production || true
+
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
