@@ -44,13 +44,13 @@
   ],
   "author": "Telnyx",
   "license": "MIT",
-  "homepage": "https://github.com/team-telnyx/react-voice-commons",
+  "homepage": "https://github.com/team-telnyx/react-native-voice-commons",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/team-telnyx/react-voice-commons.git"
+    "url": "git+https://github.com/team-telnyx/react-native-voice-commons.git"
   },
   "bugs": {
-    "url": "https://github.com/team-telnyx/react-voice-commons/issues"
+    "url": "https://github.com/team-telnyx/react-native-voice-commons/issues"
   },
   "peerDependencies": {
     "@react-native-async-storage/async-storage": "^2.1.0",
