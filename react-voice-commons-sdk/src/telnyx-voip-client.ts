@@ -143,6 +143,7 @@ export class TelnyxVoipClient {
    * @returns A Promise that completes when the connection attempt is initiated
    *
    * Listen to connectionState$ to monitor the actual connection status.
+   * Credentials are automatically stored for future reconnection.
    */
   async login(config: CredentialConfig): Promise<void> {
     this._throwIfDisposed();
@@ -156,6 +157,9 @@ export class TelnyxVoipClient {
       console.log('TelnyxVoipClient: Logging in with credentials for user:', config.sipUser);
     }
 
+    // Store credentials for future reconnection
+    await this._storeCredentials(config);
+
     await this._sessionManager.connectWithCredential(config);
   }
 
@@ -166,6 +170,7 @@ export class TelnyxVoipClient {
    * @returns A Promise that completes when the connection attempt is initiated
    *
    * Listen to connectionState$ to monitor the actual connection status.
+   * Token is automatically stored for future reconnection.
    */
   async loginWithToken(config: TokenConfig): Promise<void> {
     this._throwIfDisposed();
@@ -178,6 +183,9 @@ export class TelnyxVoipClient {
     if (this._options.debug) {
       console.log('TelnyxVoipClient: Logging in with token');
     }
+
+    // Store token for future reconnection
+    await this._storeToken(config);
 
     await this._sessionManager.connectWithToken(config);
   }
@@ -445,6 +453,62 @@ export class TelnyxVoipClient {
   }
 
   // ========== Private Methods ==========
+
+  /**
+   * Store credential configuration for automatic reconnection
+   */
+  private async _storeCredentials(config: CredentialConfig): Promise<void> {
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      
+      await AsyncStorage.setItem('@telnyx_username', config.sipUser);
+      await AsyncStorage.setItem('@telnyx_password', config.sipPassword);
+      
+      if (config.pushNotificationDeviceToken) {
+        await AsyncStorage.setItem('@push_token', config.pushNotificationDeviceToken);
+      }
+      
+      // Clear any existing token since we're using credentials
+      await AsyncStorage.removeItem('@credential_token');
+      
+      if (this._options.debug) {
+        console.log('TelnyxVoipClient: Stored credentials for user:', config.sipUser);
+      }
+    } catch (error) {
+      if (this._options.debug) {
+        console.log('TelnyxVoipClient: Failed to store credentials:', error);
+      }
+      // Don't throw here - storage failure shouldn't prevent login
+    }
+  }
+
+  /**
+   * Store token configuration for automatic reconnection
+   */
+  private async _storeToken(config: TokenConfig): Promise<void> {
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      
+      await AsyncStorage.setItem('@credential_token', config.token);
+      
+      if (config.pushNotificationDeviceToken) {
+        await AsyncStorage.setItem('@push_token', config.pushNotificationDeviceToken);
+      }
+      
+      // Clear any existing credentials since we're using token
+      await AsyncStorage.removeItem('@telnyx_username');
+      await AsyncStorage.removeItem('@telnyx_password');
+      
+      if (this._options.debug) {
+        console.log('TelnyxVoipClient: Stored authentication token');
+      }
+    } catch (error) {
+      if (this._options.debug) {
+        console.log('TelnyxVoipClient: Failed to store token:', error);
+      }
+      // Don't throw here - storage failure shouldn't prevent login
+    }
+  }
 
   /**
    * Throw an error if the client has been disposed

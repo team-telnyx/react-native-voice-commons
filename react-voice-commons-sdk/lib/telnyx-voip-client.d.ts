@@ -84,6 +84,7 @@ export declare class TelnyxVoipClient {
      * @returns A Promise that completes when the connection attempt is initiated
      *
      * Listen to connectionState$ to monitor the actual connection status.
+     * Credentials are automatically stored for future reconnection.
      */
     login(config: CredentialConfig): Promise<void>;
     /**
@@ -93,6 +94,7 @@ export declare class TelnyxVoipClient {
      * @returns A Promise that completes when the connection attempt is initiated
      *
      * Listen to connectionState$ to monitor the actual connection status.
+     * Token is automatically stored for future reconnection.
      */
     loginWithToken(config: TokenConfig): Promise<void>;
     /**
@@ -169,6 +171,14 @@ export declare class TelnyxVoipClient {
      * disposed after handling push notifications.
      */
     dispose(): void;
+    /**
+     * Store credential configuration for automatic reconnection
+     */
+    private _storeCredentials;
+    /**
+     * Store token configuration for automatic reconnection
+     */
+    private _storeToken;
     /**
      * Throw an error if the client has been disposed
      */

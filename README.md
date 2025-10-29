@@ -146,19 +146,22 @@ await voipClient.loginWithToken(config);
 
 #### Automatic Storage & Reconnection
 
-The library automatically stores authentication data in AsyncStorage for seamless reconnection:
+The library automatically stores authentication data securely for seamless reconnection. **You don't need to manually manage these storage keys** - the library handles everything internally.
 
-##### Storage Keys Used:
+##### Internal Storage (Managed Automatically)
 
+The library uses these AsyncStorage keys internally:
 - `@telnyx_username` - SIP username (credential auth)
-- `@telnyx_password` - SIP password (credential auth)
+- `@telnyx_password` - SIP password (credential auth) 
 - `@credential_token` - JWT authentication token (token auth)
 - `@push_token` - Push notification device token
+
+**Note**: These are managed automatically by the library. You only need to call `login()` once, and the library will handle storage and future reconnections.
 
 ##### Auto-Reconnection
 
 ```tsx
-// Automatically reconnects using stored credentials or token
+// Automatically reconnects using internally stored credentials or token
 const success = await voipClient.loginFromStoredConfig();
 
 if (!success) {
@@ -174,9 +177,11 @@ if (!success) {
 - Network reconnection after connectivity loss
 - App state changes (foreground/background transitions)
 
-##### Manual Storage Management
+**Demo App Note**: The demo app's `TelnyxLoginForm` component does additional storage for UI convenience (pre-filling the login form). This is separate from the library's internal authentication storage and is not required for production apps.
 
-If you need to clear stored authentication data:
+##### Manual Storage Management (Advanced Use Only)
+
+If you need to clear stored authentication data manually:
 
 ```tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -184,11 +189,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Clear all Telnyx authentication data
 await AsyncStorage.multiRemove([
   '@telnyx_username',
-  '@telnyx_password',
+  '@telnyx_password', 
   '@credential_token',
   '@push_token',
 ]);
 ```
+
+**Important**: This is typically not needed. The library manages authentication storage automatically. Only use this for advanced scenarios like implementing a "logout" feature that clears all stored data.
 
 ### Native Integration
 

@@ -18,6 +18,7 @@ import {
   TelnyxVoipClient,
   TelnyxConnectionState,
   createCredentialConfig,
+  createTokenConfig,
   useTelnyxVoice,
 } from '../react-voice-commons-sdk/src';
 import { VoipTokenFetcher } from './VoipTokenFetcher';
@@ -28,14 +29,18 @@ interface TelnyxLoginFormProps {
   debug?: boolean;
 }
 
+type LoginMode = 'credentials' | 'token';
+
 export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   onLoginSuccess,
   onLoginError,
   debug = false,
 }) => {
   const { voipClient } = useTelnyxVoice();
+  const [loginMode, setLoginMode] = useState<LoginMode>('credentials');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [token, setToken] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [connectionState, setConnectionState] = useState(voipClient.currentConnectionState);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
@@ -80,11 +85,16 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
     try {
       const storedUsername = await AsyncStorage.getItem('@telnyx_username');
       const storedPassword = await AsyncStorage.getItem('@telnyx_password');
+      const storedToken = await AsyncStorage.getItem('@credential_token');
 
       if (storedUsername) setUsername(storedUsername);
       if (storedPassword) setPassword(storedPassword);
+      if (storedToken) {
+        setToken(storedToken);
+        setLoginMode('token'); // Switch to token mode if token exists
+      }
 
-      log('TelnyxLoginForm: Loaded stored credentials');
+      log('TelnyxLoginForm: Loaded stored credentials and token');
     } catch (error) {
       log('TelnyxLoginForm: Error loading stored credentials:', error);
     }
@@ -92,13 +102,23 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
 
   const saveCredentials = async () => {
     try {
-      await AsyncStorage.setItem('@telnyx_username', username);
-      await AsyncStorage.setItem('@telnyx_password', password);
+      if (loginMode === 'credentials') {
+        await AsyncStorage.setItem('@telnyx_username', username);
+        await AsyncStorage.setItem('@telnyx_password', password);
+        // Clear token when using credentials
+        await AsyncStorage.removeItem('@credential_token');
+      } else {
+        await AsyncStorage.setItem('@credential_token', token);
+        // Clear credentials when using token
+        await AsyncStorage.removeItem('@telnyx_username');
+        await AsyncStorage.removeItem('@telnyx_password');
+      }
+      
       if (pushToken) {
         await AsyncStorage.setItem('@push_token', pushToken);
-        log('TelnyxLoginForm: Credentials and push token saved');
+        log(`TelnyxLoginForm: ${loginMode} and push token saved`);
       } else {
-        log('TelnyxLoginForm: Credentials saved (no push token yet)');
+        log(`TelnyxLoginForm: ${loginMode} saved (no push token yet)`);
       }
     } catch (error) {
       log('TelnyxLoginForm: Error saving credentials:', error);
@@ -106,27 +126,44 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   };
 
   const handleLogin = async () => {
-    if (!username.trim() || !password.trim()) {
-      Alert.alert('Error', 'Username and password are required');
-      return;
+    if (loginMode === 'credentials') {
+      if (!username.trim() || !password.trim()) {
+        Alert.alert('Error', 'Username and password are required');
+        return;
+      }
+    } else {
+      if (!token.trim()) {
+        Alert.alert('Error', 'Token is required');
+        return;
+      }
     }
 
     setIsLoading(true);
-    log('TelnyxLoginForm: Starting login process');
+    log(`TelnyxLoginForm: Starting ${loginMode} login process`);
 
     try {
-      // Save credentials first
+      // Save credentials/token first
       await saveCredentials();
 
-      // Create credential config with push token
-      const config = createCredentialConfig(username, password, {
-        debug: true,
-        pushNotificationDeviceToken: pushToken || undefined,
-      });
+      if (loginMode === 'credentials') {
+        // Create credential config with push token
+        const config = createCredentialConfig(username, password, {
+          debug: true,
+          pushNotificationDeviceToken: pushToken || undefined,
+        });
 
-      log('TelnyxLoginForm: Connecting with credentials and push token:', pushToken);
+        log('TelnyxLoginForm: Connecting with credentials and push token:', pushToken);
+        await voipClient.login(config);
+      } else {
+        // Create token config with push token
+        const config = createTokenConfig(token, {
+          debug: true,
+          pushNotificationDeviceToken: pushToken || undefined,
+        });
 
-      await voipClient.login(config);
+        log('TelnyxLoginForm: Connecting with token and push token:', pushToken);
+        await voipClient.loginWithToken(config);
+      }
     } catch (error) {
       setIsLoading(false);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -157,33 +194,75 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
               <Text style={styles.title}>Telnyx Login</Text>
               <Text style={styles.description}>Enter your SIP credentials to connect</Text>
 
-              <View style={styles.form}>
-                <TextInput
-                  style={[styles.input, focusedInput === 'username' && styles.inputFocused]}
-                  placeholder="SIP Username"
-                  placeholderTextColor="#999"
-                  value={username}
-                  onChangeText={setUsername}
-                  onFocus={() => setFocusedInput('username')}
-                  onBlur={() => setFocusedInput(null)}
-                  editable={!isLoading && !isConnected}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
+              {/* Tab Interface */}
+              <View style={styles.tabContainer}>
+                <TouchableOpacity
+                  style={[styles.tab, loginMode === 'credentials' && styles.activeTab]}
+                  onPress={() => setLoginMode('credentials')}
+                  disabled={isLoading || isConnected}
+                >
+                  <Text style={[styles.tabText, loginMode === 'credentials' && styles.activeTabText]}>
+                    Credentials
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.tab, loginMode === 'token' && styles.activeTab]}
+                  onPress={() => setLoginMode('token')}
+                  disabled={isLoading || isConnected}
+                >
+                  <Text style={[styles.tabText, loginMode === 'token' && styles.activeTabText]}>
+                    Token
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
-                <TextInput
-                  style={[styles.input, focusedInput === 'password' && styles.inputFocused]}
-                  placeholder="SIP Password"
-                  placeholderTextColor="#999"
-                  value={password}
-                  onChangeText={setPassword}
-                  onFocus={() => setFocusedInput('password')}
-                  onBlur={() => setFocusedInput(null)}
-                  secureTextEntry
-                  editable={!isLoading && !isConnected}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
+              <View style={styles.form}>
+                {loginMode === 'credentials' ? (
+                  <>
+                    <TextInput
+                      style={[styles.input, focusedInput === 'username' && styles.inputFocused]}
+                      placeholder="SIP Username"
+                      placeholderTextColor="#999"
+                      value={username}
+                      onChangeText={setUsername}
+                      onFocus={() => setFocusedInput('username')}
+                      onBlur={() => setFocusedInput(null)}
+                      editable={!isLoading && !isConnected}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+
+                    <TextInput
+                      style={[styles.input, focusedInput === 'password' && styles.inputFocused]}
+                      placeholder="SIP Password"
+                      placeholderTextColor="#999"
+                      value={password}
+                      onChangeText={setPassword}
+                      onFocus={() => setFocusedInput('password')}
+                      onBlur={() => setFocusedInput(null)}
+                      secureTextEntry
+                      editable={!isLoading && !isConnected}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </>
+                ) : (
+                  <TextInput
+                    style={[styles.input, focusedInput === 'token' && styles.inputFocused]}
+                    placeholder="Authentication Token"
+                    placeholderTextColor="#999"
+                    value={token}
+                    onChangeText={setToken}
+                    onFocus={() => setFocusedInput('token')}
+                    onBlur={() => setFocusedInput(null)}
+                    editable={!isLoading && !isConnected}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                  />
+                )}
 
                 <TouchableOpacity
                   style={[styles.button, (isLoading || isConnected) && styles.buttonDisabled]}
@@ -295,5 +374,39 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#666',
     fontSize: 14,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    marginBottom: 24,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  activeTab: {
+    backgroundColor: '#007AFF',
+    shadowColor: '#007AFF',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+  },
+  activeTabText: {
+    color: '#ffffff',
+    fontWeight: '600',
   },
 });
