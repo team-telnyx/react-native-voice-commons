@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           npm install
-          cd react-voice-commons && npm install
+          cd react-voice-commons-sdk && npm install
 
       - name: Prettier Format Check
         run: |
@@ -33,8 +33,8 @@ jobs:
       - name: ESLint Check - React Voice Commons
         continue-on-error: true
         run: |
-          echo "Running ESLint check on react-voice-commons (non-blocking)..."
-          cd react-voice-commons && npm run lint || echo "ESLint found issues in react-voice-commons but continuing..."
+          echo "Running ESLint check on react-voice-commons-sdk (non-blocking)..."
+          cd react-voice-commons-sdk && npm run lint || echo "ESLint found issues in react-voice-commons-sdk but continuing..."
 
       - name: Code Quality Summary
         if: always()
@@ -44,7 +44,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Coverage:" >> $GITHUB_STEP_SUMMARY
           echo "- 🎨 **Prettier**: All files (*.js, *.jsx, *.ts, *.tsx, *.json, *.md)" >> $GITHUB_STEP_SUMMARY
-          echo "- 🔍 **ESLint**: react-voice-commons/ (non-blocking)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔍 **ESLint**: react-voice-commons-sdk/ (non-blocking)" >> $GITHUB_STEP_SUMMARY
           echo "- 🔒 **Security**: npm audit on all projects" >> $GITHUB_STEP_SUMMARY
           echo "- 🛡️ **CodeQL**: All JavaScript/TypeScript files" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -66,15 +66,15 @@ jobs:
       - name: Install dependencies
         run: |
           npm install
-          cd react-voice-commons && npm install
+          cd react-voice-commons-sdk && npm install
 
       - name: npm audit - All Projects
         run: |
           echo "Running security audit on root project..."
           npm audit --audit-level=high --production || true
 
-          echo "Running security audit on react-voice-commons..."
-          cd react-voice-commons && npm audit --audit-level=high --production || true
+          echo "Running security audit on react-voice-commons-sdk..."
+          cd react-voice-commons-sdk && npm audit --audit-level=high --production || true
 
   codeql:
     name: CodeQL Analysis

@@ -65,8 +65,8 @@ This runs all checks that would run in GitHub Actions.
 **GitHub Actions:**
 
 - ✅ **Prettier**: All files (_.js, _.jsx, _.ts, _.tsx, _.json, _.md) - **BLOCKS merges if fails**
-- ✅ **ESLint**: react-voice-commons/ directory (non-blocking)
-- ✅ **Security audit**: Root + react-voice-commons projects
+- ✅ **ESLint**: react-voice-commons-sdk/ directory (non-blocking)
+- ✅ **Security audit**: Root + react-voice-commons-sdk projects
 - ✅ **CodeQL**: All JavaScript/TypeScript files across entire repository
 
 ## 🚦 GitHub Actions Behavior
