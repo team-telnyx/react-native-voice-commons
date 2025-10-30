@@ -460,17 +460,17 @@ export class TelnyxVoipClient {
   private async _storeCredentials(config: CredentialConfig): Promise<void> {
     try {
       const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-      
+
       await AsyncStorage.setItem('@telnyx_username', config.sipUser);
       await AsyncStorage.setItem('@telnyx_password', config.sipPassword);
-      
+
       if (config.pushNotificationDeviceToken) {
         await AsyncStorage.setItem('@push_token', config.pushNotificationDeviceToken);
       }
-      
+
       // Clear any existing token since we're using credentials
       await AsyncStorage.removeItem('@credential_token');
-      
+
       if (this._options.debug) {
         console.log('TelnyxVoipClient: Stored credentials for user:', config.sipUser);
       }
@@ -488,17 +488,17 @@ export class TelnyxVoipClient {
   private async _storeToken(config: TokenConfig): Promise<void> {
     try {
       const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-      
+
       await AsyncStorage.setItem('@credential_token', config.token);
-      
+
       if (config.pushNotificationDeviceToken) {
         await AsyncStorage.setItem('@push_token', config.pushNotificationDeviceToken);
       }
-      
+
       // Clear any existing credentials since we're using token
       await AsyncStorage.removeItem('@telnyx_username');
       await AsyncStorage.removeItem('@telnyx_password');
-      
+
       if (this._options.debug) {
         console.log('TelnyxVoipClient: Stored authentication token');
       }

@@ -94,7 +94,7 @@ function App() {
 // Use the hook in your components
 function CallComponent() {
   const { client, connect, call, callState } = useTelnyxVoice();
-  
+
   const handleConnect = () => {
     connect({
       login_token: 'your-jwt-token',
@@ -118,6 +118,7 @@ function CallComponent() {
 ## 📋 Dependencies
 
 This package depends on:
+
 - `@telnyx/react-native-voice-sdk` - The core SDK (now from npm)
 - React Native WebRTC for call functionality
 - React Native VOIP Push Notifications for iOS CallKit integration

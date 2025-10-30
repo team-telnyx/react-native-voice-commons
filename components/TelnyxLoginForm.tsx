@@ -113,7 +113,7 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
         await AsyncStorage.removeItem('@telnyx_username');
         await AsyncStorage.removeItem('@telnyx_password');
       }
-      
+
       if (pushToken) {
         await AsyncStorage.setItem('@push_token', pushToken);
         log(`TelnyxLoginForm: ${loginMode} and push token saved`);
@@ -201,7 +201,9 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
                   onPress={() => setLoginMode('credentials')}
                   disabled={isLoading || isConnected}
                 >
-                  <Text style={[styles.tabText, loginMode === 'credentials' && styles.activeTabText]}>
+                  <Text
+                    style={[styles.tabText, loginMode === 'credentials' && styles.activeTabText]}
+                  >
                     Credentials
                   </Text>
                 </TouchableOpacity>

@@ -151,8 +151,9 @@ The library automatically stores authentication data securely for seamless recon
 ##### Internal Storage (Managed Automatically)
 
 The library uses these AsyncStorage keys internally:
+
 - `@telnyx_username` - SIP username (credential auth)
-- `@telnyx_password` - SIP password (credential auth) 
+- `@telnyx_password` - SIP password (credential auth)
 - `@credential_token` - JWT authentication token (token auth)
 - `@push_token` - Push notification device token
 
@@ -189,7 +190,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Clear all Telnyx authentication data
 await AsyncStorage.multiRemove([
   '@telnyx_username',
-  '@telnyx_password', 
+  '@telnyx_password',
   '@credential_token',
   '@push_token',
 ]);
@@ -329,6 +330,7 @@ public class AppDelegate: ExpoAppDelegate, PKPushRegistryDelegate {
    - Place it in the root directory of the project
 
 5. **Prebuild the project**:
+
    ```bash
    npx expo prebuild
    ```
