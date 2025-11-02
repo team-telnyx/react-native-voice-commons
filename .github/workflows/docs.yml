@@ -45,7 +45,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd react-voice-commons-sdk
-          npm ci
+          npm install
 
       - name: Generate documentation
         run: |
