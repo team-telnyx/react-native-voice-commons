@@ -1,0 +1,293 @@
+<!DOCTYPE html><html class="default" lang="en" data-base="./"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>@telnyx/react-voice-commons-sdk - v0.1.2</title><meta name="description" content="Documentation for @telnyx/react-voice-commons-sdk"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script defer src="assets/main.js"></script><script async src="assets/icons.js" id="tsd-icons-script"></script><script async src="assets/search.js" id="tsd-search-script"></script><script async src="assets/navigation.js" id="tsd-nav-script"></script><script async src="assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar"><div class="tsd-toolbar-contents container"><a href="index.html" class="title">@telnyx/react-voice-commons-sdk - v0.1.2</a><div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/><ul role="listbox" id="tsd-search-results"></ul><div id="tsd-search-status" aria-live="polite" aria-atomic="true"><div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-menu"></use></svg></a></div></header><div class="container container-main"><div class="col-content"><div class="tsd-page-title"><h1>@telnyx/react-voice-commons-sdk - v0.1.2</h1></div><div class="tsd-panel tsd-typography"><h1 id="telnyx-react-native-voice-sdk-demo" class="tsd-anchor-link">Telnyx React Native Voice SDK Demo<a href="#telnyx-react-native-voice-sdk-demo" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h1><p>A comprehensive demo application showcasing the <strong>@telnyx/react-voice-commons-sdk</strong> library - a high-level, state-agnostic, drop-in module for the Telnyx React Native SDK that simplifies WebRTC voice calling integration.</p>
+<h2 id="overview" class="tsd-anchor-link">Overview<a href="#overview" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><p>This demo app demonstrates how to integrate the <code>@telnyx/react-voice-commons-sdk</code> library to create a fully functional VoIP calling application with native call UI support, push notifications, and background handling.</p>
+<h3 id="key-features-demonstrated" class="tsd-anchor-link">Key Features Demonstrated<a href="#key-features-demonstrated" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3><ul>
+<li><strong>TelnyxVoiceApp Integration</strong>: Automatic lifecycle management and push notification handling</li>
+<li><strong>Native Call UI</strong>: CallKit (iOS) and ConnectionService (Android) integration</li>
+<li><strong>Background Handling</strong>: Seamless app state transitions and background call processing</li>
+<li><strong>Push Notifications</strong>: Firebase (Android) and APNs (iOS) integration</li>
+<li><strong>Reactive State Management</strong>: RxJS-based state streams for real-time UI updates</li>
+<li><strong>Modern UI Components</strong>: Built with NativeWind v4 and react-native-reusables</li>
+<li><strong>Dark/Light Mode</strong>: Persistent theme support with system navigation bar matching</li>
+</ul>
+<h2 id="about-telnyxreact-voice-commons-sdk" class="tsd-anchor-link">About @telnyx/react-voice-commons-sdk<a href="#about-telnyxreact-voice-commons-sdk" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><p>The <code>@telnyx/react-voice-commons-sdk</code> library provides:</p>
+<ul>
+<li><strong>Headless Operation</strong>: Core library that can establish and manage call state programmatically</li>
+<li><strong>Reactive Streams</strong>: All state exposed via RxJS observables for easy integration</li>
+<li><strong>Simplified API</strong>: Single facade class (<code>TelnyxVoipClient</code>) that hides underlying complexity</li>
+<li><strong>Automatic Lifecycle Management</strong>: Background/foreground handling with <code>TelnyxVoiceApp</code> component</li>
+<li><strong>Call State Management</strong>: Central state machine for managing multiple calls</li>
+<li><strong>Session Management</strong>: Automatic connection lifecycle with reconnection logic</li>
+<li><strong>Push Notification Support</strong>: Built-in handling for background push notifications</li>
+<li><strong>TypeScript Support</strong>: Full TypeScript definitions for better developer experience</li>
+</ul>
+<h2 id="integration-guide" class="tsd-anchor-link">Integration Guide<a href="#integration-guide" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><h3 id="basic-setup" class="tsd-anchor-link">Basic Setup<a href="#basic-setup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3><p>The demo shows how to integrate the library using the <code>TelnyxVoiceApp</code> component for automatic lifecycle management:</p>
+<pre><code class="tsx"><span class="hl-0">import</span><span class="hl-1"> { </span><span class="hl-2">TelnyxVoiceApp</span><span class="hl-1">, </span><span class="hl-2">createTelnyxVoipClient</span><span class="hl-1"> } </span><span class="hl-0">from</span><span class="hl-1"> </span><span class="hl-3">&#39;@telnyx/react-voice-commons-sdk&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-4">// Create the VoIP client instance</span><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">voipClient</span><span class="hl-1"> = </span><span class="hl-7">createTelnyxVoipClient</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-2">enableAppStateManagement:</span><span class="hl-1"> </span><span class="hl-5">true</span><span class="hl-1">, </span><span class="hl-4">// Optional: Enable automatic app state management (default: true)</span><br/><span class="hl-1">  </span><span class="hl-2">debug:</span><span class="hl-1"> </span><span class="hl-5">true</span><span class="hl-1">, </span><span class="hl-4">// Optional: Enable debug logging</span><br/><span class="hl-1">});</span><br/><br/><span class="hl-0">export</span><span class="hl-1"> </span><span class="hl-0">default</span><span class="hl-1"> </span><span class="hl-5">function</span><span class="hl-1"> </span><span class="hl-7">App</span><span class="hl-1">() {</span><br/><span class="hl-1">  </span><span class="hl-0">return</span><span class="hl-1"> (</span><br/><span class="hl-1">    </span><span class="hl-8">&lt;</span><span class="hl-9">TelnyxVoiceApp</span><span class="hl-1"> </span><span class="hl-10">voipClient</span><span class="hl-1">=</span><span class="hl-5">{</span><span class="hl-2">voipClient</span><span class="hl-5">}</span><span class="hl-1"> </span><span class="hl-10">enableAutoReconnect</span><span class="hl-1">=</span><span class="hl-5">{false}</span><span class="hl-1"> </span><span class="hl-10">debug</span><span class="hl-1">=</span><span class="hl-5">{true}</span><span class="hl-8">&gt;</span><br/><span class="hl-1">      </span><span class="hl-8">&lt;</span><span class="hl-9">YourAppContent</span><span class="hl-1"> </span><span class="hl-8">/&gt;</span><br/><span class="hl-1">    </span><span class="hl-8">&lt;/</span><span class="hl-9">TelnyxVoiceApp</span><span class="hl-8">&gt;</span><br/><span class="hl-1">  );</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="core-components-used-in-demo" class="tsd-anchor-link">Core Components Used in Demo<a href="#core-components-used-in-demo" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3><h4 id="1-voip-client-configuration" class="tsd-anchor-link">1. VoIP Client Configuration<a href="#1-voip-client-configuration" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="tsx"><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">voipClient</span><span class="hl-1"> = </span><span class="hl-7">createTelnyxVoipClient</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-2">enableAppStateManagement:</span><span class="hl-1"> </span><span class="hl-5">true</span><span class="hl-1">, </span><span class="hl-4">// Optional: Enable automatic app state management (default: true)</span><br/><span class="hl-1">  </span><span class="hl-2">debug:</span><span class="hl-1"> </span><span class="hl-5">true</span><span class="hl-1">, </span><span class="hl-4">// Optional: Enable debug logging</span><br/><span class="hl-1">});</span>
+</code><button type="button">Copy</button></pre>
+
+<p><strong>Configuration Options Explained:</strong></p>
+<ul>
+<li><strong><code>enableAppStateManagement: true</code></strong> - <strong>Optional (default: true)</strong>: Enables automatic background/foreground app state management. When enabled, the library automatically disconnects when the app goes to background (unless there's an active call) and handles reconnection logic. Set to <code>false</code> if you want to handle app lifecycle manually.</li>
+<li><strong><code>debug: true</code></strong> - <strong>Optional</strong>: Enables detailed logging for connection states, call transitions, and push notification processing. Useful for development and troubleshooting.</li>
+</ul>
+<h4 id="2-telnyxvoiceapp-wrapper" class="tsd-anchor-link">2. TelnyxVoiceApp Wrapper<a href="#2-telnyxvoiceapp-wrapper" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4><p>The <code>TelnyxVoiceApp</code> component handles:</p>
+<ul>
+<li>Automatic background/foreground lifecycle management</li>
+<li>Push notification processing from terminated state</li>
+<li>Login state management with automatic reconnection</li>
+<li>Background client management for push notifications</li>
+</ul>
+<h4 id="3-reactive-state-management" class="tsd-anchor-link">3. Reactive State Management<a href="#3-reactive-state-management" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="tsx"><span class="hl-4">// Listen to connection state</span><br/><span class="hl-2">voipClient</span><span class="hl-1">.</span><span class="hl-2">connectionState$</span><span class="hl-1">.</span><span class="hl-7">subscribe</span><span class="hl-1">((</span><span class="hl-2">state</span><span class="hl-1">) </span><span class="hl-5">=&gt;</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-2">console</span><span class="hl-1">.</span><span class="hl-7">log</span><span class="hl-1">(</span><span class="hl-3">&#39;Connection state:&#39;</span><span class="hl-1">, </span><span class="hl-2">state</span><span class="hl-1">);</span><br/><span class="hl-1">});</span><br/><br/><span class="hl-4">// Listen to active calls</span><br/><span class="hl-2">voipClient</span><span class="hl-1">.</span><span class="hl-2">calls$</span><span class="hl-1">.</span><span class="hl-7">subscribe</span><span class="hl-1">((</span><span class="hl-2">calls</span><span class="hl-1">) </span><span class="hl-5">=&gt;</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-2">console</span><span class="hl-1">.</span><span class="hl-7">log</span><span class="hl-1">(</span><span class="hl-3">&#39;Active calls:&#39;</span><span class="hl-1">, </span><span class="hl-2">calls</span><span class="hl-1">);</span><br/><span class="hl-1">});</span><br/><br/><span class="hl-4">// Handle individual call state</span><br/><span class="hl-2">call</span><span class="hl-1">.</span><span class="hl-2">callState$</span><span class="hl-1">.</span><span class="hl-7">subscribe</span><span class="hl-1">((</span><span class="hl-2">state</span><span class="hl-1">) </span><span class="hl-5">=&gt;</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-2">console</span><span class="hl-1">.</span><span class="hl-7">log</span><span class="hl-1">(</span><span class="hl-3">&#39;Call state:&#39;</span><span class="hl-1">, </span><span class="hl-2">state</span><span class="hl-1">);</span><br/><span class="hl-1">});</span>
+</code><button type="button">Copy</button></pre>
+
+<h4 id="4-call-management" class="tsd-anchor-link">4. Call Management<a href="#4-call-management" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="tsx"><span class="hl-4">// Make a call</span><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">call</span><span class="hl-1"> = </span><span class="hl-0">await</span><span class="hl-1"> </span><span class="hl-2">voipClient</span><span class="hl-1">.</span><span class="hl-7">newCall</span><span class="hl-1">(</span><span class="hl-3">&#39;1234567890&#39;</span><span class="hl-1">);</span><br/><br/><span class="hl-4">// Answer incoming call</span><br/><span class="hl-0">await</span><span class="hl-1"> </span><span class="hl-2">call</span><span class="hl-1">.</span><span class="hl-7">answer</span><span class="hl-1">();</span><br/><br/><span class="hl-4">// Control call</span><br/><span class="hl-0">await</span><span class="hl-1"> </span><span class="hl-2">call</span><span class="hl-1">.</span><span class="hl-7">mute</span><span class="hl-1">();</span><br/><span class="hl-0">await</span><span class="hl-1"> </span><span class="hl-2">call</span><span class="hl-1">.</span><span class="hl-7">hold</span><span class="hl-1">();</span><br/><span class="hl-0">await</span><span class="hl-1"> </span><span class="hl-2">call</span><span class="hl-1">.</span><span class="hl-7">hangup</span><span class="hl-1">();</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="authentication-persistent-storage" class="tsd-anchor-link">Authentication &amp; Persistent Storage<a href="#authentication-persistent-storage" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3><p>The library supports both credential-based and token-based authentication with automatic persistence for seamless reconnection.</p>
+<h4 id="authentication-methods" class="tsd-anchor-link">Authentication Methods<a href="#authentication-methods" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4><h5 id="1-credential-based-authentication" class="tsd-anchor-link">1. Credential-Based Authentication<a href="#1-credential-based-authentication" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h5><pre><code class="tsx"><span class="hl-0">import</span><span class="hl-1"> { </span><span class="hl-2">createCredentialConfig</span><span class="hl-1"> } </span><span class="hl-0">from</span><span class="hl-1"> </span><span class="hl-3">&#39;@telnyx/react-voice-commons-sdk&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">config</span><span class="hl-1"> = </span><span class="hl-7">createCredentialConfig</span><span class="hl-1">(</span><span class="hl-3">&#39;your_sip_username&#39;</span><span class="hl-1">, </span><span class="hl-3">&#39;your_sip_password&#39;</span><span class="hl-1">, {</span><br/><span class="hl-1">  </span><span class="hl-2">debug:</span><span class="hl-1"> </span><span class="hl-5">true</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-2">pushNotificationDeviceToken:</span><span class="hl-1"> </span><span class="hl-3">&#39;your_device_token&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">});</span><br/><br/><span class="hl-0">await</span><span class="hl-1"> </span><span class="hl-2">voipClient</span><span class="hl-1">.</span><span class="hl-7">login</span><span class="hl-1">(</span><span class="hl-2">config</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<h5 id="2-token-based-authentication" class="tsd-anchor-link">2. Token-Based Authentication<a href="#2-token-based-authentication" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h5><pre><code class="tsx"><span class="hl-0">import</span><span class="hl-1"> { </span><span class="hl-2">createTokenConfig</span><span class="hl-1"> } </span><span class="hl-0">from</span><span class="hl-1"> </span><span class="hl-3">&#39;@telnyx/react-voice-commons-sdk&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">config</span><span class="hl-1"> = </span><span class="hl-7">createTokenConfig</span><span class="hl-1">(</span><span class="hl-3">&#39;your_jwt_token&#39;</span><span class="hl-1">, {</span><br/><span class="hl-1">  </span><span class="hl-2">debug:</span><span class="hl-1"> </span><span class="hl-5">true</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-2">pushNotificationDeviceToken:</span><span class="hl-1"> </span><span class="hl-3">&#39;your_device_token&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">});</span><br/><br/><span class="hl-0">await</span><span class="hl-1"> </span><span class="hl-2">voipClient</span><span class="hl-1">.</span><span class="hl-7">loginWithToken</span><span class="hl-1">(</span><span class="hl-2">config</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<h4 id="automatic-storage-reconnection" class="tsd-anchor-link">Automatic Storage &amp; Reconnection<a href="#automatic-storage-reconnection" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4><p>The library automatically stores authentication data securely for seamless reconnection. <strong>You don't need to manually manage these storage keys</strong> - the library handles everything internally.</p>
+<h5 id="internal-storage-managed-automatically" class="tsd-anchor-link">Internal Storage (Managed Automatically)<a href="#internal-storage-managed-automatically" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h5><p>The library uses these AsyncStorage keys internally:</p>
+<ul>
+<li><code>@telnyx_username</code> - SIP username (credential auth)</li>
+<li><code>@telnyx_password</code> - SIP password (credential auth)</li>
+<li><code>@credential_token</code> - JWT authentication token (token auth)</li>
+<li><code>@push_token</code> - Push notification device token</li>
+</ul>
+<p><strong>Note</strong>: These are managed automatically by the library. You only need to call <code>login()</code> once, and the library will handle storage and future reconnections.</p>
+<h5 id="auto-reconnection" class="tsd-anchor-link">Auto-Reconnection<a href="#auto-reconnection" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h5><pre><code class="tsx"><span class="hl-4">// Automatically reconnects using internally stored credentials or token</span><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">success</span><span class="hl-1"> = </span><span class="hl-0">await</span><span class="hl-1"> </span><span class="hl-2">voipClient</span><span class="hl-1">.</span><span class="hl-7">loginFromStoredConfig</span><span class="hl-1">();</span><br/><br/><span class="hl-0">if</span><span class="hl-1"> (!</span><span class="hl-2">success</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-4">// No stored authentication data found, show login UI</span><br/><span class="hl-1">  </span><span class="hl-2">console</span><span class="hl-1">.</span><span class="hl-7">log</span><span class="hl-1">(</span><span class="hl-3">&#39;Please log in again&#39;</span><span class="hl-1">);</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<p><strong>When Auto-Reconnection Happens:</strong></p>
+<ul>
+<li>App launches from background/terminated state</li>
+<li>Push notification received while disconnected</li>
+<li>Network reconnection after connectivity loss</li>
+<li>App state changes (foreground/background transitions)</li>
+</ul>
+<p><strong>Demo App Note</strong>: The demo app's <code>TelnyxLoginForm</code> component does additional storage for UI convenience (pre-filling the login form). This is separate from the library's internal authentication storage and is not required for production apps.</p>
+<h5 id="manual-storage-management-advanced-use-only" class="tsd-anchor-link">Manual Storage Management (Advanced Use Only)<a href="#manual-storage-management-advanced-use-only" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h5><p>If you need to clear stored authentication data manually:</p>
+<pre><code class="tsx"><span class="hl-0">import</span><span class="hl-1"> </span><span class="hl-2">AsyncStorage</span><span class="hl-1"> </span><span class="hl-0">from</span><span class="hl-1"> </span><span class="hl-3">&#39;@react-native-async-storage/async-storage&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-4">// Clear all Telnyx authentication data</span><br/><span class="hl-0">await</span><span class="hl-1"> </span><span class="hl-2">AsyncStorage</span><span class="hl-1">.</span><span class="hl-7">multiRemove</span><span class="hl-1">([</span><br/><span class="hl-1">  </span><span class="hl-3">&#39;@telnyx_username&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-3">&#39;@telnyx_password&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-3">&#39;@credential_token&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-3">&#39;@push_token&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">]);</span>
+</code><button type="button">Copy</button></pre>
+
+<p><strong>Important</strong>: This is typically not needed. The library manages authentication storage automatically. Only use this for advanced scenarios like implementing a &quot;logout&quot; feature that clears all stored data.</p>
+<h3 id="native-integration" class="tsd-anchor-link">Native Integration<a href="#native-integration" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3><p>The demo app shows complete native integration for both platforms. These integrations are required for production apps using the library.</p>
+<h4 id="android-integration" class="tsd-anchor-link">Android Integration<a href="#android-integration" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4><h5 id="1-mainactivity-setup" class="tsd-anchor-link">1. MainActivity Setup<a href="#1-mainactivity-setup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h5><p>Your app's MainActivity should extend <code>TelnyxMainActivity</code> for automatic push notification handling:</p>
+<pre><code class="kotlin">// In your app's MainActivity.kt
+import com.telnyx.react_voice_commons.TelnyxMainActivity
+
+class MainActivity : TelnyxMainActivity() {
+    // Your app-specific code
+
+    override fun onHandleIntent(intent: Intent) {
+        super.onHandleIntent(intent)
+        // Handle any additional intent processing
+    }
+}
+</code><button type="button">Copy</button></pre>
+
+<p>The <code>TelnyxMainActivity</code> provides:</p>
+<ul>
+<li>Automatic push notification intent handling</li>
+<li>Call action processing (Answer/Decline from notifications)</li>
+<li>Proper lifecycle management for VoIP functionality</li>
+<li>Integration with <code>VoicePnManager</code> for push notification state</li>
+</ul>
+<h5 id="2-push-notification-setup" class="tsd-anchor-link">2. Push Notification Setup<a href="#2-push-notification-setup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h5><ol>
+<li>Place <code>google-services.json</code> in the project root</li>
+<li>Register background message handler:</li>
+</ol>
+<pre><code class="tsx"><span class="hl-0">import</span><span class="hl-1"> </span><span class="hl-2">messaging</span><span class="hl-1"> </span><span class="hl-0">from</span><span class="hl-1"> </span><span class="hl-3">&#39;@react-native-firebase/messaging&#39;</span><span class="hl-1">;</span><br/><span class="hl-0">import</span><span class="hl-1"> { </span><span class="hl-2">TelnyxVoiceApp</span><span class="hl-1"> } </span><span class="hl-0">from</span><span class="hl-1"> </span><span class="hl-3">&#39;@telnyx/react-voice-commons-sdk&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-7">messaging</span><span class="hl-1">().</span><span class="hl-7">setBackgroundMessageHandler</span><span class="hl-1">(</span><span class="hl-5">async</span><span class="hl-1"> (</span><span class="hl-2">remoteMessage</span><span class="hl-1">) </span><span class="hl-5">=&gt;</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-0">await</span><span class="hl-1"> </span><span class="hl-2">TelnyxVoiceApp</span><span class="hl-1">.</span><span class="hl-7">handleBackgroundPush</span><span class="hl-1">(</span><span class="hl-2">remoteMessage</span><span class="hl-1">.</span><span class="hl-2">data</span><span class="hl-1">);</span><br/><span class="hl-1">});</span>
+</code><button type="button">Copy</button></pre>
+
+<h4 id="ios-integration" class="tsd-anchor-link">iOS Integration<a href="#ios-integration" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4><h5 id="1-appdelegate-setup" class="tsd-anchor-link">1. AppDelegate Setup<a href="#1-appdelegate-setup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h5><p>Your AppDelegate only needs to implement <code>PKPushRegistryDelegate</code> for VoIP push notifications. CallKit integration is automatically handled by CallBridge:</p>
+<pre><code class="swift">import PushKit
+import TelnyxVoiceCommons
+
+@UIApplicationMain
+public class AppDelegate: ExpoAppDelegate, PKPushRegistryDelegate {
+
+  public override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+  ) -> Bool {
+    // Your existing setup...
+
+    // Initialize VoIP push registry via react-voice-commons
+    TelnyxVoipPushHandler.initializeVoipRegistration()
+
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  // MARK: - VoIP Push Notifications
+  public func pushRegistry(_ registry: PKPushRegistry, didUpdate pushCredentials: PKPushCredentials, for type: PKPushType) {
+    TelnyxVoipPushHandler.shared.handleVoipTokenUpdate(pushCredentials, type: type)
+  }
+
+  public func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType, completion: @escaping () -> Void) {
+    TelnyxVoipPushHandler.shared.handleVoipPush(payload, type: type, completion: completion)
+  }
+}
+</code><button type="button">Copy</button></pre>
+
+<p><strong>Note</strong>: CallKit integration (CXProvider, CXProviderDelegate, audio session management) is automatically handled by the internal CallBridge component. You don't need to implement any CallKit delegate methods manually.</p>
+<h5 id="2-voip-push-certificate-setup" class="tsd-anchor-link">2. VoIP Push Certificate Setup<a href="#2-voip-push-certificate-setup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h5><ul>
+<li>Configure VoIP push certificates in your Apple Developer account</li>
+<li>The <code>TelnyxVoipPushHandler</code> automatically handles token registration and push processing</li>
+<li>CallKit integration is automatically managed by CallBridge - no manual setup required</li>
+</ul>
+<h4 id="key-native-features-integrated" class="tsd-anchor-link">Key Native Features Integrated<a href="#key-native-features-integrated" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4><ol>
+<li><strong>Push Notification Handling</strong>: Both platforms handle background push notifications properly</li>
+<li><strong>Native Call UI</strong>: CallKit (iOS, managed by CallBridge) and ConnectionService (Android) integration</li>
+<li><strong>Audio Session Management</strong>: Automatic audio session handling for VoIP calls via CallBridge</li>
+<li><strong>Background Processing</strong>: Seamless app state transitions and background call handling</li>
+<li><strong>Intent Processing</strong>: Android intent handling for notification actions (Answer/Decline)</li>
+<li><strong>Token Management</strong>: Automatic push token registration and updates</li>
+</ol>
+<h2 id="running-the-demo-application" class="tsd-anchor-link">Running the Demo Application<a href="#running-the-demo-application" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><h3 id="prerequisites" class="tsd-anchor-link">Prerequisites<a href="#prerequisites" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3><ul>
+<li>Node.js and npm</li>
+<li>Expo CLI</li>
+<li>iOS development: Xcode</li>
+<li>Android development: Android Studio</li>
+</ul>
+<h3 id="installation-and-setup" class="tsd-anchor-link">Installation and Setup<a href="#installation-and-setup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3><ol>
+<li>
+<p><strong>Remove global Expo CLI</strong> (if previously installed):</p>
+<pre><code class="bash"><span class="hl-7">npm</span><span class="hl-1"> </span><span class="hl-3">uninstall</span><span class="hl-1"> </span><span class="hl-5">-g</span><span class="hl-1"> </span><span class="hl-3">expo</span>
+</code><button type="button">Copy</button></pre>
+
+</li>
+<li>
+<p><strong>Install dependencies</strong> (including local Expo):</p>
+<pre><code class="bash"><span class="hl-7">npm</span><span class="hl-1"> </span><span class="hl-3">install</span>
+</code><button type="button">Copy</button></pre>
+
+</li>
+<li>
+<p><strong>Run Expo install</strong> to ensure all dependencies are properly configured:</p>
+<pre><code class="bash"><span class="hl-7">npx</span><span class="hl-1"> </span><span class="hl-3">expo</span><span class="hl-1"> </span><span class="hl-3">install</span>
+</code><button type="button">Copy</button></pre>
+
+</li>
+<li>
+<p><strong>Configure Firebase for Android</strong>:</p>
+<ul>
+<li>Download the <code>google-services.json</code> file from your Firebase project</li>
+<li>Place it in the root directory of the project</li>
+</ul>
+</li>
+<li>
+<p><strong>Prebuild the project</strong>:</p>
+<pre><code class="bash"><span class="hl-7">npx</span><span class="hl-1"> </span><span class="hl-3">expo</span><span class="hl-1"> </span><span class="hl-3">prebuild</span>
+</code><button type="button">Copy</button></pre>
+
+</li>
+<li>
+<p><strong>Install iOS dependencies</strong> (required for iOS):</p>
+<pre><code class="bash"><span class="hl-7">cd</span><span class="hl-1"> </span><span class="hl-3">ios</span><span class="hl-1"> &amp;&amp; </span><span class="hl-7">pod</span><span class="hl-1"> </span><span class="hl-3">install</span><span class="hl-1"> &amp;&amp; </span><span class="hl-7">cd</span><span class="hl-1"> </span><span class="hl-3">..</span>
+</code><button type="button">Copy</button></pre>
+
+</li>
+</ol>
+<h3 id="running-the-application" class="tsd-anchor-link">Running the Application<a href="#running-the-application" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3><ol>
+<li>
+<p><strong>Start Metro bundler</strong> (in a separate terminal):</p>
+<pre><code class="bash"><span class="hl-7">npx</span><span class="hl-1"> </span><span class="hl-3">expo</span><span class="hl-1"> </span><span class="hl-3">start</span><span class="hl-1"> </span><span class="hl-5">--clear</span><span class="hl-1"> </span><span class="hl-5">--reset-cache</span>
+</code><button type="button">Copy</button></pre>
+
+</li>
+<li>
+<p><strong>Run on iOS</strong>:</p>
+<pre><code class="bash"><span class="hl-7">npx</span><span class="hl-1"> </span><span class="hl-3">expo</span><span class="hl-1"> </span><span class="hl-3">run:ios</span>
+</code><button type="button">Copy</button></pre>
+
+</li>
+<li>
+<p><strong>Run on Android</strong>:</p>
+<pre><code class="bash"><span class="hl-7">npx</span><span class="hl-1"> </span><span class="hl-3">expo</span><span class="hl-1"> </span><span class="hl-3">run:android</span>
+</code><button type="button">Copy</button></pre>
+
+</li>
+</ol>
+<blockquote>
+<p><strong>Note</strong>: Make sure you have the necessary development environment set up for iOS (Xcode) or Android (Android Studio) before running the respective commands.</p>
+</blockquote>
+<h3 id="demo-app-features" class="tsd-anchor-link">Demo App Features<a href="#demo-app-features" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3><p>Once running, the demo app provides:</p>
+<ul>
+<li><strong>Login Form</strong>: Enter your Telnyx SIP credentials or token</li>
+<li><strong>Dialer Interface</strong>: Make outgoing calls with a native dialer UI</li>
+<li><strong>Call Management</strong>: Answer, decline, hold, mute, and transfer calls</li>
+<li><strong>Native Call UI</strong>: Integrated CallKit (iOS) and ConnectionService (Android)</li>
+<li><strong>Push Notifications</strong>: Receive calls when app is in background or terminated</li>
+<li><strong>Multiple Call Support</strong>: Handle multiple simultaneous calls</li>
+<li><strong>Background Handling</strong>: Seamless app state transitions</li>
+</ul>
+<h3 id="configuration" class="tsd-anchor-link">Configuration<a href="#configuration" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3><p>The demo app includes debug logging enabled by default:</p>
+<pre><code class="tsx"><span class="hl-4">// Enable debug logging for the Telnyx SDK</span><br/><span class="hl-0">if</span><span class="hl-1"> (</span><span class="hl-2">__DEV__</span><span class="hl-1">) {</span><br/><span class="hl-1">  </span><span class="hl-2">log</span><span class="hl-1">.</span><span class="hl-7">setLevel</span><span class="hl-1">(</span><span class="hl-3">&#39;debug&#39;</span><span class="hl-1">);</span><br/><span class="hl-1">  (</span><span class="hl-2">global</span><span class="hl-1"> </span><span class="hl-0">as</span><span class="hl-1"> </span><span class="hl-9">any</span><span class="hl-1">).</span><span class="hl-2">__TELNYX_DEBUG__</span><span class="hl-1"> = </span><span class="hl-5">true</span><span class="hl-1">;</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<p>This provides detailed logging for:</p>
+<ul>
+<li>Connection state changes</li>
+<li>Call state transitions</li>
+<li>Push notification processing</li>
+<li>Background lifecycle events</li>
+</ul>
+<h2 id="troubleshooting" class="tsd-anchor-link">Troubleshooting<a href="#troubleshooting" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><h3 id="ios-connection-issues-first-run" class="tsd-anchor-link">iOS Connection Issues (First Run)<a href="#ios-connection-issues-first-run" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3><p>If you encounter network connection errors on iOS:</p>
+<pre><code class="bash"><span class="hl-4"># Try clearing cache and resetting</span><br/><span class="hl-7">npx</span><span class="hl-1"> </span><span class="hl-3">expo</span><span class="hl-1"> </span><span class="hl-3">start</span><span class="hl-1"> </span><span class="hl-5">--clear</span><span class="hl-1"> </span><span class="hl-5">--reset-cache</span><br/><br/><span class="hl-4"># Or use tunnel mode</span><br/><span class="hl-7">npx</span><span class="hl-1"> </span><span class="hl-3">expo</span><span class="hl-1"> </span><span class="hl-3">start</span><span class="hl-1"> </span><span class="hl-5">--tunnel</span><br/><br/><span class="hl-4"># Or specify host explicitly</span><br/><span class="hl-7">npx</span><span class="hl-1"> </span><span class="hl-3">expo</span><span class="hl-1"> </span><span class="hl-3">start</span><span class="hl-1"> </span><span class="hl-5">--host</span><span class="hl-1"> </span><span class="hl-3">lan</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="ios-voip-push-notification-issues" class="tsd-anchor-link">iOS VoIP Push Notification Issues<a href="#ios-voip-push-notification-issues" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3><p>If you see VoIP-related crashes on iOS, ensure your AppDelegate.swift includes the VoIP push notification delegate methods. The project includes these by default, but if you encounter issues, rebuild the iOS project:</p>
+<pre><code class="bash"><span class="hl-7">npx</span><span class="hl-1"> </span><span class="hl-3">expo</span><span class="hl-1"> </span><span class="hl-3">prebuild</span><span class="hl-1"> </span><span class="hl-5">--platform</span><span class="hl-1"> </span><span class="hl-3">ios</span><span class="hl-1"> </span><span class="hl-5">--clean</span><br/><span class="hl-7">npx</span><span class="hl-1"> </span><span class="hl-3">expo</span><span class="hl-1"> </span><span class="hl-3">run:ios</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="common-integration-issues" class="tsd-anchor-link">Common Integration Issues<a href="#common-integration-issues" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3><h4 id="double-login" class="tsd-anchor-link">Double Login<a href="#double-login" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Ensure you're not calling login methods manually when using <code>TelnyxVoiceApp</code> with auto-reconnection enabled.</p>
+<h4 id="background-disconnection" class="tsd-anchor-link">Background Disconnection<a href="#background-disconnection" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Check if <code>enableAutoReconnect</code> is set appropriately for your use case in the <code>TelnyxVoiceApp</code> configuration.</p>
+<h4 id="push-notifications-not-working" class="tsd-anchor-link">Push Notifications Not Working<a href="#push-notifications-not-working" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4><ul>
+<li><strong>Android</strong>:
+<ul>
+<li>Verify <code>google-services.json</code> is in the correct location and Firebase is properly configured</li>
+<li>Ensure your MainActivity extends <code>TelnyxMainActivity</code></li>
+<li>Check that <code>VoicePnManager</code> is properly handling push actions</li>
+</ul>
+</li>
+<li><strong>iOS</strong>:
+<ul>
+<li>Ensure VoIP push certificates are configured in your Apple Developer account</li>
+<li>Verify AppDelegate implements <code>PKPushRegistryDelegate</code> and delegates to <code>TelnyxVoipPushHandler</code></li>
+<li>Check that <code>TelnyxVoipPushHandler.initializeVoipRegistration()</code> is called in <code>didFinishLaunchingWithOptions</code></li>
+</ul>
+</li>
+<li><strong>Both</strong>: Check that background message handlers are properly registered</li>
+</ul>
+<h4 id="native-integration-issues" class="tsd-anchor-link">Native Integration Issues<a href="#native-integration-issues" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4><ul>
+<li><strong>Android</strong>: Ensure MainActivity extends <code>TelnyxMainActivity</code> for proper intent handling</li>
+<li><strong>iOS</strong>: Verify AppDelegate implements <code>PKPushRegistryDelegate</code> and delegates to <code>TelnyxVoipPushHandler</code></li>
+<li><strong>CallKit</strong>: On iOS, CallKit integration is automatically handled by CallBridge - no manual setup required</li>
+</ul>
+<h4 id="audio-issues" class="tsd-anchor-link">Audio Issues<a href="#audio-issues" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4><ul>
+<li><strong>iOS</strong>: Audio session management is automatically handled by CallBridge</li>
+<li><strong>Android</strong>: Verify ConnectionService is properly configured for audio routing</li>
+<li><strong>Both</strong>: Ensure proper audio permissions are granted</li>
+</ul>
+<h4 id="memory-leaks" class="tsd-anchor-link">Memory Leaks<a href="#memory-leaks" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Ensure you're unsubscribing from RxJS observables in your React components:</p>
+<pre><code class="tsx"><span class="hl-7">useEffect</span><span class="hl-1">(() </span><span class="hl-5">=&gt;</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">subscription</span><span class="hl-1"> = </span><span class="hl-2">voipClient</span><span class="hl-1">.</span><span class="hl-2">connectionState$</span><span class="hl-1">.</span><span class="hl-7">subscribe</span><span class="hl-1">(</span><span class="hl-2">handleStateChange</span><span class="hl-1">);</span><br/><span class="hl-1">  </span><span class="hl-0">return</span><span class="hl-1"> () </span><span class="hl-5">=&gt;</span><span class="hl-1"> </span><span class="hl-2">subscription</span><span class="hl-1">.</span><span class="hl-7">unsubscribe</span><span class="hl-1">();</span><br/><span class="hl-1">}, []);</span><br/><span class="hl-1">}, []);</span>
+</code><button type="button">Copy</button></pre>
+
+<h2 id="documentation" class="tsd-anchor-link">Documentation<a href="#documentation" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><p>For complete API documentation and advanced usage patterns, see the <a href="./react-voice-commons-sdk/TELNYX_VOICE_APP.md">TelnyxVoiceApp Documentation</a>.</p>
+<h2 id="contributing" class="tsd-anchor-link">Contributing<a href="#contributing" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><p>When contributing to this demo or the underlying library:</p>
+<ol>
+<li>Maintain compatibility with both iOS and Android platforms</li>
+<li>Add comprehensive tests for new features</li>
+<li>Update documentation for any API changes</li>
+<li>Follow the existing code style and patterns</li>
+<li>Test with both foreground and background scenarios</li>
+</ol>
+<h2 id="license" class="tsd-anchor-link">License<a href="#license" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><p>MIT License - see LICENSE file for details.</p>
+</div></div><div class="col-sidebar"><div class="page-menu"><div class="tsd-navigation settings"><details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg><h3>Settings</h3></summary><div class="tsd-accordion-details"><div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span><ul id="tsd-filter-options"><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div><div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div><details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg><h3>On This Page</h3></summary><div class="tsd-accordion-details"><a href="#telnyx-react-native-voice-sdk-demo"><span>Telnyx <wbr/>React <wbr/>Native <wbr/>Voice <wbr/>SDK <wbr/>Demo</span></a><ul><li><a href="#overview"><span>Overview</span></a></li><li><ul><li><a href="#key-features-demonstrated"><span>Key <wbr/>Features <wbr/>Demonstrated</span></a></li></ul></li><li><a href="#about-telnyxreact-voice-commons-sdk"><span>About @telnyx/react-<wbr/>voice-<wbr/>commons-<wbr/>sdk</span></a></li><li><a href="#integration-guide"><span>Integration <wbr/>Guide</span></a></li><li><ul><li><a href="#basic-setup"><span>Basic <wbr/>Setup</span></a></li><li><a href="#core-components-used-in-demo"><span>Core <wbr/>Components <wbr/>Used in <wbr/>Demo</span></a></li><li><ul><li><a href="#1-voip-client-configuration"><span>1. <wbr/>Vo<wbr/>IP <wbr/>Client <wbr/>Configuration</span></a></li><li><a href="#2-telnyxvoiceapp-wrapper"><span>2. <wbr/>Telnyx<wbr/>Voice<wbr/>App <wbr/>Wrapper</span></a></li><li><a href="#3-reactive-state-management"><span>3. <wbr/>Reactive <wbr/>State <wbr/>Management</span></a></li><li><a href="#4-call-management"><span>4. <wbr/>Call <wbr/>Management</span></a></li></ul></li><li><a href="#authentication-persistent-storage"><span>Authentication &amp; <wbr/>Persistent <wbr/>Storage</span></a></li><li><ul><li><a href="#authentication-methods"><span>Authentication <wbr/>Methods</span></a></li><li><ul><li><a href="#1-credential-based-authentication"><span>1. <wbr/>Credential-<wbr/>Based <wbr/>Authentication</span></a></li><li><a href="#2-token-based-authentication"><span>2. <wbr/>Token-<wbr/>Based <wbr/>Authentication</span></a></li></ul></li><li><a href="#automatic-storage-reconnection"><span>Automatic <wbr/>Storage &amp; <wbr/>Reconnection</span></a></li><li><ul><li><a href="#internal-storage-managed-automatically"><span>Internal <wbr/>Storage (<wbr/>Managed <wbr/>Automatically)</span></a></li><li><a href="#auto-reconnection"><span>Auto-<wbr/>Reconnection</span></a></li><li><a href="#manual-storage-management-advanced-use-only"><span>Manual <wbr/>Storage <wbr/>Management (<wbr/>Advanced <wbr/>Use <wbr/>Only)</span></a></li></ul></li></ul></li><li><a href="#native-integration"><span>Native <wbr/>Integration</span></a></li><li><ul><li><a href="#android-integration"><span>Android <wbr/>Integration</span></a></li><li><ul><li><a href="#1-mainactivity-setup"><span>1. <wbr/>Main<wbr/>Activity <wbr/>Setup</span></a></li><li><a href="#2-push-notification-setup"><span>2. <wbr/>Push <wbr/>Notification <wbr/>Setup</span></a></li></ul></li><li><a href="#ios-integration"><span>i<wbr/>OS <wbr/>Integration</span></a></li><li><ul><li><a href="#1-appdelegate-setup"><span>1. <wbr/>App<wbr/>Delegate <wbr/>Setup</span></a></li><li><a href="#2-voip-push-certificate-setup"><span>2. <wbr/>Vo<wbr/>IP <wbr/>Push <wbr/>Certificate <wbr/>Setup</span></a></li></ul></li><li><a href="#key-native-features-integrated"><span>Key <wbr/>Native <wbr/>Features <wbr/>Integrated</span></a></li></ul></li></ul></li><li><a href="#running-the-demo-application"><span>Running the <wbr/>Demo <wbr/>Application</span></a></li><li><ul><li><a href="#prerequisites"><span>Prerequisites</span></a></li><li><a href="#installation-and-setup"><span>Installation and <wbr/>Setup</span></a></li><li><a href="#running-the-application"><span>Running the <wbr/>Application</span></a></li><li><a href="#demo-app-features"><span>Demo <wbr/>App <wbr/>Features</span></a></li><li><a href="#configuration"><span>Configuration</span></a></li></ul></li><li><a href="#troubleshooting"><span>Troubleshooting</span></a></li><li><ul><li><a href="#ios-connection-issues-first-run"><span>i<wbr/>OS <wbr/>Connection <wbr/>Issues (<wbr/>First <wbr/>Run)</span></a></li><li><a href="#ios-voip-push-notification-issues"><span>i<wbr/>OS <wbr/>Vo<wbr/>IP <wbr/>Push <wbr/>Notification <wbr/>Issues</span></a></li><li><a href="#common-integration-issues"><span>Common <wbr/>Integration <wbr/>Issues</span></a></li><li><ul><li><a href="#double-login"><span>Double <wbr/>Login</span></a></li><li><a href="#background-disconnection"><span>Background <wbr/>Disconnection</span></a></li><li><a href="#push-notifications-not-working"><span>Push <wbr/>Notifications <wbr/>Not <wbr/>Working</span></a></li><li><a href="#native-integration-issues"><span>Native <wbr/>Integration <wbr/>Issues</span></a></li><li><a href="#audio-issues"><span>Audio <wbr/>Issues</span></a></li><li><a href="#memory-leaks"><span>Memory <wbr/>Leaks</span></a></li></ul></li></ul></li><li><a href="#documentation"><span>Documentation</span></a></li><li><a href="#contributing"><span>Contributing</span></a></li><li><a href="#license"><span>License</span></a></li></ul></div></details></div><div class="site-menu"><nav class="tsd-navigation"><a href="modules.html">@telnyx/react-voice-commons-sdk - v0.1.2</a><ul class="tsd-small-nested-navigation" id="tsd-nav-container"><li>Loading...</li></ul></nav></div></div></div><footer><p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer><div class="overlay"></div></body></html>

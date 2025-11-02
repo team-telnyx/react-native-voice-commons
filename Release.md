@@ -122,3 +122,19 @@ This package depends on:
 - `@telnyx/react-native-voice-sdk` - The core SDK (now from npm)
 - React Native WebRTC for call functionality
 - React Native VOIP Push Notifications for iOS CallKit integration
+
+## 📚 Documentation
+
+API documentation is automatically generated and published to GitHub Pages on every push to main:
+
+- **Live Documentation**: https://team-telnyx.github.io/react-native-voice-commons/
+- **Source**: TypeDoc generates docs from `react-voice-commons-sdk/src/`
+- **Updates**: Automatic via GitHub Actions workflow
+
+To generate documentation locally:
+
+```bash
+cd react-voice-commons-sdk
+npm run docs        # Generate once
+npm run docs:watch  # Watch for changes
+```
