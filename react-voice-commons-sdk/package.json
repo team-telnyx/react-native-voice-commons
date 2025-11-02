@@ -1,6 +1,6 @@
 {
   "name": "@telnyx/react-voice-commons-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A high-level, state-agnostic, drop-in module for the Telnyx React Native SDK that simplifies WebRTC voice calling integration",
   "main": "lib/index.js",
   "module": "lib/index.js",
