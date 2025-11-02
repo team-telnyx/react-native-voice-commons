@@ -1,0 +1,35 @@
+# Generated documentation
+docs/
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+lib/
+dist/
+build/
+**/lib/
+**/dist/
+**/build/
+
+# React Native
+android/
+ios/
+.expo/
+.expo-shared/
+
+# Cache
+.cache/
+*.tgz
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
