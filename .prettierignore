@@ -1,5 +1,6 @@
 # Generated documentation
 docs/
+docs-markdown/
 
 # Dependencies
 node_modules/

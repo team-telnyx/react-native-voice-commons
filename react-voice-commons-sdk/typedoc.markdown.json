@@ -1,0 +1,26 @@
+{
+  "entryPoints": ["src/index.ts"],
+  "out": "../docs-markdown",
+  "name": "@telnyx/react-voice-commons-sdk",
+  "entryPointStrategy": "expand",
+  "exclude": [
+    "**/*+(index|.spec|.test).ts",
+    "**/__tests__/**",
+    "**/__mocks__/**",
+    "**/node_modules/**"
+  ],
+  "excludePrivate": true,
+  "excludeProtected": false,
+  "includeVersion": true,
+  "readme": "README.md",
+  "plugin": ["typedoc-plugin-markdown"],
+  "categorizeByGroup": true,
+  "sort": ["source-order"],
+  "searchInComments": true,
+  "visibilityFilters": {
+    "protected": false,
+    "private": false,
+    "inherited": true,
+    "external": false
+  }
+}

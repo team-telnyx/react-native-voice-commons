@@ -1,19 +1,6 @@
 name: Generate Documentation
 
 on:
-  push:
-    branches: [main, develop]
-    paths:
-      - 'react-voice-commons-sdk/src/**'
-      - 'react-voice-commons-sdk/README.md'
-      - 'react-voice-commons-sdk/typedoc.json'
-      - '.github/workflows/docs.yml'
-  pull_request:
-    branches: [main, develop]
-    paths:
-      - 'react-voice-commons-sdk/src/**'
-      - 'react-voice-commons-sdk/README.md'
-      - 'react-voice-commons-sdk/typedoc.json'
   workflow_dispatch:
 
 permissions:
@@ -41,14 +28,13 @@ jobs:
       - name: Generate documentation
         run: |
           cd react-voice-commons-sdk
-          npm run docs
+          npm run docs:all
 
       - name: Commit documentation
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add docs/
+          git add docs/ docs-markdown/
           git diff --staged --quiet || git commit -m "docs: auto-generate API documentation [skip ci]"
           git push
 
@@ -58,8 +44,10 @@ jobs:
           echo "## 📚 Documentation Generation Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Status:" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ TypeDoc documentation generated successfully" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ TypeDoc HTML documentation generated successfully" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ TypeDoc Markdown documentation generated successfully" >> $GITHUB_STEP_SUMMARY
           echo "- 📦 Source: \`react-voice-commons-sdk/src\`" >> $GITHUB_STEP_SUMMARY
-          echo "- 📄 Output: \`docs/\` directory" >> $GITHUB_STEP_SUMMARY
+          echo "- 📄 HTML Output: \`docs/\` directory" >> $GITHUB_STEP_SUMMARY
+          echo "- 📝 Markdown Output: \`docs-markdown/\` directory" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Documentation committed to repository on push to main branch." >> $GITHUB_STEP_SUMMARY
+          echo "Documentation committed to repository." >> $GITHUB_STEP_SUMMARY
