@@ -19,7 +19,8 @@
     "src",
     "ios",
     "TelnyxVoiceCommons.podspec",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsc",
