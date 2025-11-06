@@ -1,6 +1,6 @@
 # CHANGELOG.md
 
-## [0.1.2](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.2) (2025-11-04)
+## [0.1.2](https://www.npmjs.com/package/@telnyx/react-voice-commons-sdk/v/0.1.2) (2025-11-04)
 
 ### Enhancement
 
@@ -12,7 +12,7 @@
 • Documentation for authentication methods (credential and token-based)
 • Native integration examples for Android and iOS
 
-## [0.1.1](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.1) (2025-11-02)
+## [0.1.1](https://www.npmjs.com/package/@telnyx/react-voice-commons-sdk/v/0.1.1) (2025-11-02)
 
 ### Enhancement
 
@@ -23,7 +23,7 @@
 • Push notification handling
 • Reactive state management with RxJS
 
-## [0.1.0](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.0) (2025-11-01)
+## [0.1.0](https://www.npmjs.com/package/@telnyx/react-voice-commons-sdk/v/0.1.0) (2025-11-01)
 
 ### Enhancement
 
