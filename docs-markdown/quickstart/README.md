@@ -2,13 +2,13 @@
 
 Get up and running with the `@telnyx/react-voice-commons-sdk` in just a few minutes!
 
-## 🚀 Installation
+## Installation
 
 ```bash
 npm install @telnyx/react-voice-commons-sdk
 ```
 
-## ⚡ Basic Setup
+## Basic Setup
 
 ### 1. Wrap Your App
 
@@ -132,16 +132,16 @@ export function useConnectionState() {
 }
 ```
 
-## 🎯 That's It!
+## That's It!
 
 You now have a basic VoIP calling app! The SDK automatically handles:
 
-- ✅ **Connection management** - Automatic reconnection and lifecycle
-- ✅ **Call state management** - Complete call state machine
-- ✅ **Background handling** - App state transitions
-- ✅ **Authentication storage** - Secure credential persistence
+- **Connection management** - Automatic reconnection and lifecycle
+- **Call state management** - Complete call state machine
+- **Background handling** - App state transitions
+- **Authentication storage** - Secure credential persistence
 
-## 📱 Next Steps
+## Next Steps
 
 ### Add Push Notifications
 
@@ -164,7 +164,7 @@ The SDK provides extensive capabilities for building production VoIP apps:
 - **Error Handling** - Robust error handling patterns (see [Error Handling Guide](../error-handling/ErrorHandling.mdx))  
 - **State Management** - RxJS observables and reactive patterns (see [TelnyxVoipClient API](../classes/TelnyxVoipClient.md))
 
-## 🛠️ Configuration Options
+## Configuration Options
 
 ### VoIP Client Options
 
@@ -197,7 +197,7 @@ const voipClient = createTelnyxVoipClient({
 </TelnyxVoiceApp>
 ```
 
-## 🔧 Authentication Options
+## Authentication Options
 
 ### Credential-Based Authentication
 
@@ -235,13 +235,13 @@ if (!success) {
 }
 ```
 
-## 📚 Need Help?
+## Need Help?
 
 - **[API Documentation](../README.md)** - Complete API reference
 - **[Push Notifications](../push-notification/README.md)** - Push notification setup
 - **[Troubleshooting](../README.md#troubleshooting)** - Common issues and solutions
 - **[Demo App](../../README.md)** - Full demo application source code
 
-## 🎉 You're Ready!
+## You're Ready!
 
 Start building your VoIP application with the Telnyx React Voice Commons SDK. The SDK handles the complexity so you can focus on building great user experiences!

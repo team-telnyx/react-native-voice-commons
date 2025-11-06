@@ -33,16 +33,16 @@ The `@telnyx/react-voice-commons-sdk` library provides:
 - **Push Notification Support**: Built-in handling for background push notifications
 - **TypeScript Support**: Full TypeScript definitions for better developer experience
 
-## 🚀 Quick Start
+## Quick Start
 
 Ready to get started? Check out our **[Quick Start Guide](./quickstart/README.md)** to build your first VoIP app in minutes!
 
 The quickstart covers:
-- ⚡ **Installation** - Get the SDK installed
-- 🔧 **Basic Setup** - Wrap your app and create a client
-- 📞 **Make Your First Call** - Simple dialer implementation
-- 🔐 **Authentication** - Login with credentials or tokens
-- 📱 **Next Steps** - Push notifications and native integration
+- **Installation** - Get the SDK installed
+- **Basic Setup** - Wrap your app and create a client
+- **Make Your First Call** - Simple dialer implementation
+- **Authentication** - Login with credentials or tokens
+- **Next Steps** - Push notifications and native integration
 
 ## Core Components Used in Demo
 
