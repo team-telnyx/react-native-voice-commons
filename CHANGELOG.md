@@ -3,6 +3,7 @@
 ## [0.1.2](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.2) (2025-11-04)
 
 ### Enhancement
+
 • Automated documentation generation workflow (manual trigger)
 • HTML documentation output in `docs/` folder
 • Markdown documentation output in `docs-markdown/` folder
@@ -14,6 +15,7 @@
 ## [0.1.1](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.1) (2025-11-02)
 
 ### Enhancement
+
 • Initial package setup
 • Core VoIP client functionality
 • CallKit integration for iOS
@@ -24,6 +26,7 @@
 ## [0.1.0](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.0) (2025-11-01)
 
 ### Enhancement
+
 • Initial release of react-voice-commons-sdk
 • TelnyxVoipClient for managing VoIP connections
 • TelnyxVoiceApp component for automatic lifecycle management

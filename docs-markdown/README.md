@@ -33,31 +33,18 @@ The `@telnyx/react-voice-commons-sdk` library provides:
 - **Push Notification Support**: Built-in handling for background push notifications
 - **TypeScript Support**: Full TypeScript definitions for better developer experience
 
-## Integration Guide
+## 🚀 Quick Start
 
-### Basic Setup
+Ready to get started? Check out our **[Quick Start Guide](./quickstart/README.md)** to build your first VoIP app in minutes!
 
-The demo shows how to integrate the library using the `TelnyxVoiceApp` component for automatic lifecycle management:
+The quickstart covers:
+- ⚡ **Installation** - Get the SDK installed
+- 🔧 **Basic Setup** - Wrap your app and create a client
+- 📞 **Make Your First Call** - Simple dialer implementation
+- 🔐 **Authentication** - Login with credentials or tokens
+- 📱 **Next Steps** - Push notifications and native integration
 
-```tsx
-import { TelnyxVoiceApp, createTelnyxVoipClient } from '@telnyx/react-voice-commons-sdk';
-
-// Create the VoIP client instance
-const voipClient = createTelnyxVoipClient({
-  enableAppStateManagement: true, // Optional: Enable automatic app state management (default: true)
-  debug: true, // Optional: Enable debug logging
-});
-
-export default function App() {
-  return (
-    <TelnyxVoiceApp voipClient={voipClient} enableAutoReconnect={false} debug={true}>
-      <YourAppContent />
-    </TelnyxVoiceApp>
-  );
-}
-```
-
-### Core Components Used in Demo
+## Core Components Used in Demo
 
 #### 1. VoIP Client Configuration
 
@@ -468,19 +455,6 @@ useEffect(() => {
 }, []);
 ```
 
-## Documentation
-
-For complete API documentation and advanced usage patterns, see the [TelnyxVoiceApp Documentation](./react-voice-commons-sdk/TELNYX_VOICE_APP.md).
-
-## Contributing
-
-When contributing to this demo or the underlying library:
-
-1. Maintain compatibility with both iOS and Android platforms
-2. Add comprehensive tests for new features
-3. Update documentation for any API changes
-4. Follow the existing code style and patterns
-5. Test with both foreground and background scenarios
 
 ## License
 
