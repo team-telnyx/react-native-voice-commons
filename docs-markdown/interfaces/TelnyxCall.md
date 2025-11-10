@@ -1,9 +1,3 @@
-[**@telnyx/react-voice-commons-sdk v0.1.2**](../README.md)
-
-***
-
-[@telnyx/react-voice-commons-sdk](../globals.md) / TelnyxCall
-
 # Interface: TelnyxCall
 
 Defined in: [types/telnyx-sdk.d.ts:42](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L42)

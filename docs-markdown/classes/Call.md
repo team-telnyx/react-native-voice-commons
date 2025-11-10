@@ -1,9 +1,3 @@
-[**@telnyx/react-voice-commons-sdk v0.1.2**](../README.md)
-
-***
-
-[@telnyx/react-voice-commons-sdk](../globals.md) / Call
-
 # Class: Call
 
 Defined in: [models/call.ts:14](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L14)
@@ -12,7 +6,7 @@ Represents a call with reactive state streams.
 
 This class wraps the underlying Telnyx Call object and provides
 reactive streams for all call state changes, making it easy to
-integrate with any state management solution.
+integrate with any state management solution.F
 
 ## Constructors
 

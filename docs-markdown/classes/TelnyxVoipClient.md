@@ -1,8 +1,3 @@
-[**@telnyx/react-voice-commons-sdk v0.1.2**](../README.md)
-
-***
-
-[@telnyx/react-voice-commons-sdk](../globals.md) / TelnyxVoipClient
 
 # Class: TelnyxVoipClient
 
