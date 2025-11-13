@@ -36,6 +36,4 @@ rootProject.name = 'telnyx-react-native-voice-sdk-demo'
 expoAutolinking.useExpoVersionCatalog()
 
 include ':app'
-include ':react-voice-commons'
-project(':react-voice-commons').projectDir = new File(rootProject.projectDir, '../react-voice-commons/android')
 includeBuild(expoAutolinking.reactNativeGradlePlugin)

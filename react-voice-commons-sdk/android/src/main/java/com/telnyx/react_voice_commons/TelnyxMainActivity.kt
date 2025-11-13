@@ -47,7 +47,7 @@ abstract class TelnyxMainActivity : ReactActivity() {
         if (extras != null) {
             Log.d(TAG, "Intent extras found:")
             for (key in extras.keySet()) {
-                Log.d(TAG, "  $key: ${extras.get(key)}")
+                Log.d(TAG, "  $key: ${extras.getString(key) ?: extras.get(key)}")
             }
             
             // Handle push notification data

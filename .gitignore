@@ -49,6 +49,8 @@ android/app/build/
 android/build/
 android/.gradle/
 android/app/.cxx/
+react-voice-commons-sdk/android/build/
+react-voice-commons-sdk/android/.gradle/
 ios/build/
 ios/Pods
 ios/Podfile.lock
