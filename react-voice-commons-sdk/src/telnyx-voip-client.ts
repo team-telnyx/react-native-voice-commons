@@ -286,12 +286,19 @@ export class TelnyxVoipClient {
    * Initiates a new outgoing call.
    *
    * @param destination The destination number or SIP URI to call
-   * @param debug Optional flag to enable call quality metrics for this call
+   * @param callerName Optional caller name to display
+   * @param callerNumber Optional caller ID number
+   * @param customHeaders Optional custom headers to include with the call
    * @returns A Promise that completes with the Call object once the invitation has been sent
    *
    * The call's state can be monitored through the returned Call object's streams.
    */
-  async newCall(destination: string, debug: boolean = false): Promise<Call> {
+  async newCall(
+    destination: string,
+    callerName?: string,
+    callerNumber?: string,
+    customHeaders?: Record<string, string>
+  ): Promise<Call> {
     this._throwIfDisposed();
 
     if (!destination || destination.trim() === '') {
@@ -306,7 +313,7 @@ export class TelnyxVoipClient {
       console.log('TelnyxVoipClient: Creating new call to:', destination);
     }
 
-    return await this._callStateController.newCall(destination, undefined, undefined, debug);
+    return await this._callStateController.newCall(destination, callerName, callerNumber, customHeaders);
   }
 
   // ========== Push Notification Methods ==========

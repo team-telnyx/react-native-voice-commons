@@ -385,7 +385,7 @@ class CallKitCoordinator {
   }
 
   /**
-   * Handle CallKit push received event - when a VoIP push notification has been processed
+   * Handle CallKit push received event 
    * This allows us to coordinate between the push notification and any subsequent WebRTC calls
    */
   async handleCallKitPushReceived(callKitUUID: string, event?: any): Promise<void> {

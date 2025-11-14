@@ -1,0 +1,539 @@
+import { EventEmitter } from 'eventemitter3';
+import log from 'loglevel';
+import uuid from 'uuid-random';
+import type { CallOptions } from './call-options';
+import { Connection } from './connection';
+import type { AnswerEvent, ByeEvent, RingingEvent } from './messages/call';
+import {
+  createAnswerAck,
+  createAnswerMessage,
+  createDTMFRequest,
+  createHangupRequest,
+  createInviteMessage,
+  createModifyCallRequest,
+  createRingingAckMessage,
+  isAnswerEvent,
+  isByeEvent,
+  isDTMFResponse,
+  isInviteACKMessage,
+  isModifyCallAnswer,
+  isRingingEvent,
+} from './messages/call';
+import { Peer } from './peer';
+
+type CallEvents = {
+  'telnyx.call.state': (call: Call, state: CallState) => void;
+};
+
+export type CallState = 'new' | 'ringing' | 'active' | 'ended' | 'held';
+
+type CallConstructorParams = {
+  connection: Connection;
+  options: CallOptions;
+  sessionId: string;
+  direction: CallDirection;
+  telnyxSessionId: string | null;
+  telnyxLegId: string | null;
+  telnyxCallControlId?: string | null;
+  callId: string | null;
+  callState?: CallState;
+};
+
+export type CallDirection = 'inbound' | 'outbound';
+
+export type CreateInboundCall = {
+  connection: Connection;
+  options: CallOptions;
+  sessionId: string;
+  telnyxSessionId: string;
+  telnyxLegId: string;
+  telnyxCallControlId?: string | null;
+  remoteSDP: string;
+  callId: string;
+  inviteCustomHeaders?: { name: string; value: string }[] | null;
+};
+
+// TODO persist customHeaders and clientState
+export class Call extends EventEmitter<CallEvents> {
+  public direction: CallDirection;
+  public callId: string;
+  public telnyxSessionId: string | null;
+  public telnyxCallControlId: string | null;
+  public telnyxLegId: string | null;
+  public state: CallState;
+
+  /**
+   * Custom headers received from the WebRTC INVITE message.
+   * These headers are passed during call initiation and can contain application-specific information.
+   * Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+   */
+  public inviteCustomHeaders: { name: string; value: string }[] | null = null;
+
+  /**
+   * Custom headers received from the WebRTC ANSWER message.
+   * These headers are passed during call acceptance and can contain application-specific information.
+   * Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+   */
+  public answerCustomHeaders: { name: string; value: string }[] | null = null;
+
+  static async createInboundCall({
+    connection,
+    options,
+    remoteSDP,
+    sessionId,
+    telnyxLegId,
+    telnyxSessionId,
+    callId,
+    inviteCustomHeaders = null,
+  }: CreateInboundCall) {
+    const call = new Call({
+      connection,
+      options,
+      sessionId,
+      direction: 'inbound',
+      telnyxLegId,
+      telnyxSessionId,
+      callId,
+      callState: 'ringing',
+    });
+
+    // Store the custom headers from the INVITE message
+    call.inviteCustomHeaders = inviteCustomHeaders;
+
+    // Check if the connection has a reference to the client with stored push notification CallKit UUID
+    // The client should store the UUID when CallKitHandler processes the push notification
+    const connectionClient = (connection as any)._client;
+    if (connectionClient && typeof connectionClient.getPushNotificationCallKitUUID === 'function') {
+      const storedCallKitUUID = connectionClient.getPushNotificationCallKitUUID();
+      if (storedCallKitUUID) {
+        log.debug('[Call] Automatically assigning stored CallKit UUID to new inbound call:', {
+          callId,
+          storedCallKitUUID,
+        });
+
+        // Set multiple CallKit UUID properties on the call object during creation
+        (call as any)._callKitUUID = storedCallKitUUID;
+        (call as any)._isPushNotificationCall = true;
+        (call as any)._pushCallKitUUID = storedCallKitUUID;
+        (call as any)._originalCallKitUUID = storedCallKitUUID;
+
+        // Make these properties non-configurable to prevent accidental deletion
+        try {
+          Object.defineProperty(call, '_callKitUUID', {
+            value: storedCallKitUUID,
+            writable: false,
+            enumerable: false,
+            configurable: false,
+          });
+          Object.defineProperty(call, '_isPushNotificationCall', {
+            value: true,
+            writable: false,
+            enumerable: false,
+            configurable: false,
+          });
+        } catch (error) {
+          log.warn('[Call] Could not make UUID properties non-configurable:', error);
+        }
+
+        // Clear the stored UUID since we've used it
+        connectionClient.setPushNotificationCallKitUUID(null);
+
+        log.debug('[Call] CallKit UUID properties set during call creation:', {
+          _callKitUUID: (call as any)._callKitUUID,
+          _isPushNotificationCall: (call as any)._isPushNotificationCall,
+          _pushCallKitUUID: (call as any)._pushCallKitUUID,
+          _originalCallKitUUID: (call as any)._originalCallKitUUID,
+        });
+      }
+    }
+
+    call.peer = new Peer(options);
+    call.peer.createPeerConnection();
+    call.peer.setRemoteDescription({ type: 'offer', sdp: remoteSDP });
+
+    call.setState('ringing');
+
+    return call;
+  }
+
+  private connection: Connection;
+  private options: CallOptions;
+  private peer: Peer | null;
+  private sessionId: string;
+
+  constructor({
+    connection,
+    options,
+    sessionId,
+    direction,
+    callId,
+    telnyxLegId,
+    telnyxSessionId,
+    telnyxCallControlId = null,
+    callState = 'new',
+  }: CallConstructorParams) {
+    super();
+
+    this.connection = connection;
+    this.options = options;
+    this.sessionId = sessionId;
+    this.callId = callId ?? uuid();
+    this.direction = direction;
+    this.state = callState;
+    this.telnyxLegId = telnyxLegId;
+    this.telnyxSessionId = telnyxSessionId;
+    this.telnyxCallControlId = telnyxCallControlId;
+    this.peer = null;
+
+    this.connection.addListener('telnyx.socket.message', this.onSocketMessage);
+  }
+
+  public get remoteStream() {
+    return this.options.remoteStream;
+  }
+
+  public get localStream() {
+    return this.options.localStream;
+  }
+
+  /**
+   * Accept an incoming call
+   * This method will attach the local audio stream, create an answer,
+   * and send the answer message to the Telnyx platform.
+   * It will also set the call state to 'active'.
+   * @param customHeaders Optional custom headers to include with the answer
+   * @throws {Error} If the peer connection is not created
+   * @returns {Promise<void>} A promise that resolves when the call is accepted
+   */
+  public answer = async (customHeaders?: { name: string; value: string }[]) => {
+    if (!this.peer) {
+      throw new Error('[Call] Peer is not created');
+    }
+    await this.peer
+      .attachLocalStream({ audio: true, video: false })
+      .then((peer) => peer.createAnswer())
+      .then((peer) => peer.waitForIceGatheringComplete());
+
+    await this.connection.sendAndWait(
+      createAnswerMessage({
+        callId: this.callId,
+        dialogParams: {},
+        sdp: this.peer.localDescription!.sdp,
+        telnyxLegId: this.telnyxLegId!,
+        telnyxSessionId: this.telnyxSessionId!,
+        sessionId: this.sessionId,
+        customHeaders,
+      })
+    );
+
+    this.setState('active');
+  };
+
+   /**
+   * Accept an incoming call
+   * This method will attach the local audio stream, create an answer,
+   * and send the answer message to the Telnyx platform.
+   * It will also set the call state to 'active'.
+   * @throws {Error} If the peer connection is not created
+   * @returns {Promise<void>} A promise that resolves when the call is accepted
+   */
+  public answerAttach = async () => {
+    if (!this.peer) {
+      throw new Error('[Call] Peer is not created');
+    }
+    await this.peer
+      .attachLocalStream({ audio: true, video: false })
+      .then((peer) => peer.createAnswer())
+      .then((peer) => peer.waitForIceGatheringComplete());
+
+    this.setState('active');
+  };
+
+  /**
+   * Hang up the call
+   * This method will send a hangup request to the Telnyx platform,
+   * close the peer connection, and set the call state to 'ended'.
+   * @param customHeaders Optional custom headers to include with the hangup request
+   */
+  public hangup = (customHeaders?: { name: string; value: string }[]) => {
+    this.connection.send(
+      createHangupRequest({
+        callId: this.callId,
+        telnyxLegId: this.telnyxLegId!,
+        telnyxSessionId: this.telnyxSessionId!,
+        cause: 'USER_BUSY',
+        causeCode: 17,
+        sessionId: this.sessionId,
+        customHeaders,
+      })
+    );
+
+    this.peer?.close();
+    this.setState('ended');
+  };
+
+  /**
+   * Hold the call
+   * This method will send a hold request to the Telnyx platform,
+   * and set the call state to 'held'.
+   * @throws {Error} If the hold action fails or if the response is invalid
+   * @return {Promise<void>} A promise that resolves when the call is held
+   */
+
+  public hold = async () => {
+    const holdRequest = createModifyCallRequest({
+      action: 'hold',
+      callId: this.callId,
+      sessionId: this.sessionId,
+    });
+
+    const result = await this.connection.sendAndWait(holdRequest);
+    if (!isModifyCallAnswer(result)) {
+      throw new Error(`[Call] Invalid hold response received: ${JSON.stringify(result)}`);
+    }
+    if (result.result.holdState !== 'held') {
+      throw new Error(`[Call] Hold action failed: ${JSON.stringify(result)}`);
+    }
+    this.setState('held');
+  };
+
+  /**
+   * Unhold the call
+   * This method will send an unhold request to the Telnyx platform,
+   * and set the call state to 'active'.
+   * @throws {Error} If the unhold action fails or if the response is invalid
+   * @return {Promise<void>} A promise that resolves when the call is unheld
+   */
+  public unhold = async () => {
+    const unholdRequest = createModifyCallRequest({
+      action: 'unhold',
+      sessionId: this.sessionId,
+      callId: this.callId,
+    });
+    const result = await this.connection.sendAndWait(unholdRequest);
+    if (!isModifyCallAnswer(result)) {
+      throw new Error(`[Call] Invalid hold response received: ${JSON.stringify(result)}`);
+    }
+    if (result.result.holdState !== 'held') {
+      throw new Error(`[Call] Hold action failed: ${JSON.stringify(result)}`);
+    }
+
+    this.setState('active');
+  };
+
+  /**
+   *
+   * @param digits The DTMF digits to send
+   * This method will send a DTMF request to the Telnyx platform,
+   * and return the result of the DTMF action.
+   * @throws {Error} If the DTMF response is invalid
+   * @returns {Promise<string>} A promise that resolves with the DTMF result
+   * @example
+   * ```typescript
+   * const result = await call.dtmf('1234');
+   * console.log(result); // 'SENT' or other result based on the DTMF action
+   * ```
+   */
+  public dtmf = async (digits: string) => {
+    const DTMFRequest = createDTMFRequest({
+      digits,
+      sessionId: this.sessionId,
+      callId: this.callId,
+    });
+
+    const response = await this.connection.sendAndWait(DTMFRequest);
+    if (!isDTMFResponse(response)) {
+      throw new Error(`[Call] Invalid DTMF response received: ${JSON.stringify(response)}`);
+    }
+    return response.result;
+  };
+
+  /**
+   * Mute the local audio stream
+   * This method will set the local audio stream state to false,
+   * effectively muting the audio.
+   * @throws {Error} If the peer connection or local stream is not set
+   * @returns {void}
+   * @example
+   * ```typescript
+   * call.mute();
+   * console.log('Call muted');
+   * ```
+   * @see {@link Call.unmute} for unmuting the call.
+   * @see {@link Call.deaf} for deafening the call.
+   * @see {@link Call.undeaf} for undeafening the call.
+   *
+   */
+
+  public mute = () => {
+    if (!this.peer) {
+      throw new Error('[Call] Peer not created');
+    }
+    if (!this.options.localStream) {
+      throw new Error('[Call] Local stream not set');
+    }
+    this.peer.setMediaStreamState(this.options.localStream, false);
+  };
+
+  /**
+   * Unmute the local audio stream
+   * This method will set the local audio stream state to true,
+   * effectively unmuting the audio.
+   * @throws {Error} If the peer connection or local stream is not set
+   * @returns {void}
+   * @example
+   * ```typescript
+   * call.unmute();
+   * console.log('Call unmuted');
+   * ```
+   * @see {@link Call.mute} for muting the call.
+   * @see {@link Call.deaf} for deafening the call.
+   * @see {@link Call.undeaf} for undeafening the call.
+   */
+  public unmute = () => {
+    if (!this.peer) {
+      throw new Error('[Call] Peer not created');
+    }
+    if (!this.options.localStream) {
+      throw new Error('[Call] Local stream not set');
+    }
+    this.peer.setMediaStreamState(this.options.localStream, true);
+  };
+
+  /**
+   * Deafen the remote audio stream
+   * This method will set the remote audio stream state to false,
+   * effectively deafening the audio.
+   * @throws {Error} If the peer connection or remote stream is not set
+   * @returns {void}
+   * @example
+   * ```typescript
+   * call.deaf();
+   * console.log('Call deafened');
+   * ```
+   * @see {@link Call.undeaf} for undeafening the call.
+   * @see {@link Call.mute} for muting the call.
+   * @see {@link Call.unmute} for unmuting the call.
+   *
+   */
+  public deaf = () => {
+    if (!this.peer) {
+      throw new Error('[Call] Peer not created');
+    }
+    if (!this.options.remoteStream) {
+      throw new Error('[Call] Remote stream not set');
+    }
+    this.peer.setMediaStreamState(this.options.remoteStream, false);
+  };
+
+  /**
+   * Undeafen the remote audio stream
+   * This method will set the remote audio stream state to true,
+   * effectively undeafening the audio.
+   * @throws {Error} If the peer connection or remote stream is not set
+   * @returns {void}
+   * @example
+   * ```typescript
+   * call.undeaf();
+   * console.log('Call undeafened');
+   * ```
+   * @see {@link Call.deaf} for deafening the call.
+   * @see {@link Call.mute} for muting the call.
+   *  @see {@link Call.unmute} for unmuting the call.
+   *
+   */
+  public undeaf = () => {
+    if (!this.peer) {
+      throw new Error('[Call] Peer not created');
+    }
+    if (!this.options.remoteStream) {
+      throw new Error('[Call] Remote stream not set');
+    }
+    this.peer.setMediaStreamState(this.options.remoteStream, true);
+  };
+
+  /**
+   * Get the Telnyx IDs associated with the call
+   * This method returns an object containing the Telnyx session ID, leg ID, and call control ID.
+   * @returns {Object} An object containing the Telnyx IDs
+   */
+  public get telnyxIds() {
+    return {
+      telnyxSessionId: this.telnyxSessionId,
+      telnyxLegId: this.telnyxLegId,
+      telnyxCallControlId: this.telnyxCallControlId,
+    };
+  }
+  public invite = async () => {
+    this.peer = await Peer.createOffer(this.options);
+
+    // Store the custom headers we're sending with the invite
+    this.inviteCustomHeaders = this.options.customHeaders || null;
+
+    const msg = await this.connection.sendAndWait(
+      createInviteMessage({
+        attach: false,
+        callOptions: this.options,
+        sessionId: this.sessionId,
+        callId: this.callId,
+        sdp: this.peer.localDescription!.sdp,
+      })
+    );
+
+    if (!isInviteACKMessage(msg)) {
+      throw new Error(`[Call] Invalid invite ACK message received: ${JSON.stringify(msg)}`);
+    }
+    this.callId = msg.result.callID;
+  };
+
+  private setState = (state: CallState) => {
+    this.state = state;
+    this.emit('telnyx.call.state', this, state);
+  };
+
+  private onSocketMessage = (msg: unknown) => {
+    if (isRingingEvent(msg) && msg.params.callID === this.callId) {
+      return this.handleRingingEvent(msg);
+    }
+
+    if (isAnswerEvent(msg) && msg.params.callID === this.callId) {
+      return this.handleAnswerEvent(msg);
+    }
+
+    if (isByeEvent(msg) && msg.params.callID === this.callId) {
+      return this.handleHangupEvent(msg);
+    }
+  };
+
+  private handleRingingEvent = (msg: RingingEvent) => {
+    log.debug('[Call] Ringing event received', msg);
+    this.setState('ringing');
+    this.telnyxLegId = msg.params.telnyx_leg_id;
+    this.telnyxSessionId = msg.params.telnyx_session_id;
+    this.connection.send(createRingingAckMessage(msg.id));
+  };
+
+  private handleAnswerEvent = async (msg: AnswerEvent) => {
+    if (!this.peer) {
+      throw new Error('[Call] Peer not created');
+    }
+
+    // Store custom headers from the ANSWER message
+    this.answerCustomHeaders = msg.params.dialogParams?.custom_headers || null;
+
+    await this.peer.setRemoteDescription({
+      type: 'answer',
+      sdp: msg.params.sdp,
+    });
+    this.connection.send(createAnswerAck(msg.id));
+    this.setState('active');
+  };
+
+  private handleHangupEvent = (msg: ByeEvent) => {
+    log.debug('[Call] Hangup event received', msg);
+
+    this.setState('ended');
+
+    this.peer?.close();
+  };
+}

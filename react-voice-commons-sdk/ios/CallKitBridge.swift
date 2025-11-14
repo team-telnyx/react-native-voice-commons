@@ -563,14 +563,9 @@ import React
             NSLog(
                 "🎧🎧🎧 TelnyxVoice: AUDIO SESSION ACTIVATED BY CALLKIT - USER ANSWERED THE CALL! 🎧🎧🎧")
             NSLog("🎧 Provider: \(provider)")
-            NSLog(
-                "🎧 Audio session details: active=\(audioSession.isOtherAudioPlaying), category=\(audioSession.category.rawValue), mode=\(audioSession.mode.rawValue)"
-            )
-            NSLog(
-                "🎧 Current RTCAudioSession state - useManualAudio=\(RTCAudioSession.sharedInstance().useManualAudio), isAudioEnabled=\(RTCAudioSession.sharedInstance().isAudioEnabled)"
-            )
 
-            // CRITICAL: Activate WebRTC audio session (matches Flutter implementation)
+
+            // CRITICAL: Activate WebRTC audio session 
             RTCAudioSession.sharedInstance().audioSessionDidActivate(audioSession)
             RTCAudioSession.sharedInstance().isAudioEnabled = true
             NSLog("🎧 TelnyxVoice: WebRTC RTCAudioSession activated and audio enabled")

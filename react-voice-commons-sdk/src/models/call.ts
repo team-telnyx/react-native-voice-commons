@@ -86,6 +86,24 @@ export class Call {
   }
 
   /**
+   * Custom headers received from the WebRTC INVITE message.
+   * These headers are passed during call initiation and can contain application-specific information.
+   * Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+   */
+  get inviteCustomHeaders(): { name: string; value: string }[] | null {
+    return this._telnyxCall.inviteCustomHeaders;
+  }
+
+  /**
+   * Custom headers received from the WebRTC ANSWER message.
+   * These headers are passed during call acceptance and can contain application-specific information.
+   * Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+   */
+  get answerCustomHeaders(): { name: string; value: string }[] | null {
+    return this._telnyxCall.answerCustomHeaders;
+  }
+
+  /**
    * Get the underlying Telnyx Call object (for internal use)
    * @internal
    */
@@ -163,8 +181,9 @@ export class Call {
 
   /**
    * Answer the incoming call
+   * @param customHeaders Optional custom headers to include with the answer
    */
-  async answer(): Promise<void> {
+  async answer(customHeaders?: { name: string; value: string }[]): Promise<void> {
     if (!CallStateHelpers.canAnswer(this.currentState)) {
       throw new Error(`Cannot answer call in state: ${this.currentState}`);
     }
@@ -184,7 +203,8 @@ export class Call {
       console.log('Call: Setting state to CONNECTING before answering');
       this._callState.next(TelnyxCallState.CONNECTING);
 
-      await this._telnyxCall.answer();
+      // Pass custom headers to the underlying Telnyx call
+      await this._telnyxCall.answer(customHeaders);
     } catch (error) {
       console.error('Failed to answer call:', error);
       throw error;
@@ -193,8 +213,9 @@ export class Call {
 
   /**
    * Hang up the call
+   * @param customHeaders Optional custom headers to include with the hangup request
    */
-  async hangup(): Promise<void> {
+  async hangup(customHeaders?: { name: string; value: string }[]): Promise<void> {
     if (!CallStateHelpers.canHangup(this.currentState)) {
       throw new Error(`Cannot hang up call in state: ${this.currentState}`);
     }
@@ -211,7 +232,7 @@ export class Call {
       }
 
       // Fallback for Android or when CallKit is not available
-      await this._telnyxCall.hangup();
+      await this._telnyxCall.hangup(customHeaders);
     } catch (error) {
       console.error('Failed to hang up call:', error);
       throw error;
