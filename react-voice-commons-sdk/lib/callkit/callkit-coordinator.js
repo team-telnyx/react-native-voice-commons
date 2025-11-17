@@ -32,15 +32,11 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.callKitCoordinator = void 0;
 const react_native_1 = require("react-native");
 const callkit_1 = __importStar(require("./callkit"));
 const voice_pn_bridge_1 = require("../internal/voice-pn-bridge");
-const async_storage_1 = __importDefault(require("@react-native-async-storage/async-storage"));
 /**
  * CallKit Coordinator - Manages the proper CallKit-first flow for iOS
  *
@@ -65,6 +61,8 @@ class CallKitCoordinator {
         // Tracks calls that have already been reported as connected to prevent duplicate reports
         this.connectedCalls = new Set();
         this.isCallFromPush = false;
+        // Flag to auto-answer the next incoming call (set when answering push notifications via CallKit)
+        this.shouldAutoAnswerNextCall = false;
         // Reference to the VoIP client for triggering reconnection when needed
         this.voipClient = null;
         if (react_native_1.Platform.OS === 'ios' && callkit_1.default.isAvailable()) {
@@ -341,7 +339,7 @@ class CallKitCoordinator {
         // We just need to report when it connects
     }
     /**
-     * Handle CallKit push received event - when a VoIP push notification has been processed
+     * Handle CallKit push received event
      * This allows us to coordinate between the push notification and any subsequent WebRTC calls
      */
     async handleCallKitPushReceived(callKitUUID, event) {
@@ -385,14 +383,15 @@ class CallKitCoordinator {
                 from_callkit: true,
             };
             // Check if auto-answer is set and add from_notification flag
-            const autoAnswerFlag = await async_storage_1.default.getItem('@auto_answer_next_call');
-            const shouldAddFromNotification = autoAnswerFlag === 'true';
+            const shouldAddFromNotification = this.shouldAutoAnswerNextCall;
             let pushData;
             if (shouldAddFromNotification) {
                 pushData = {
                     metadata: enhancedMetadata,
                     from_notification: true,
+                    action: 'answer',
                 };
+                voipClient.queueAnswerFromCallKit();
             }
             else {
                 pushData = {
@@ -417,11 +416,8 @@ class CallKitCoordinator {
             if (react_native_1.Platform.OS === 'ios') {
                 console.log('CallKitCoordinator: Processing iOS push notification answer');
                 // Set auto-answer flag so when the WebRTC call comes in, it will be answered automatically
-                await async_storage_1.default.setItem('@auto_answer_next_call', 'true');
+                this.shouldAutoAnswerNextCall = true;
                 console.log('CallKitCoordinator: ✅ Set auto-answer flag for next incoming call');
-                // Store the CallKit UUID so we can link it when the WebRTC call arrives
-                await async_storage_1.default.setItem('@pending_callkit_uuid', callKitUUID);
-                console.log('CallKitCoordinator: ✅ Stored pending CallKit UUID for linking');
                 // Get VoIP client and trigger reconnection
                 const voipClient = this.getSDKClient();
                 if (!voipClient) {
@@ -469,9 +465,9 @@ class CallKitCoordinator {
                         from_callkit: true,
                     });
                 }
-                // Set the pending push action using VoicePnBridge
+                // Set the pending push action to be handled when app comes to foreground
                 await voice_pn_bridge_1.VoicePnBridge.setPendingPushAction(pushAction, pushMetadata);
-                console.log('CallKitCoordinator: ✅ Set pending push action for reconnection');
+                console.log('CallKitCoordinator: ✅ Set pending push action');
                 return;
             }
             // For other platforms (shouldn't happen on iOS)
@@ -639,26 +635,11 @@ class CallKitCoordinator {
         this.voipClient = voipClient;
     }
     /**
-     * Helper method to handle auto-answer logic for push notification calls
-     */
-    async handleAutoAnswer(call) {
-        const shouldAutoAnswer = await async_storage_1.default.getItem('@auto_answer_next_call');
-        if (shouldAutoAnswer === 'true') {
-            console.log('CallKitCoordinator: Auto-answering call from push notification');
-            await async_storage_1.default.removeItem('@auto_answer_next_call');
-            // Auto-answer the call after a brief delay to ensure CallKit is ready
-            setTimeout(() => {
-                call.answer();
-            }, 100);
-        }
-    }
-    /**
      * Helper method to clean up push notification state
      */
     async cleanupPushNotificationState() {
-        console.log('CallKitCoordinator: ✅ Cleared pending CallKit UUID and auto-answer flag');
-        await async_storage_1.default.removeItem('@pending_callkit_uuid');
-        await async_storage_1.default.removeItem('@auto_answer_next_call');
+        console.log('CallKitCoordinator: ✅ Cleared auto-answer flag');
+        this.shouldAutoAnswerNextCall = false;
     }
     /**
      * Get reference to the SDK client (for queuing actions when call doesn't exist yet)
@@ -699,6 +680,8 @@ class CallKitCoordinator {
         console.log('CallKitCoordinator: Resetting coordinator flags');
         // Reset push notification flag
         this.isCallFromPush = false;
+        // Reset auto-answer flag
+        this.shouldAutoAnswerNextCall = false;
         console.log('CallKitCoordinator: ✅ Coordinator flags reset');
     }
     /**

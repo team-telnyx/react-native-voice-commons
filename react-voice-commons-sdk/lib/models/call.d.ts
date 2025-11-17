@@ -53,6 +53,24 @@ export declare class Call {
      */
     get currentDuration(): number;
     /**
+     * Custom headers received from the WebRTC INVITE message.
+     * These headers are passed during call initiation and can contain application-specific information.
+     * Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+     */
+    get inviteCustomHeaders(): {
+        name: string;
+        value: string;
+    }[] | null;
+    /**
+     * Custom headers received from the WebRTC ANSWER message.
+     * These headers are passed during call acceptance and can contain application-specific information.
+     * Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+     */
+    get answerCustomHeaders(): {
+        name: string;
+        value: string;
+    }[] | null;
+    /**
      * Get the underlying Telnyx Call object (for internal use)
      * @internal
      */

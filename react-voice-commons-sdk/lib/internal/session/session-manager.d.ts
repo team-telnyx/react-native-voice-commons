@@ -65,17 +65,13 @@ export declare class SessionManager {
      */
     dispose(): void;
     /**
-     * Internal method to establish connection
+     * Internal method to establish connection with or without push notification handling
      */
     private _connect;
     /**
      * Set up event listeners for the Telnyx client
      */
     private _setupClientListeners;
-    /**
-     * Attempt to reconnect after connection loss
-     */
-    private _attemptReconnection;
     /**
      * Extract the actual payload metadata from wrapped push notification payload
      */

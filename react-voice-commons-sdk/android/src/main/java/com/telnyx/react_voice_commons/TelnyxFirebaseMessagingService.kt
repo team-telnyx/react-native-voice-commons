@@ -130,32 +130,33 @@ open class TelnyxFirebaseMessagingService : FirebaseMessagingService() {
                 Log.d(tag, "Using top-level data - callId: $callId, callerName: $callerName, callerNumber: $callerNumber")
             }
             
-            // Show notification using dynamic class resolution
-            val notificationHelper = TelnyxNotificationHelper(this)
-            notificationHelper.showIncomingCallNotification(callerName, callerNumber, callId)
+
+            var metadata = ""
             
             // Extract metadata using the same approach as official Telnyx service
             try {
                 val params = remoteMessage.data
                 val objects = org.json.JSONObject(params as Map<*, *>)
-                val metadata = objects.getString("metadata")
+                metadata = objects.getString( "metadata")
                 
                 Log.d(tag, "Extracted FCM metadata string: $metadata")
-                VoicePnManager.setPendingPushAction(this, "incoming_call", metadata)
             } catch (e: Exception) {
                 Log.e(tag, "Error extracting metadata from FCM data: ${e.message}")
-                
+
                 // Fallback to simple JSON if metadata extraction fails
-                val fallbackMetadata = org.json.JSONObject().apply {
+                metadata = org.json.JSONObject().apply {
                     put("call_id", callId)
                     put("caller_name", callerName)
                     put("caller_number", callerNumber)
                 }.toString()
                 
-                Log.d(tag, "Using fallback metadata: $fallbackMetadata")
-                VoicePnManager.setPendingPushAction(this, "incoming_call", fallbackMetadata)
+                Log.d(tag, "Using fallback metadata: $metadata")
             }
-            
+            //VoicePnManager.setPendingPushAction(this, "incoming_call", metadata)
+
+            // Show notification using dynamic class resolution
+            val notificationHelper = TelnyxNotificationHelper(this)
+            notificationHelper.showIncomingCallNotification(callerName, callerNumber, callId, metadata)
             Log.d(tag, "Telnyx voice push processed successfully")
         } catch (e: Exception) {
             Log.e(tag, "Error handling Telnyx voice push notification", e)

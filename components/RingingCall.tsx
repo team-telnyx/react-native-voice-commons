@@ -18,6 +18,12 @@ export function RingingCall({ call, isPushNotificationCall = false }: Props) {
     isPushNotificationCall,
   });
 
+  // Don't show ringing UI for push notification calls
+  if (isPushNotificationCall) {
+    console.log('RingingCall: Skipping render for push notification call');
+    return null;
+  }
+
   // Ensure dialog stays open when call is ringing
   useEffect(() => {
     if (call) {

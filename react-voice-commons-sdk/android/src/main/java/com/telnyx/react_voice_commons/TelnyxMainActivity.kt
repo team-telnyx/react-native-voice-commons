@@ -45,16 +45,14 @@ abstract class TelnyxMainActivity : ReactActivity() {
         
         val extras = intent.extras
         if (extras != null) {
-            Log.d(TAG, "Intent extras found:")
-            for (key in extras.keySet()) {
-                Log.d(TAG, "  $key: ${extras.getString(key) ?: extras.get(key)}")
-            }
+            Log.d(TAG, "Intent extras found: ${extras.keySet()}")
+
             
             // Handle push notification data
             val callId = extras.getString("call_id")
             val action = extras.getString("action")
             val fromNotificationAction = extras.getBoolean("from_notification_action", false)
-            
+            val metadata = extras.getString("meta_data")
             if (callId != null && action != null) {
                 Log.d(TAG, "Found push notification data - callId: $callId, action: $action, fromNotificationAction: $fromNotificationAction")
                 
@@ -66,7 +64,7 @@ abstract class TelnyxMainActivity : ReactActivity() {
                 
                 // Store the push action for when React Native is ready
                 pendingPushAction = action
-                pendingPushMetadata = createPushMetadata(callId, action, extras)
+                pendingPushMetadata = metadata
                 
                 // Try to send immediately if React Native is already loaded
                 checkAndSendPendingPushAction()
@@ -100,28 +98,6 @@ abstract class TelnyxMainActivity : ReactActivity() {
      */
     fun checkAndSendPendingPushAction(): Boolean {
         Log.d(TAG, "checkAndSendPendingPushAction called")
-        
-        // First, check if we have FCM metadata (from push notification)
-        val (fcmAction, fcmMetadata) = VoicePnManager.getPendingPushAction(this)
-        
-        if (fcmAction != null && fcmMetadata != null) {
-            Log.d(TAG, "Found FCM push action: $fcmAction")
-            Log.d(TAG, "FCM metadata: $fcmMetadata")
-            
-            try {
-                // The FCM metadata is now clean JSON - just validate it parses
-                val metadata = org.json.JSONObject(fcmMetadata)
-                Log.d(TAG, "Successfully validated FCM metadata JSON")
-                
-                // FCM data already contains everything we need including voice_sdk_id
-                Log.d(TAG, "Using FCM metadata directly")
-                return true
-            } catch (e: Exception) {
-                Log.e(TAG, "Error parsing FCM metadata JSON: ${e.message}")
-                VoicePnManager.clearPendingPushAction(this)
-            }
-        }
-        
         // Fallback: handle instance variables (from intent extras)
         if (pendingPushAction != null && pendingPushMetadata != null) {
             Log.d(TAG, "Found instance push action: $pendingPushAction")

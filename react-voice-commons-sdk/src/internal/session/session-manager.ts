@@ -276,7 +276,7 @@ export class SessionManager {
   }
 
   /**
-   * Internal method to establish connection
+   * Internal method to establish connection with or without push notification handling
    */
   private async _connect(): Promise<void> {
     if (!this._currentConfig) {
@@ -404,27 +404,6 @@ export class SessionManager {
     // We'll rely on the client-level events for now
   }
 
-  /**
-   * Attempt to reconnect after connection loss
-   */
-  private async _attemptReconnection(): Promise<void> {
-    if (this._disposed || !this._currentConfig) {
-      return;
-    }
-
-    // Simple reconnection logic - in production, this should include
-    // exponential backoff and maximum retry attempts
-    setTimeout(async () => {
-      if (this.currentState === TelnyxConnectionState.RECONNECTING) {
-        try {
-          await this._connect();
-        } catch (error) {
-          console.error('Reconnection failed:', error);
-          // Could implement retry logic here
-        }
-      }
-    }, 3000);
-  }
 
   /**
    * Extract the actual payload metadata from wrapped push notification payload
@@ -434,10 +413,19 @@ export class SessionManager {
     let actualPayload = payload;
 
     if (payload.metadata && typeof payload.metadata === 'object') {
-      // If there's a metadata wrapper, use that
+      // If there's a metadata wrapper, use that but preserve wrapper-level flags
       actualPayload = payload.metadata;
+      
+      // Preserve important flags from the wrapper level
+      if (payload.from_notification !== undefined) {
+        actualPayload.from_notification = payload.from_notification;
+      }
+      if (payload.action !== undefined) {
+        actualPayload.action = payload.action;
+      }
+      
       console.log(
-        'SessionManager: RELEASE DEBUG - Using metadata portion of payload:',
+        'SessionManager: RELEASE DEBUG - Using metadata portion of payload with preserved flags:',
         JSON.stringify(actualPayload)
       );
     } else if (payload.action === 'incoming_call' && payload.metadata) {
@@ -446,8 +434,17 @@ export class SessionManager {
         const parsedMetadata =
           typeof payload.metadata === 'string' ? JSON.parse(payload.metadata) : payload.metadata;
         actualPayload = parsedMetadata;
+        
+        // Preserve important flags from the wrapper level
+        if (payload.from_notification !== undefined) {
+          actualPayload.from_notification = payload.from_notification;
+        }
+        if (payload.action !== undefined) {
+          actualPayload.action = payload.action;
+        }
+        
         console.log(
-          'SessionManager: RELEASE DEBUG - Using parsed metadata:',
+          'SessionManager: RELEASE DEBUG - Using parsed metadata with preserved flags:',
           JSON.stringify(actualPayload)
         );
       } catch (error) {

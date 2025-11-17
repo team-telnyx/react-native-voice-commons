@@ -25,7 +25,7 @@ type CallEvents = {
   'telnyx.call.state': (call: Call, state: CallState) => void;
 };
 
-export type CallState = 'new' | 'ringing' | 'active' | 'ended' | 'held';
+export type CallState = 'new' | 'ringing' | 'connecting' | 'active' | 'ended' | 'held';
 
 type CallConstructorParams = {
   connection: Connection;
@@ -209,6 +209,11 @@ export class Call extends EventEmitter<CallEvents> {
     if (!this.peer) {
       throw new Error('[Call] Peer is not created');
     }
+
+    // Set state to connecting when starting the answer process
+    log.debug('[Call] Setting state to connecting before answering');
+    this.setState('connecting');
+
     await this.peer
       .attachLocalStream({ audio: true, video: false })
       .then((peer) => peer.createAnswer())
@@ -489,6 +494,14 @@ export class Call extends EventEmitter<CallEvents> {
   private setState = (state: CallState) => {
     this.state = state;
     this.emit('telnyx.call.state', this, state);
+  };
+
+  /**
+   * Set the call to connecting state (used for push notification calls when answered via CallKit)
+   */
+  public setConnecting = () => {
+    log.debug('[Call] Setting state to connecting');
+    this.setState('connecting');
   };
 
   private onSocketMessage = (msg: unknown) => {

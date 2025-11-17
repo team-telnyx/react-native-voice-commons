@@ -60,31 +60,23 @@ class TelnyxNotificationHelper(private val context: Context) {
         callerName: String?,
         callerNumber: String?,
         callId: String,
-        mainActivityClass: Class<*>? = null,
-        actionReceiverClass: Class<*>? = null
+        metadata: String,
+        mainActivityClass: Class<*>? = null
     ): Notification {
         val displayName = callerName ?: callerNumber ?: "Unknown Caller"
         val displayNumber = if (callerName != null && callerNumber != null) callerNumber else ""
 
         // Use provided MainActivity class or try to find it dynamically
         val activityClass = mainActivityClass ?: try {
-            Class.forName("${context.packageName}.MainActivity")
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not find MainActivity class, using context class", e)
-            context.javaClass
-        }
-
-        // Use provided ActionReceiver class or try to find it dynamically
-        val receiverClass = actionReceiverClass ?: try {
-            // First try to find the app's receiver class (which should extend TelnyxNotificationActionReceiver)
-            Class.forName("${context.packageName}.AppNotificationActionReceiver")
-        } catch (e: Exception) {
+            // Try TelnyxMainActivity first (apps should extend this)
+            Class.forName("${context.packageName}.TelnyxMainActivity")
+        } catch (e1: Exception) {
             try {
-                // Fallback to any other receiver in the app package
-                Class.forName("${context.packageName}.TelnyxNotificationActionReceiver")
+                // Fallback to MainActivity
+                Class.forName("${context.packageName}.MainActivity")
             } catch (e2: Exception) {
-                Log.w(TAG, "Could not find notification action receiver class", e2)
-                null
+                Log.w(TAG, "Could not find TelnyxMainActivity or MainActivity, using context class", e2)
+                context.javaClass
             }
         }
 
@@ -118,29 +110,29 @@ class TelnyxNotificationHelper(private val context: Context) {
             putExtra("call_id", callId)
             putExtra("action", "answer")
             putExtra("from_notification_action", true)
+            putExtra("meta_data",metadata)
+
         }
         val answerPendingIntent = PendingIntent.getActivity(
             context, 1, answerActivityIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Reject action - store action and dismiss (no activity needed)
-        if (receiverClass != null) {
-            val rejectIntent = Intent(context, receiverClass).apply {
-                action = "REJECT_CALL"
-                putExtra("call_id", callId)
-            }
-            val rejectPendingIntent = PendingIntent.getBroadcast(
-                context, 2, rejectIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            
-            builder.addAction(android.R.drawable.ic_menu_call, "Answer", answerPendingIntent)
-            builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Reject", rejectPendingIntent)
-        } else {
-            // If no receiver class, still add Answer action
-            builder.addAction(android.R.drawable.ic_menu_call, "Answer", answerPendingIntent)
+        // Reject action - direct activity launch to avoid BAL restrictions
+        val rejectActivityIntent = Intent(context, activityClass).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("call_id", callId)
+            putExtra("action", "reject")
+            putExtra("from_notification_action", true)
+            putExtra("meta_data",metadata)
         }
+        val rejectPendingIntent = PendingIntent.getActivity(
+            context, 2, rejectActivityIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        builder.addAction(android.R.drawable.ic_menu_call, "Answer", answerPendingIntent)
+        builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Reject", rejectPendingIntent)
 
         return builder.build()
     }
@@ -149,13 +141,13 @@ class TelnyxNotificationHelper(private val context: Context) {
         callerName: String?, 
         callerNumber: String?, 
         callId: String,
+        metadata: String,
         mainActivityClass: Class<*>? = null,
-        actionReceiverClass: Class<*>? = null
     ) {
         // First, hide any existing notification to avoid conflicts
         hideIncomingCallNotification()
         
-        val notification = createIncomingCallNotification(callerName, callerNumber, callId, mainActivityClass, actionReceiverClass)
+        val notification = createIncomingCallNotification(callerName, callerNumber, callId,metadata, mainActivityClass)
         notificationManager.notify(NOTIFICATION_ID, notification)
         Log.d(TAG, "Showed incoming call notification for: $callerName ($callerNumber)")
     }

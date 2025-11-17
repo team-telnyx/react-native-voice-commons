@@ -14,6 +14,7 @@ declare class CallKitCoordinator {
     private endedCalls;
     private connectedCalls;
     private isCallFromPush;
+    private shouldAutoAnswerNextCall;
     private voipClient;
     static getInstance(): CallKitCoordinator;
     private constructor();
@@ -48,7 +49,7 @@ declare class CallKitCoordinator {
      */
     private handleCallKitStart;
     /**
-     * Handle CallKit push received event - when a VoIP push notification has been processed
+     * Handle CallKit push received event
      * This allows us to coordinate between the push notification and any subsequent WebRTC calls
      */
     handleCallKitPushReceived(callKitUUID: string, event?: any): Promise<void>;
@@ -87,10 +88,6 @@ declare class CallKitCoordinator {
      * Set the VoIP client reference for triggering reconnection
      */
     setVoipClient(voipClient: TelnyxVoipClient): void;
-    /**
-     * Helper method to handle auto-answer logic for push notification calls
-     */
-    private handleAutoAnswer;
     /**
      * Helper method to clean up push notification state
      */

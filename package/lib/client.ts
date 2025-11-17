@@ -700,6 +700,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
     });
 
+    // Set call state to connecting after creation
+    (this.call as any).state = 'connecting';
+    this.call.emit('telnyx.call.state', this.call, 'connecting');
+    log.debug('[TelnyxRTC] Call state set to connecting after creation');
+
     log.debug('[TelnyxRTC] Call object created, checking for pending actions');
 
     // Check for pending actions from CallKit (matching iOS SDK behavior)
@@ -708,18 +713,22 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
       // Check if this call came from a notification Answer action
       const fromNotification = this.pushNotificationPayload?.from_notification;
+      const action = this.pushNotificationPayload?.action;
+
       if (fromNotification) {
-        log.debug('[TelnyxRTC] Call came from notification Answer button - auto-answering');
+        log.debug('[TelnyxRTC] <Call came from >notification Answer button - auto-answering');
         // Auto-answer the call since user already pressed Answer button
-        setTimeout(() => {
-          if (this.call) {
+         if (this.call) {
             log.debug(
               '[TelnyxRTC] Auto-answering push notification call, current state:',
               this.call.state
             );
-            this.call.answer();
+            if (action === 'answer') {
+              this.call.answer();
+            } else if (action === 'reject') {
+              this.call.hangup();
+            }
           }
-        }, 500); // Small delay to ensure call setup is complete
       } else if (this.pendingAnswerAction) {
         log.debug('[TelnyxRTC] Found pending answer action, executing...');
         // Execute pending answer asynchronously to allow call setup to complete first
@@ -728,7 +737,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         log.debug('[TelnyxRTC] Found pending end action, executing...');
         // Execute pending end asynchronously
         setTimeout(() => this.executePendingEnd(), 100);
+      } else {
+        log.debug('[TelnyxRTC] No pending actions to execute for push notification call');
       }
+    } else {
+      log.debug('[TelnyxRTC] Not a push notification call, no pending actions to check');
     }
 
     log.debug('[TelnyxRTC] Emitting telnyx.call.incoming event');
@@ -996,6 +1009,19 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     if (this.reconnectionTimeoutHandle) {
       clearTimeout(this.reconnectionTimeoutHandle);
       this.reconnectionTimeoutHandle = null;
+    }
+  }
+
+  /**
+   * Set a call to connecting state (used for push notification calls when answered via CallKit)
+   * @param callId The ID of the call to set to connecting state
+   */
+  public setCallConnecting(callId: string): void {
+    if (this.call && this.call.callId === callId) {
+      log.debug('[TelnyxRTC] Setting call to connecting state:', callId);
+      this.call.setConnecting();
+    } else {
+      log.warn('[TelnyxRTC] Could not find call to set connecting:', callId);
     }
   }
 }

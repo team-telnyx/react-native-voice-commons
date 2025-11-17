@@ -155,25 +155,15 @@ const TelnyxVoiceAppComponent = ({ voipClient, children, onPushNotificationProce
             // If auto-reconnection fails, redirect to login screen
             if (!success) {
                 log('Auto-reconnection failed - redirecting to login screen');
-                // Import router dynamically to avoid circular dependency issues
-                const { router } = require('expo-router');
-                // Small delay to ensure state is settled
-                setTimeout(() => {
-                    router.replace('/');
-                }, 100);
             }
         }
         catch (e) {
             log('Auto-reconnection error:', e);
             // On error, also redirect to login
             log('Auto-reconnection error - redirecting to login screen');
-            const { router } = require('expo-router');
-            setTimeout(() => {
-                router.replace('/');
-            }, 100);
         }
     }, [voipClient, log]);
-    // Check for initial push notification when app launches
+    // Check for initial push notification action when app launches
     const checkForInitialPushNotification = (0, react_1.useCallback)(async (fromAppResume = false) => {
         log(`checkForInitialPushNotification called${fromAppResume ? ' (from app resume)' : ''}`);
         if (processingPushOnLaunch && !fromAppResume) {
@@ -200,33 +190,13 @@ const TelnyxVoiceAppComponent = ({ voipClient, children, onPushNotificationProce
                         log('Found pending push action:', pendingAction);
                         // Parse the metadata if it's a string
                         let metadata = pendingAction.metadata;
-                        if (typeof metadata === 'string') {
-                            try {
-                                // First try parsing as JSON
-                                metadata = JSON.parse(metadata);
-                                log('Parsed metadata as JSON:', metadata);
-                            }
-                            catch (e) {
-                                // If JSON parsing fails, try parsing Android key-value format
-                                // Format: "{call_id=value, action=value}"
-                                log('JSON parse failed, trying Android key-value format');
-                                try {
-                                    const cleanedString = metadata.replace(/[{}]/g, '').trim();
-                                    const pairs = cleanedString.split(',').map((pair) => pair.trim());
-                                    const parsed = {};
-                                    for (const pair of pairs) {
-                                        const [key, value] = pair.split('=').map((s) => s.trim());
-                                        if (key && value) {
-                                            parsed[key] = value;
-                                        }
-                                    }
-                                    metadata = parsed;
-                                    log('Parsed metadata as Android key-value format:', metadata);
-                                }
-                                catch (parseError) {
-                                    log('Failed to parse metadata in any format, using as-is:', parseError);
-                                }
-                            }
+                        try {
+                            // First try parsing as JSON
+                            metadata = JSON.parse(metadata);
+                            log('Parsed metadata as JSON:', metadata);
+                        }
+                        catch (e) {
+                            log('JSON parse failed, trying Android key-value format');
                         }
                         // Create push data structure that matches what the VoIP client expects
                         pushData = {

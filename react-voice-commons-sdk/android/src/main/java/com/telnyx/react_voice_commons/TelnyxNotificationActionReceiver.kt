@@ -68,7 +68,7 @@ open class TelnyxNotificationActionReceiver : BroadcastReceiver() {
                         val startIndex = existingMetadata.indexOf("{\"call_id\"")
                         val endIndex = existingMetadata.lastIndexOf("}") + 1
                         
-                        if (startIndex >= 0 && endIndex > startIndex) {
+                        if (startIndex in 0..<endIndex) {
                             val originalJson = existingMetadata.substring(startIndex, endIndex)
                             Log.d(tag, "Extracted original JSON: $originalJson")
                             

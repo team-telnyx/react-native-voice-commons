@@ -50,20 +50,32 @@ export class Connection extends EventEmitter<ConnectionEvents> {
         this.reconnectTimer = null;
       }
       this.reconnectAttempts = 0;
-      this.emit('telnyx.socket.open');
+      try {
+        this.emit('telnyx.socket.open');
+      } catch (error) {
+        log.error('[Connection]: Failed to emit socket.open event - bridge may be disconnected:', error);
+      }
       this.flushMessageQueue();
     });
 
     this.socket.onError((error: string) => {
       log.error('[Connection]: WebSocket error occurred', error);
-      this.emit('telnyx.socket.error', new Error(error));
+      try {
+        this.emit('telnyx.socket.error', error as any);
+      } catch (emitError) {
+        log.error('[Connection]: Failed to emit socket.error event - bridge may be disconnected:', emitError);
+      }
       this.scheduleReconnect();
     });
 
     this.socket.onClose(() => {
       log.debug('[Connection]: WebSocket connection closed');
       this.isSocketConnected = false;
-      this.emit('telnyx.socket.close');
+      try {
+        this.emit('telnyx.socket.close');
+      } catch (error) {
+        log.error('[Connection]: Failed to emit socket.close event - bridge may be disconnected:', error);
+      }
       this.scheduleReconnect();
     });
 
@@ -80,7 +92,11 @@ export class Connection extends EventEmitter<ConnectionEvents> {
       if (parsedMessage.voice_sdk_id) {
         updateVoiceSDKId(parsedMessage.voice_sdk_id);
       }
-      this.emit('telnyx.socket.message', parsedMessage);
+      try {
+        this.emit('telnyx.socket.message', parsedMessage);
+      } catch (error) {
+        log.error('[Connection]: Failed to emit socket.message event - bridge may be disconnected:', error);
+      }
     });
 
     this.transactions = new Map();
@@ -98,8 +114,14 @@ export class Connection extends EventEmitter<ConnectionEvents> {
       return;
     }
 
-    log.debug('Sending message to gateway', msg);
-    this.socket.send(JSON.stringify(msg));
+    try {
+      log.debug('Sending message to gateway', msg);
+      this.socket.send(JSON.stringify(msg));
+    } catch (error) {
+      log.error('[Connection]: Failed to send WebSocket message - bridge may be disconnected:', error);
+      // Don't throw the error, just log it to prevent app crashes during app state transitions
+      // The message will be lost, but this is better than crashing the entire app
+    }
   };
 
   public sendAndWait = (msg: { id: string }): Promise<unknown> => {
