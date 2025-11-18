@@ -118,4 +118,37 @@ object VoicePnManager {
             return false
         }
     }
+
+    // Call action management (using same pattern as push actions)
+    fun setPendingCallAction(context: Context, action: String, callId: String?, timestamp: Long) {
+        Log.d(TAG, "setPendingCallAction called with action: $action, callId: $callId")
+        val editor = getSharedPreferences(context).edit()
+        editor.putString("pending_call_action", action)
+        editor.putString("pending_call_id", callId)
+        editor.putLong("pending_call_timestamp", timestamp)
+        editor.apply()
+    }
+    
+    fun getPendingCallAction(context: Context): Triple<String?, String?, Long?> {
+        Log.d(TAG, "getPendingCallAction called")
+        val prefs = getSharedPreferences(context)
+        val action = prefs.getString("pending_call_action", null)
+        val callId = prefs.getString("pending_call_id", null)
+        val timestamp = if (prefs.contains("pending_call_timestamp")) {
+            prefs.getLong("pending_call_timestamp", 0)
+        } else {
+            null
+        }
+        return Triple(action, callId, timestamp)
+    }
+    
+    fun clearPendingCallAction(context: Context): Boolean {
+        Log.d(TAG, "clearPendingCallAction called")
+        val editor = getSharedPreferences(context).edit()
+        editor.remove("pending_call_action")
+        editor.remove("pending_call_id")
+        editor.remove("pending_call_timestamp")
+        editor.apply()
+        return true
+    }
 }

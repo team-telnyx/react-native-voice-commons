@@ -15,11 +15,13 @@ import { createAttachCallMessage } from './messages/attach';
 import type { AttachEvent } from './messages/attach';
 import { isAttachEvent } from './messages/attach';
 import { isValidGatewayStateResponse } from './messages/gateway';
+import { from } from 'rxjs';
 
 type TelnyxRTCEvents = {
   'telnyx.client.ready': () => void;
   'telnyx.client.error': (error: Error) => void;
   'telnyx.call.incoming': (call: Call, msg: InviteEvent) => void;
+  'telnyx.call.reattached': (call: Call, msg: AttachEvent) => void;
 };
 
 export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
@@ -37,8 +39,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private credentialSessionConfig: any = null; // Store login credentials for reconnection
   private tokenSessionConfig: any = null; // Store login token for reconnection
   private reconnectionTimeoutHandle: any = null;
+  private reconnectionSessionId: string | null = null; // Store sessionId during reconnection
   private static readonly RECONNECT_DELAY = 3000; // 3 seconds
-  private static readonly RECONNECT_TIMEOUT = 30000; // 30 seconds
+  private static readonly RECONNECT_TIMEOUT = 60000; // 30 seconds
 
   // Push notification support
   private isCallFromPush: boolean = false;
@@ -306,13 +309,13 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     try {
       log.debug('[TelnyxRTC] Executing pending answer action');
-      
+
       // Convert Record<string, string> to { name: string; value: string }[] format
       const customHeaders = Object.entries(this.pendingCustomHeaders).map(([name, value]) => ({
         name,
         value,
       }));
-      
+
       // Use the answer method with custom headers
       await this.call.answer(customHeaders);
       log.debug('[TelnyxRTC] Pending answer executed successfully');
@@ -509,6 +512,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
 
     log.debug('[TelnyxRTC] Attempting login...');
+    // The attach_call parameter and sessid are now handled automatically in the LoginHandler
+    log.debug('[TelnyxRTC] Login will include attach_call and sessid (if available) for reliable reconnection');
+
     this.sessionId = await this.loginHandler.login(this.options);
     if (!this.sessionId) {
       log.error('Login failed. Please check your credentials and try again.');
@@ -555,7 +561,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * console.log('Disconnected from Telnyx RTC');
    * ```
    */
-  public disconnect() {
+  public disconnect(fromReconnection: boolean = false) {
     if (!this.connection) {
       log.warn('No connection exists.');
       return;
@@ -571,26 +577,36 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     this.connection.close();
     this.connection = null;
-    this.removeAllListeners();
-    this.netInfoSubscription?.();
 
-    // Clear push-specific voice_sdk_id on disconnect to ensure clean state
-    if ((this as any)._pushVoiceSDKId) {
-      log.debug('[TelnyxRTC] Clearing push voice_sdk_id on disconnect');
-      (this as any)._pushVoiceSDKId = null;
+    if (!fromReconnection) {
+      log.debug('[TelnyxRTC] Disconnected due to reconnection process');
+      this.removeAllListeners();
+      this.netInfoSubscription?.();
+
+      // Clear push-specific voice_sdk_id on disconnect to ensure clean state
+      if ((this as any)._pushVoiceSDKId) {
+        log.debug('[TelnyxRTC] Clearing push voice_sdk_id on disconnect');
+        (this as any)._pushVoiceSDKId = null;
+      }
     }
 
-    // Reset push flags on disconnect to ensure clean state for next connection
-    this.isCallFromPush = false;
-    this.pushNotificationPayload = null;
-    this.pendingInvite = null;
-    this.pushNotificationCallKitUUID = null;
-    log.debug('[TelnyxRTC] Reset push flags on disconnect');
 
-    // Clear stored push state from AsyncStorage
-    this.clearPushState().catch((error) => {
-      log.error('[TelnyxRTC] Failed to clear push state on disconnect:', error);
-    });
+    // Reset push flags on disconnect to ensure clean state for next connection
+    // Preserve push-related flags during reconnection so they survive the disconnect
+    if (!this.reconnecting) {
+      this.isCallFromPush = false;
+      this.pushNotificationPayload = null;
+      this.pendingInvite = null;
+      this.pushNotificationCallKitUUID = null;
+      log.debug('[TelnyxRTC] Reset push flags on disconnect');
+
+      // Clear stored push state from AsyncStorage
+      this.clearPushState().catch((error) => {
+        log.error('[TelnyxRTC] Failed to clear push state on disconnect:', error);
+      });
+    } else {
+      log.debug('[TelnyxRTC] Preserving push flags due to ongoing reconnection');
+    }
 
     log.warn('[TelnyxRTC] Disconnected from Telnyx RTC');
   }
@@ -599,22 +615,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     return this.connection !== null && this.connection.isConnected;
   }
 
-  private sendAttachCall = async () => {
-    if (!this.connection) {
-      log.error('[TelnyxRTC] Cannot send attach call without connection');
-      return;
-    }
-
-    log.debug('[TelnyxRTC] Sending attach call message for push notification');
-    const attachMessage = createAttachCallMessage(this.pushNotificationPayload);
-
-    try {
-      this.connection.send(attachMessage);
-      log.debug('[TelnyxRTC] Attach call message sent successfully');
-    } catch (error) {
-      log.error('[TelnyxRTC] Failed to send attach call message:', error);
-    }
-  };
 
   private onSocketMessage = (msg: unknown) => {
     log.debug('[TelnyxRTC] Processing socket message:', msg);
@@ -690,9 +690,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     log.debug('[TelnyxRTC] Creating inbound call object');
     this.call = await Call.createInboundCall({
-      connection: this.connection,
+      connection: this.connection!,
       remoteSDP: msg.params.sdp,
-      sessionId: this.sessionId,
+      sessionId: this.sessionId!,
       callId: msg.params.callID,
       telnyxLegId: msg.params.telnyx_leg_id,
       telnyxSessionId: msg.params.telnyx_session_id,
@@ -701,8 +701,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     });
 
     // Set call state to connecting after creation
-    (this.call as any).state = 'connecting';
-    this.call.emit('telnyx.call.state', this.call, 'connecting');
+    //(this.call as any).state = 'connecting';
+    //this.call.emit('telnyx.call.state', this.call, 'connecting');
     log.debug('[TelnyxRTC] Call state set to connecting after creation');
 
     log.debug('[TelnyxRTC] Call object created, checking for pending actions');
@@ -718,17 +718,17 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       if (fromNotification) {
         log.debug('[TelnyxRTC] <Call came from >notification Answer button - auto-answering');
         // Auto-answer the call since user already pressed Answer button
-         if (this.call) {
-            log.debug(
-              '[TelnyxRTC] Auto-answering push notification call, current state:',
-              this.call.state
-            );
-            if (action === 'answer') {
-              this.call.answer();
-            } else if (action === 'reject') {
-              this.call.hangup();
-            }
+        if (this.call) {
+          log.debug(
+            '[TelnyxRTC] Auto-answering push notification call, current state:',
+            this.call.state
+          );
+          if (action === 'answer') {
+            this.call.answer();
+          } else if (action === 'reject') {
+            this.call.hangup();
           }
+        }
       } else if (this.pendingAnswerAction) {
         log.debug('[TelnyxRTC] Found pending answer action, executing...');
         // Execute pending answer asynchronously to allow call setup to complete first
@@ -774,35 +774,37 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     this.reconnecting = false;
     this.cancelReconnectionTimer();
 
+
     log.debug('[TelnyxRTC] Creating new call object from attach message');
-    
+
     // Create new inbound call from attach message (like Android SDK)
-    const attachCall = await Call.createInboundCall({
-      connection: this.connection,
+    this.call  = await Call.createInboundCall({
+      connection: this.connection!,
       remoteSDP: msg.params.sdp,
-      sessionId: this.sessionId,
+      sessionId: this.sessionId!,
       callId: msg.params.callID,
       telnyxLegId: msg.params.telnyx_leg_id,
       telnyxSessionId: msg.params.telnyx_session_id,
-      options: { 
-        destinationNumber: msg.params.caller_id_number 
+      options: {
+        destinationNumber: msg.params.caller_id_number
       },
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
+      initialState: 'connecting', // Set initial state to connecting
     });
 
-    // Set the new call object and set state to active (like Android SDK)
-    this.call = attachCall;
-    
-    this.call.answerAttach(); // Auto-answer the attached call
-    // Android SDK sets call state to ACTIVE after attach received
-    (attachCall as any).state = 'active';
-    attachCall.emit('telnyx.call.state', attachCall, 'active');
-    
-    log.debug('[TelnyxRTC] Call reattached successfully and set to active state');
 
-    // Emit event to notify that the call has been reestablished
-    this.emit('telnyx.call.incoming', this.call, msg as any);
+    await this.call.answerAttach().then(() => {
+      log.debug('[TelnyxRTC] AnswerAttach completed successfully');
+    }).catch((error: Error) => {
+      log.error('[TelnyxRTC] Failed to execute answerAttach:', error);
+    });
 
+
+    log.debug('[TelnyxRTC] Emitting telnyx.call.reattached event for reattached call');
+    log.debug('[TelnyxRTC] Listeners for telnyx.call.reattached:', this.listenerCount('telnyx.call.reattached'));
+    this.emit('telnyx.call.reattached', this.call, msg);
+
+    log.debug('[TelnyxRTC] Emitting legacy event bus notification for reattached call');
     eventBus.emit('telnyx.notification', {
       type: 'callUpdate',
       call: this.call,
@@ -813,7 +815,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
   private onNetInfoStateChange = (state: NetInfoState) => {
     log.debug(`[TelnyxRTC] Network state changed: ${state.isInternetReachable}`);
-    
+
     if (state.isInternetReachable === false) {
       this.onNetworkUnavailable();
     } else if (state.isInternetReachable === true && this.reconnecting) {
@@ -830,21 +832,21 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     this.reconnecting = true;
 
     // Disconnect active calls (similar to Android SDK)
-    if (this.call && this.call.state !== 'ended') {
-      log.debug('[TelnyxRTC] Updating call state to DROPPED due to network loss');
-      // Update call state to indicate network issues
-      // The call object will handle the state change
+    if (this.call && this.call.state !== 'ended' && this.call.state !== 'dropped') {
+      log.debug('[TelnyxRTC] Updating call state to dropped due to network loss');
+      // Update call state to indicate network issues - set to dropped since call is lost due to network
+      this.call.setDropped();
+      log.debug('[TelnyxRTC] Call state updated to dropped due to network disconnection');
     }
+
 
     // Start reconnection timeout timer
     this.startReconnectionTimer();
 
-    // Attempt reconnection after delay to allow network to stabilize
-    setTimeout(() => {
-      if (this.reconnecting) {
-        this.attemptReconnection();
-      }
-    }, TelnyxRTC.RECONNECT_DELAY);
+    // Disconnect existing connection (this clears the connection and handlers)
+    this.disconnect(true);
+    this.call?.disposePeer();
+
   }
 
   /**
@@ -858,110 +860,23 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
   /**
    * Attempts to reconnect to the socket and relogin
-   * Follows Android SDK pattern: disconnect -> connect -> login -> attach calls
+   * disconnect -> connect -> login
    */
   private async attemptReconnection() {
     if (!this.reconnecting) {
       return;
     }
 
+    this.reconnecting = false;
+
+
     try {
       log.debug('[TelnyxRTC] Starting reconnection process...');
 
-      // Disconnect existing connection
-      if (this.connection) {
-        log.debug('[TelnyxRTC] Closing existing connection for reconnection');
-        this.connection.close();
-        this.connection = null;
-      }
-
-      // Stop existing handlers
-      this.keepAliveHandler?.stop();
-      this.keepAliveHandler = null;
-      this.loginHandler = null;
-
-      // Create new connection (similar to Android SDK)
-      const pushVoiceSDKId = (this as any)._pushVoiceSDKId;
-      if (pushVoiceSDKId) {
-        log.debug('[TelnyxRTC] Creating reconnection with push voice_sdk_id:', pushVoiceSDKId);
-        this.connection = new Connection(pushVoiceSDKId);
-      } else {
-        log.debug('[TelnyxRTC] Creating standard reconnection');
-        this.connection = new Connection();
-      }
-
-      // Store reference to this client in the connection
-      this.connection._client = this;
-
-      // Set up connection event listeners
-      this.connection.addListener('telnyx.socket.message', this.onSocketMessage);
-      this.connection.addListener('telnyx.socket.error', (error) => {
-        log.error('[TelnyxRTC] WebSocket reconnection error:', error);
-      });
-
-      // Wait for connection to be established
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('Reconnection timeout after 15 seconds'));
-        }, 15000);
-
-        const onOpen = () => {
-          log.debug('[TelnyxRTC] Reconnection WebSocket established');
-          clearTimeout(timeout);
-          this.connection!.removeListener('telnyx.socket.open', onOpen);
-          this.connection!.removeListener('telnyx.socket.error', onError);
-          this.connection!.removeListener('telnyx.socket.close', onClose);
-          resolve();
-        };
-
-        const onError = (error: Event) => {
-          log.error('[TelnyxRTC] Reconnection failed:', error);
-          clearTimeout(timeout);
-          this.connection!.removeListener('telnyx.socket.open', onOpen);
-          this.connection!.removeListener('telnyx.socket.error', onError);
-          this.connection!.removeListener('telnyx.socket.close', onClose);
-          reject(new Error(`Reconnection failed: ${error.type}`));
-        };
-
-        const onClose = () => {
-          log.debug('[TelnyxRTC] Reconnection closed during attempt');
-          clearTimeout(timeout);
-          this.connection!.removeListener('telnyx.socket.open', onOpen);
-          this.connection!.removeListener('telnyx.socket.error', onError);
-          this.connection!.removeListener('telnyx.socket.close', onClose);
-          reject(new Error('Reconnection closed unexpectedly'));
-        };
-
-        this.connection!.addListener('telnyx.socket.open', onOpen);
-        this.connection!.addListener('telnyx.socket.error', onError);
-        this.connection!.addListener('telnyx.socket.close', onClose);
-      });
-
-      // Set up handlers
-      this.loginHandler = new LoginHandler(this.connection);
-      this.keepAliveHandler = new KeepAliveHandler(this.connection);
-      this.keepAliveHandler.start();
-
-      // Relogin with stored configuration
-      log.debug('[TelnyxRTC] Attempting relogin after reconnection...');
-      if (this.credentialSessionConfig) {
-        // For credential-based login, set attach_call flag
-        this.loginHandler.setAttachCall(true);
-        this.sessionId = await this.loginHandler.login(this.credentialSessionConfig);
-      } else if (this.tokenSessionConfig) {
-        // For token-based login, set attach_call flag  
-        this.loginHandler.setAttachCall(true);
-        this.sessionId = await this.loginHandler.login(this.tokenSessionConfig);
-      } else {
-        throw new Error('No stored login configuration found for reconnection');
-      }
-
-      if (!this.sessionId) {
-        throw new Error('Relogin failed after reconnection');
-      }
+      // Connect (this will create new connection and login)
+      await this.connect();
 
       log.debug('[TelnyxRTC] Reconnection and relogin successful');
-      this.reconnecting = false;
       this.cancelReconnectionTimer();
 
       // If there was an active call, the attach message will be handled in onAttachReceived
@@ -969,15 +884,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     } catch (error) {
       log.error('[TelnyxRTC] Reconnection attempt failed:', error);
-      
-      // If we have time left, try again
-      if (this.reconnecting) {
-        setTimeout(() => {
-          if (this.reconnecting) {
-            this.attemptReconnection();
-          }
-        }, TelnyxRTC.RECONNECT_DELAY);
-      }
     }
   }
 
@@ -987,12 +893,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private startReconnectionTimer() {
     log.debug('[TelnyxRTC] Starting reconnection timeout timer');
     this.cancelReconnectionTimer();
-    
+
     this.reconnectionTimeoutHandle = setTimeout(() => {
       if (this.reconnecting) {
         log.error('[TelnyxRTC] Reconnection timeout reached');
         this.reconnecting = false;
-        
+
         // Update call state to indicate timeout
         if (this.call && this.call.state !== 'ended') {
           log.debug('[TelnyxRTC] Setting call to failed state due to reconnection timeout');

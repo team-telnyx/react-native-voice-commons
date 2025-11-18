@@ -22,6 +22,9 @@ export enum TelnyxCallState {
 
   /** Call failed to connect or was rejected */
   FAILED = 'FAILED',
+
+  /** Call was dropped due to network issues */
+  DROPPED = 'DROPPED',
 }
 
 /**
@@ -79,7 +82,7 @@ export const CallStateHelpers = {
    * Is the call in a terminated state?
    */
   isTerminated(state: TelnyxCallState): boolean {
-    return state === TelnyxCallState.ENDED || state === TelnyxCallState.FAILED;
+    return state === TelnyxCallState.ENDED || state === TelnyxCallState.FAILED || state === TelnyxCallState.DROPPED;
   },
 
   /**

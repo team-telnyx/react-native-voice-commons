@@ -42,7 +42,8 @@ const CurrentCall = ({ call, callState }: Props) => {
       return <ActiveCall call={call} />;
     }
     case TelnyxCallState.ENDED:
-    case TelnyxCallState.FAILED: {
+    case TelnyxCallState.FAILED:
+    case TelnyxCallState.DROPPED: {
       console.log('CurrentCall: Not rendering - call state is', callState);
       return null;
     }

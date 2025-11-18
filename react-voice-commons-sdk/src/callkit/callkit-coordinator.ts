@@ -269,9 +269,9 @@ class CallKitCoordinator {
       currentState: call.state,
     });
 
-    if (call.state === 'active' || call.state === 'connecting') {
+    if (call.state === 'active') {
       console.log(
-        'CallKitCoordinator: Call already active/connecting, skipping duplicate answer action'
+        'CallKitCoordinator: Call already active, skipping duplicate answer action'
       );
       return;
     }

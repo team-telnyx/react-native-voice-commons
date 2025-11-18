@@ -54,7 +54,7 @@ export default function RootLayout() {
   return (
     <TelnyxVoiceApp voipClient={voipClient} enableAutoReconnect={false} debug={true}>
       <ThemeProvider value={isDarkColorScheme ? DARK_THEME : LIGHT_THEME}>
-        <StatusBar style={isDarkColorScheme ? 'light' : 'dark'} />
+        <StatusBar style="dark" backgroundColor="#ffffff" />
         <Stack
           screenOptions={{
             headerShown: false,
@@ -79,7 +79,8 @@ function useSetWebBackgroundClassName() {
 
 function useSetAndroidNavigationBar() {
   React.useLayoutEffect(() => {
-    setAndroidNavigationBar(Appearance.getColorScheme() ?? 'light');
+    // Always use light theme for consistent white appearance
+    setAndroidNavigationBar('light');
   }, []);
 }
 

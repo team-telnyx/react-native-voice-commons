@@ -19,6 +19,8 @@ interface TelnyxDialerProps {
 export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => {
   const { voipClient } = useTelnyxVoice();
   const [destinationNumber, setDestinationNumber] = useState('');
+  const [callerIdName, setCallerIdName] = useState('');
+  const [callerIdNumber, setCallerIdNumber] = useState('');
   const [connectionState, setConnectionState] = useState(voipClient.currentConnectionState);
   const [calls, setCalls] = useState<Call[]>([]);
   const [activeCall, setActiveCall] = useState<Call | null>(null);
@@ -103,7 +105,11 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
       // Add a small delay to ensure client is fully ready
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const call = await voipClient.newCall(destinationNumber);
+      const call = await voipClient.newCall(
+        destinationNumber,
+        callerIdName || undefined,
+        callerIdNumber || undefined
+      );
       log('TelnyxDialer: Call initiated successfully:', call);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -170,12 +176,30 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
             <Text style={styles.sectionTitle}>Make a Call</Text>
             <TextInput
               style={[styles.input, inputFocused && styles.inputFocused]}
-              placeholder="Enter destination number"
+              placeholder="Enter destination (number, SIP URI, etc.)"
               placeholderTextColor="#999"
               value={destinationNumber}
               onChangeText={setDestinationNumber}
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
+              keyboardType="default"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextInput
+              style={[styles.input]}
+              placeholder="Caller ID Name (optional)"
+              placeholderTextColor="#999"
+              value={callerIdName}
+              onChangeText={setCallerIdName}
+              autoCapitalize="words"
+            />
+            <TextInput
+              style={[styles.input]}
+              placeholder="Caller ID Number (optional)"
+              placeholderTextColor="#999"
+              value={callerIdNumber}
+              onChangeText={setCallerIdNumber}
               keyboardType="phone-pad"
             />
             <TouchableOpacity style={[styles.button, styles.callButton]} onPress={handleStartCall}>

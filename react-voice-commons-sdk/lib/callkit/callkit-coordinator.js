@@ -243,8 +243,8 @@ class CallKitCoordinator {
             direction: call.direction,
             currentState: call.state,
         });
-        if (call.state === 'active' || call.state === 'connecting') {
-            console.log('CallKitCoordinator: Call already active/connecting, skipping duplicate answer action');
+        if (call.state === 'active') {
+            console.log('CallKitCoordinator: Call already active, skipping duplicate answer action');
             return;
         }
         this.processingCalls.add(callKitUUID);

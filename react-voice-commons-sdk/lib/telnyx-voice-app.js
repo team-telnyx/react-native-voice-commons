@@ -348,6 +348,35 @@ const TelnyxVoiceAppComponent = ({ voipClient, children, onPushNotificationProce
                 setProcessingPushOnLaunch(false);
             }
         });
+        // Listen for immediate call action events from notification buttons (Android only)
+        let callActionSubscription = null;
+        if (react_native_1.Platform.OS === 'android') {
+            try {
+                const { VoicePnBridge } = require('./internal/voice-pn-bridge');
+                callActionSubscription = VoicePnBridge.addCallActionListener((event) => {
+                    log(`Received immediate call action: ${event.action} for callId: ${event.callId}`);
+                    // Handle immediate call actions (mainly for ending active calls from notification)
+                    if (event.action === 'hangup' || event.action === 'endCall' || event.action === 'reject') {
+                        log(`Processing immediate end call action for callId: ${event.callId}`);
+                        // Find the call by ID and end it
+                        const targetCall = voipClient.currentCalls.find(call => call.callId === event.callId);
+                        if (targetCall) {
+                            log(`Found active call ${event.callId}, ending it immediately`);
+                            targetCall.hangup().catch((error) => {
+                                log(`Error ending call ${event.callId}:`, error);
+                            });
+                        }
+                        else {
+                            log(`No active call found with ID ${event.callId}`);
+                        }
+                    }
+                });
+                log('Call action listener registered for immediate notification handling');
+            }
+            catch (e) {
+                log('Error setting up call action listener (VoicePnBridge not available):', e);
+            }
+        }
         // Add app state listener if not skipping web background detection or not on web
         // AND if app state management is enabled in the client options
         let appStateSubscription = null;
@@ -366,6 +395,16 @@ const TelnyxVoiceAppComponent = ({ voipClient, children, onPushNotificationProce
         return () => {
             connectionStateSubscription.unsubscribe();
             callsSubscription.unsubscribe();
+            if (callActionSubscription) {
+                try {
+                    const { VoicePnBridge } = require('./internal/voice-pn-bridge');
+                    VoicePnBridge.removeCallActionListener(callActionSubscription);
+                    log('Call action listener removed');
+                }
+                catch (e) {
+                    log('Error removing call action listener:', e);
+                }
+            }
             if (appStateSubscription) {
                 appStateSubscription.remove();
             }

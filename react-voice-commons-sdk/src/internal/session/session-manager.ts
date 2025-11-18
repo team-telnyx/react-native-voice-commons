@@ -363,8 +363,13 @@ export class SessionManager {
       console.log(
         '🔧 SessionManager: Setting up CallStateController listeners before connection...'
       );
+      console.log('🔧 SessionManager: _onClientReady callback exists:', !!this._onClientReady);
       if (this._onClientReady) {
+        console.log('🔧 SessionManager: Calling _onClientReady callback now...');
         this._onClientReady();
+        console.log('🔧 SessionManager: _onClientReady callback completed');
+      } else {
+        console.log('🔧 SessionManager: No _onClientReady callback found');
       }
 
       // Connect to the platform AFTER processing push notification
@@ -393,6 +398,17 @@ export class SessionManager {
     this._telnyxClient.on('telnyx.client.ready', () => {
       console.log('Telnyx client ready');
       this._connectionState.next(TelnyxConnectionState.CONNECTED);
+      
+      // Ensure CallStateController listeners are set up when client becomes ready
+      // This handles both initial connection and automatic reconnection
+      console.log('🔧 SessionManager: Client ready event - reinitializing CallStateController listeners');
+      if (this._onClientReady) {
+        console.log('🔧 SessionManager: Calling _onClientReady callback from client ready event...');
+        this._onClientReady();
+        console.log('🔧 SessionManager: _onClientReady callback completed from client ready event');
+      } else {
+        console.log('🔧 SessionManager: No _onClientReady callback found in client ready event');
+      }
     });
 
     this._telnyxClient.on('telnyx.client.error', (error: Error) => {

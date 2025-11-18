@@ -65,7 +65,6 @@ export class Connection extends EventEmitter<ConnectionEvents> {
       } catch (emitError) {
         log.error('[Connection]: Failed to emit socket.error event - bridge may be disconnected:', emitError);
       }
-      this.scheduleReconnect();
     });
 
     this.socket.onClose(() => {
@@ -76,7 +75,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
       } catch (error) {
         log.error('[Connection]: Failed to emit socket.close event - bridge may be disconnected:', error);
       }
-      this.scheduleReconnect();
+      
     });
 
     this.socket.onMessage((message: string) => {

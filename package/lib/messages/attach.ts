@@ -1,4 +1,6 @@
 import { Platform } from 'react-native';
+import uuid from 'uuid-random';
+import { SDK_VERSION } from '../env';
 
 // const attachMessage = {
 //   id: 3546946,
@@ -34,6 +36,60 @@ import { Platform } from 'react-native';
 //   },
 //   voice_sdk_id: "VSDK1Ch8RUTpauq8R_PjeRii_E_pLMAph9Q",
 // };
+
+type CreateAttachMessageParams = {
+  callId: string;
+  sessionId: string;
+  sdp: string;
+  customHeaders?: { name: string; value: string }[];
+  destinationNumber?: string;
+  callerIdName?: string;
+  callerIdNumber?: string;
+  clientState?: string;
+  userVariables?: string[];
+};
+
+/**
+ * Create telnyx_rtc.attach message for call reattachment
+ * This message includes SDP and dialog parameters needed for WebRTC media reestablishment
+ */
+export function createAttachMessage({
+  callId,
+  sessionId,
+  sdp,
+  customHeaders = [],
+  destinationNumber = '',
+  callerIdName = '',
+  callerIdNumber = '',
+  clientState = '',
+  userVariables = [],
+}: CreateAttachMessageParams) {
+  return {
+    id: uuid(),
+    jsonrpc: '2.0' as const,
+    method: 'telnyx_rtc.attach' as const,
+    params: {
+      dialogParams: {
+        attach: true,
+        audio: true,
+        callID: callId,
+        caller_id_name: callerIdName,
+        caller_id_number: callerIdNumber,
+        clientState,
+        custom_headers: customHeaders,
+        destination_number: destinationNumber,
+        remote_caller_id_name: '',
+        screenShare: false,
+        useStereo: false,
+        userVariables,
+        video: false,
+      },
+      sdp,
+      sessid: sessionId,
+      'User-Agent': `${Platform.OS}-${SDK_VERSION}`,
+    },
+  };
+}
 
 export type AttachEvent = {
   id: number;

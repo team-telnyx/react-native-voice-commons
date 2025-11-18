@@ -199,6 +199,21 @@ class Call {
             this._callState.next(call_state_1.TelnyxCallState.CONNECTING);
             // Pass custom headers to the underlying Telnyx call
             await this._telnyxCall.answer(customHeaders);
+            // On Android, show ongoing call notification to keep app alive in background
+            if (react_native_1.Platform.OS === 'android') {
+                try {
+                    const { VoicePnBridge } = await Promise.resolve().then(() => __importStar(require('../internal/voice-pn-bridge')));
+                    // Extract caller information from destination or use defaults
+                    const callerNumber = this._destination;
+                    const callerName = "Unknown Caller"; // Could be enhanced with caller ID lookup
+                    await VoicePnBridge.showOngoingCallNotification(callerName, callerNumber, this._callId);
+                    console.log('Call: Showed ongoing call notification on Android');
+                }
+                catch (error) {
+                    console.error('Call: Failed to show ongoing call notification:', error);
+                    // Don't fail the answer if notification showing fails
+                }
+            }
         }
         catch (error) {
             console.error('Failed to answer call:', error);
@@ -225,6 +240,18 @@ class Call {
             }
             // Fallback for Android or when CallKit is not available
             await this._telnyxCall.hangup(customHeaders);
+            // On Android, also notify the native side to hide ongoing notification
+            if (react_native_1.Platform.OS === 'android') {
+                try {
+                    const { VoicePnBridge } = await Promise.resolve().then(() => __importStar(require('../internal/voice-pn-bridge')));
+                    await VoicePnBridge.endCall(this._callId);
+                    console.log('Call: Notified Android to hide ongoing notification');
+                }
+                catch (error) {
+                    console.error('Call: Failed to notify Android about call end:', error);
+                    // Don't fail the hangup if notification hiding fails
+                }
+            }
         }
         catch (error) {
             console.error('Failed to hang up call:', error);

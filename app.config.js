@@ -24,6 +24,10 @@ export default {
         foregroundImage: './assets/images/adaptive-icon.png',
         backgroundColor: '#ffffff',
       },
+      statusBar: {
+        barStyle: 'dark-content',
+        backgroundColor: '#ffffff',
+      },
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './android/app/google-services.json',
       package: 'com.telnyx.rn_voice_sdk_demo',
       permissions: [

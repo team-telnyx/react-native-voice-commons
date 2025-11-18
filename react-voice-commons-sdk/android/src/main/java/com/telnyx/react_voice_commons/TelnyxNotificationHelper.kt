@@ -19,6 +19,7 @@ class TelnyxNotificationHelper(private val context: Context) {
         const val CHANNEL_ID = "telnyx_voice_calls"
         const val CHANNEL_NAME = "Telnyx Voice Calls"
         const val NOTIFICATION_ID = 1001
+        const val ONGOING_CALL_NOTIFICATION_ID = 1002
         private const val TAG = "TelnyxNotifications"
         
         /**
@@ -29,6 +30,16 @@ class TelnyxNotificationHelper(private val context: Context) {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.cancel(NOTIFICATION_ID)
             Log.d(TAG, "Dismissed Telnyx notification from static context")
+        }
+        
+        /**
+         * Static method to hide ongoing call notification from anywhere in the app
+         * Should be called when a call ends to dismiss the ongoing call notification
+         */
+        fun hideOngoingCallNotificationFromContext(context: Context) {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.cancel(ONGOING_CALL_NOTIFICATION_ID)
+            Log.d(TAG, "Dismissed ongoing call notification from static context")
         }
     }
 
@@ -110,8 +121,9 @@ class TelnyxNotificationHelper(private val context: Context) {
             putExtra("call_id", callId)
             putExtra("action", "answer")
             putExtra("from_notification_action", true)
-            putExtra("meta_data",metadata)
-
+            putExtra("meta_data", metadata)
+            putExtra("caller_name", callerName)
+            putExtra("caller_number", callerNumber)
         }
         val answerPendingIntent = PendingIntent.getActivity(
             context, 1, answerActivityIntent,
@@ -178,8 +190,88 @@ class TelnyxNotificationHelper(private val context: Context) {
         Log.d(TAG, "Showed missed call notification for: $callerName ($callerNumber)")
     }
 
+    fun showOngoingCallNotification(
+        callerName: String?,
+        callerNumber: String?,
+        callId: String,
+        mainActivityClass: Class<*>? = null
+    ) {
+        val notification = createOngoingCallNotification(callerName, callerNumber, callId, mainActivityClass)
+        notificationManager.notify(ONGOING_CALL_NOTIFICATION_ID, notification)
+        Log.d(TAG, "Showed ongoing call notification for: $callerName ($callerNumber)")
+    }
+
+    /**
+     * Create ongoing call notification (for foreground services)
+     * Returns the notification object instead of showing it directly
+     */
+    fun createOngoingCallNotification(
+        callerName: String?,
+        callerNumber: String?,
+        callId: String,
+        mainActivityClass: Class<*>? = null
+    ): Notification {
+        val displayName = callerName ?: callerNumber ?: "Unknown Caller"
+        val displayNumber = if (callerName != null && callerNumber != null) callerNumber else ""
+
+        // Use provided MainActivity class or try to find it dynamically
+        val activityClass = mainActivityClass ?: try {
+            // Try TelnyxMainActivity first (apps should extend this)
+            Class.forName("${context.packageName}.TelnyxMainActivity")
+        } catch (e1: Exception) {
+            try {
+                // Fallback to MainActivity
+                Class.forName("${context.packageName}.MainActivity")
+            } catch (e2: Exception) {
+                Log.w(TAG, "Could not find TelnyxMainActivity or MainActivity, using context class", e2)
+                context.javaClass
+            }
+        }
+
+        // Intent to open the app when notification is tapped
+        val appIntent = Intent(context, activityClass).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("call_id", callId)
+            putExtra("action", "return_to_call")
+        }
+        val appPendingIntent = PendingIntent.getActivity(
+            context, 0, appIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // End call action
+        val endCallIntent = Intent(context, activityClass).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("call_id", callId)
+            putExtra("action", "hangup")
+            putExtra("from_notification_action", true)
+        }
+        val endCallPendingIntent = PendingIntent.getActivity(
+            context, 3, endCallIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        return NotificationCompat.Builder(context, CHANNEL_ID)
+            .setContentTitle("Ongoing Call")
+            .setContentText("$displayName${if (displayNumber.isNotEmpty()) " ($displayNumber)" else ""}")
+            .setSmallIcon(android.R.drawable.ic_menu_call)
+            .setPriority(NotificationCompat.PRIORITY_LOW) // Low priority for ongoing calls
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setAutoCancel(false) // Don't auto-cancel ongoing call notifications
+            .setOngoing(true) // This is the key - makes it persistent and keeps app alive
+            .setContentIntent(appPendingIntent)
+            .setColor(Color.GREEN)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "End Call", endCallPendingIntent)
+            .build()
+    }
+
     fun hideIncomingCallNotification() {
         notificationManager.cancel(NOTIFICATION_ID)
         Log.d(TAG, "Hid incoming call notification")
+    }
+
+    fun hideOngoingCallNotification() {
+        notificationManager.cancel(ONGOING_CALL_NOTIFICATION_ID)
+        Log.d(TAG, "Hid ongoing call notification")
     }
 }

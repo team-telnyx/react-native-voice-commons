@@ -19,13 +19,14 @@ import {
   isModifyCallAnswer,
   isRingingEvent,
 } from './messages/call';
+import { createAttachMessage } from './messages/attach';
 import { Peer } from './peer';
 
 type CallEvents = {
   'telnyx.call.state': (call: Call, state: CallState) => void;
 };
 
-export type CallState = 'new' | 'ringing' | 'connecting' | 'active' | 'ended' | 'held';
+export type CallState = 'new' | 'ringing' | 'connecting' | 'active' | 'ended' | 'held' | 'dropped';
 
 type CallConstructorParams = {
   connection: Connection;
@@ -51,6 +52,7 @@ export type CreateInboundCall = {
   remoteSDP: string;
   callId: string;
   inviteCustomHeaders?: { name: string; value: string }[] | null;
+  initialState?: CallState;
 };
 
 // TODO persist customHeaders and clientState
@@ -85,6 +87,7 @@ export class Call extends EventEmitter<CallEvents> {
     telnyxSessionId,
     callId,
     inviteCustomHeaders = null,
+    initialState = 'ringing',
   }: CreateInboundCall) {
     const call = new Call({
       connection,
@@ -94,7 +97,7 @@ export class Call extends EventEmitter<CallEvents> {
       telnyxLegId,
       telnyxSessionId,
       callId,
-      callState: 'ringing',
+      callState: initialState,
     });
 
     // Store the custom headers from the INVITE message
@@ -151,7 +154,7 @@ export class Call extends EventEmitter<CallEvents> {
     call.peer.createPeerConnection();
     call.peer.setRemoteDescription({ type: 'offer', sdp: remoteSDP });
 
-    call.setState('ringing');
+    call.setState(initialState);
 
     return call;
   }
@@ -235,23 +238,70 @@ export class Call extends EventEmitter<CallEvents> {
   };
 
    /**
-   * Accept an incoming call
+   * Accept an incoming call for attachment
    * This method will attach the local audio stream, create an answer,
-   * and send the answer message to the Telnyx platform.
+   * and send the answer message to the Telnyx platform for call reattachment.
    * It will also set the call state to 'active'.
    * @throws {Error} If the peer connection is not created
-   * @returns {Promise<void>} A promise that resolves when the call is accepted
+   * @returns {Promise<void>} A promise that resolves when the call is attached
    */
   public answerAttach = async () => {
+    log.debug('[Call] Starting answerAttach process');
+    
     if (!this.peer) {
+      log.error('[Call] No peer connection available for answerAttach');
       throw new Error('[Call] Peer is not created');
     }
-    await this.peer
-      .attachLocalStream({ audio: true, video: false })
-      .then((peer) => peer.createAnswer())
-      .then((peer) => peer.waitForIceGatheringComplete());
+    
+    try {
+      log.debug('[Call] Attaching local stream and creating answer for reattachment');
+      await this.peer
+        .attachLocalStream({ audio: true, video: false })
+        .then((peer) => {
+          log.debug('[Call] Local stream attached, creating answer');
+          return peer.createAnswer();
+        })
+        .then((peer) => {
+          log.debug('[Call] Answer created, waiting for ICE gathering');
+          return peer.waitForIceGatheringComplete();
+        });
 
-    this.setState('active');
+      log.debug('[Call] ICE gathering complete, preparing answer message');
+      
+      if (!this.peer.localDescription?.sdp) {
+        log.error('[Call] No local SDP available for answer message');
+        throw new Error('[Call] Local SDP not available');
+      }
+
+      const attachMessage = createAttachMessage({
+        callId: this.callId,
+        sessionId: this.sessionId,
+        sdp: this.peer.localDescription.sdp,
+        customHeaders: this.inviteCustomHeaders || [],
+        destinationNumber: this.options.destinationNumber || '',
+        callerIdName: this.options.callerIdName || '',
+        callerIdNumber: this.options.callerIdNumber || '',
+        clientState: this.options.clientState || '',
+        userVariables: [], // Not available in CallOptions, using empty array
+      });
+
+      log.debug('[Call] Sending attach message for reattachment:', {
+        callId: this.callId,
+        sessionId: this.sessionId,
+        hasCustomHeaders: !!(this.inviteCustomHeaders && this.inviteCustomHeaders.length > 0)
+      });
+
+      // Send attach message for call reattachment (critical for WebRTC media flow)
+      await this.connection.sendAndWait(attachMessage);
+      
+      log.debug('[Call] Attach message sent successfully, setting call to active');
+      this.setState('active');
+      log.debug('[Call] answerAttach completed successfully');
+      
+    } catch (error) {
+      log.error('[Call] answerAttach failed:', error);
+      throw error;
+    }
   };
 
   /**
@@ -502,6 +552,29 @@ export class Call extends EventEmitter<CallEvents> {
   public setConnecting = () => {
     log.debug('[Call] Setting state to connecting');
     this.setState('connecting');
+  };
+
+  /**
+   * Set the call to dropped state (used when network connection is lost)
+   */
+  public setDropped = () => {
+    log.debug('[Call] Setting state to dropped due to network loss');
+    this.setState('dropped');
+  };
+
+  /**
+   * Dispose of the peer connection and clean up resources
+   * This should be called before creating a new peer for the same call
+   */
+  public disposePeer = () => {
+    if (this.peer) {
+      log.debug('[Call] Disposing of existing peer connection');
+      this.peer.close();
+      this.peer = null;
+      log.debug('[Call] Peer connection disposed successfully');
+    } else {
+      log.debug('[Call] No peer connection to dispose');
+    }
   };
 
   private onSocketMessage = (msg: unknown) => {
