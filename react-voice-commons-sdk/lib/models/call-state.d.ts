@@ -16,7 +16,9 @@ export declare enum TelnyxCallState {
     /** Call has ended normally */
     ENDED = "ENDED",
     /** Call failed to connect or was rejected */
-    FAILED = "FAILED"
+    FAILED = "FAILED",
+    /** Call was dropped due to network issues */
+    DROPPED = "DROPPED"
 }
 /**
  * Type guard to check if a value is a valid TelnyxCallState

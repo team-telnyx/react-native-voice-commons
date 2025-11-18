@@ -82,7 +82,11 @@ export const CallStateHelpers = {
    * Is the call in a terminated state?
    */
   isTerminated(state: TelnyxCallState): boolean {
-    return state === TelnyxCallState.ENDED || state === TelnyxCallState.FAILED || state === TelnyxCallState.DROPPED;
+    return (
+      state === TelnyxCallState.ENDED ||
+      state === TelnyxCallState.FAILED ||
+      state === TelnyxCallState.DROPPED
+    );
   },
 
   /**

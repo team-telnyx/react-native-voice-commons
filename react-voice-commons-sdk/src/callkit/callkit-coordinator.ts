@@ -270,9 +270,7 @@ class CallKitCoordinator {
     });
 
     if (call.state === 'active') {
-      console.log(
-        'CallKitCoordinator: Call already active, skipping duplicate answer action'
-      );
+      console.log('CallKitCoordinator: Call already active, skipping duplicate answer action');
       return;
     }
 
@@ -388,7 +386,7 @@ class CallKitCoordinator {
   }
 
   /**
-   * Handle CallKit push received event 
+   * Handle CallKit push received event
    * This allows us to coordinate between the push notification and any subsequent WebRTC calls
    */
   async handleCallKitPushReceived(callKitUUID: string, event?: any): Promise<void> {
@@ -741,7 +739,6 @@ class CallKitCoordinator {
   setVoipClient(voipClient: TelnyxVoipClient): void {
     this.voipClient = voipClient;
   }
-
 
   /**
    * Helper method to clean up push notification state

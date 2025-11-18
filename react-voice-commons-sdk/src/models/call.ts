@@ -34,7 +34,7 @@ export class Call {
       console.log('Call: Setting initial state to ACTIVE for reattached call');
       this._callState.next(TelnyxCallState.ACTIVE);
     }
-    
+
     this._setupCallListeners();
   }
 
@@ -242,7 +242,7 @@ export class Call {
 
       // Fallback for Android or when CallKit is not available
       await this._telnyxCall.hangup(customHeaders);
-      
+
       // On Android, also notify the native side to hide ongoing notification
       if (Platform.OS === 'android') {
         try {
@@ -369,18 +369,18 @@ export class Call {
       // Start duration timer when call becomes active
       if (telnyxState === TelnyxCallState.ACTIVE && !this._startTime) {
         this._startDurationTimer();
-        
+
         // Show ongoing call notification on Android when call becomes active
         // This covers both locally answered calls and calls that become active from remote side
         if (Platform.OS === 'android') {
           (async () => {
             try {
               const { VoicePnBridge } = await import('../internal/voice-pn-bridge');
-              
+
               // Extract caller information based on call direction
               let callerNumber: string | undefined;
               let callerName: string | undefined;
-              
+
               if (this._isIncoming) {
                 // For incoming calls, use the remote caller ID (who's calling us)
                 callerNumber = this._telnyxCall.remoteCallerIdNumber;
@@ -391,11 +391,11 @@ export class Call {
                 callerNumber = this._telnyxCall.localCallerIdNumber || this._originalCallerNumber;
                 callerName = this._telnyxCall.localCallerIdName || this._originalCallerName;
               }
-              
+
               // Fallback logic for better notification display - avoid "Unknown" when possible
               let displayName: string;
               let displayNumber: string;
-              
+
               if (this._isIncoming) {
                 // For incoming calls: use caller name or fall back to caller number, then destination
                 displayName = callerName || callerNumber || this._destination;
@@ -405,12 +405,16 @@ export class Call {
                 displayName = callerName || `${this._destination}`;
                 displayNumber = callerNumber || this._destination;
               }
-              
-              await VoicePnBridge.showOngoingCallNotification(displayName, displayNumber, this._callId);
+
+              await VoicePnBridge.showOngoingCallNotification(
+                displayName,
+                displayNumber,
+                this._callId
+              );
               console.log('Call: Showed ongoing call notification on Android (call active)', {
                 isIncoming: this._isIncoming,
                 callerName: displayName,
-                callerNumber: displayNumber
+                callerNumber: displayNumber,
               });
             } catch (error) {
               console.error('Call: Failed to show ongoing call notification on active:', error);
@@ -422,7 +426,7 @@ export class Call {
       // Stop duration timer when call ends
       if (CallStateHelpers.isTerminated(telnyxState)) {
         this._stopDurationTimer();
-        
+
         // Clean up ongoing call notification on Android when call ends
         if (Platform.OS === 'android') {
           (async () => {
@@ -431,7 +435,10 @@ export class Call {
               await VoicePnBridge.endCall(this._callId);
               console.log('Call: Cleaned up ongoing call notification (call terminated)');
             } catch (error) {
-              console.error('Call: Failed to clean up ongoing call notification on termination:', error);
+              console.error(
+                'Call: Failed to clean up ongoing call notification on termination:',
+                error
+              );
             }
           })();
         }

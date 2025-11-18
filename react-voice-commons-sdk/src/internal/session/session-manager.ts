@@ -398,12 +398,16 @@ export class SessionManager {
     this._telnyxClient.on('telnyx.client.ready', () => {
       console.log('Telnyx client ready');
       this._connectionState.next(TelnyxConnectionState.CONNECTED);
-      
+
       // Ensure CallStateController listeners are set up when client becomes ready
       // This handles both initial connection and automatic reconnection
-      console.log('🔧 SessionManager: Client ready event - reinitializing CallStateController listeners');
+      console.log(
+        '🔧 SessionManager: Client ready event - reinitializing CallStateController listeners'
+      );
       if (this._onClientReady) {
-        console.log('🔧 SessionManager: Calling _onClientReady callback from client ready event...');
+        console.log(
+          '🔧 SessionManager: Calling _onClientReady callback from client ready event...'
+        );
         this._onClientReady();
         console.log('🔧 SessionManager: _onClientReady callback completed from client ready event');
       } else {
@@ -420,7 +424,6 @@ export class SessionManager {
     // We'll rely on the client-level events for now
   }
 
-
   /**
    * Extract the actual payload metadata from wrapped push notification payload
    */
@@ -431,7 +434,7 @@ export class SessionManager {
     if (payload.metadata && typeof payload.metadata === 'object') {
       // If there's a metadata wrapper, use that but preserve wrapper-level flags
       actualPayload = payload.metadata;
-      
+
       // Preserve important flags from the wrapper level
       if (payload.from_notification !== undefined) {
         actualPayload.from_notification = payload.from_notification;
@@ -439,7 +442,7 @@ export class SessionManager {
       if (payload.action !== undefined) {
         actualPayload.action = payload.action;
       }
-      
+
       console.log(
         'SessionManager: RELEASE DEBUG - Using metadata portion of payload with preserved flags:',
         JSON.stringify(actualPayload)
@@ -450,7 +453,7 @@ export class SessionManager {
         const parsedMetadata =
           typeof payload.metadata === 'string' ? JSON.parse(payload.metadata) : payload.metadata;
         actualPayload = parsedMetadata;
-        
+
         // Preserve important flags from the wrapper level
         if (payload.from_notification !== undefined) {
           actualPayload.from_notification = payload.from_notification;
@@ -458,7 +461,7 @@ export class SessionManager {
         if (payload.action !== undefined) {
           actualPayload.action = payload.action;
         }
-        
+
         console.log(
           'SessionManager: RELEASE DEBUG - Using parsed metadata with preserved flags:',
           JSON.stringify(actualPayload)

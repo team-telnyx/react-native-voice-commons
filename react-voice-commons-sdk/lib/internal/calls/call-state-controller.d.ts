@@ -66,17 +66,9 @@ export declare class CallStateController {
      */
     private _setupClientListeners;
     /**
-     * Handle incoming call
+     * Handle incoming call or reattached call
      */
     private _handleIncomingCall;
-    /**
-     * Handle call state changes from the Telnyx client
-     */
-    private _handleCallStateChange;
-    /**
-     * Handle call updates from notifications
-     */
-    private _handleCallUpdate;
     /**
      * Add a call to our tracking
      */

@@ -40,7 +40,7 @@ describe('Call Custom Headers (react-voice-commons-sdk)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Reset mock call
     mockTelnyxCall.answer.mockClear();
     mockTelnyxCall.hangup.mockClear();
@@ -232,7 +232,7 @@ describe('Call Custom Headers (react-voice-commons-sdk)', () => {
   describe('reactive streams', () => {
     it('should emit call state changes', (done) => {
       let stateChangeCount = 0;
-      
+
       call.callState$.subscribe((state) => {
         stateChangeCount++;
         if (stateChangeCount === 2) {
@@ -269,28 +269,20 @@ describe('Call Custom Headers (react-voice-commons-sdk)', () => {
   describe('custom headers accessibility', () => {
     beforeEach(() => {
       // Set mock custom headers properties
-      mockTelnyxCall.inviteCustomHeaders = [
-        { name: 'X-Invite-Header', value: 'invite-value' }
-      ];
-      mockTelnyxCall.answerCustomHeaders = [
-        { name: 'X-Answer-Header', value: 'answer-value' }
-      ];
+      mockTelnyxCall.inviteCustomHeaders = [{ name: 'X-Invite-Header', value: 'invite-value' }];
+      mockTelnyxCall.answerCustomHeaders = [{ name: 'X-Answer-Header', value: 'answer-value' }];
     });
 
     it('should expose inviteCustomHeaders from underlying Telnyx call', () => {
       const inviteHeaders = call.inviteCustomHeaders;
-      
-      expect(inviteHeaders).toEqual([
-        { name: 'X-Invite-Header', value: 'invite-value' }
-      ]);
+
+      expect(inviteHeaders).toEqual([{ name: 'X-Invite-Header', value: 'invite-value' }]);
     });
 
     it('should expose answerCustomHeaders from underlying Telnyx call', () => {
       const answerHeaders = call.answerCustomHeaders;
-      
-      expect(answerHeaders).toEqual([
-        { name: 'X-Answer-Header', value: 'answer-value' }
-      ]);
+
+      expect(answerHeaders).toEqual([{ name: 'X-Answer-Header', value: 'answer-value' }]);
     });
 
     it('should handle null custom headers gracefully', () => {

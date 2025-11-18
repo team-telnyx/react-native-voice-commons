@@ -467,8 +467,8 @@ useEffect(() => {
 
 For complete API documentation and advanced usage patterns, see:
 
-- **[API Reference](https://team-telnyx.github.io/react-native-voice-commons/)** - Auto-generated TypeDoc documentation
-- **[TelnyxVoiceApp Documentation](./react-voice-commons-sdk/TELNYX_VOICE_APP.md)** - Detailed component guide
+- **[API Reference](https://developers.telnyx.com/development/webrtc/react-native-sdk)** - Auto-generated TypeDoc documentation
+- **[TelnyxVoiceApp Documentation](https://developers.telnyx.com/development/webrtc/react-native-sdk)** - Detailed component guide
 
 ## Contributing
 

@@ -23,7 +23,7 @@ describe('TelnyxRTC Client Custom Headers', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Create client instance
     client = new TelnyxRTC({
       logLevel: 'debug',
@@ -64,12 +64,10 @@ describe('TelnyxRTC Client Custom Headers', () => {
       client.queueAnswerFromCallKit(customHeaders);
 
       // Wait for async execution
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Verify call was answered with converted headers
-      expect(mockCall.answer).toHaveBeenCalledWith([
-        { name: 'X-Immediate', value: 'true' },
-      ]);
+      expect(mockCall.answer).toHaveBeenCalledWith([{ name: 'X-Immediate', value: 'true' }]);
     });
 
     it('should handle empty custom headers', () => {
@@ -213,11 +211,11 @@ describe('TelnyxRTC Client Custom Headers', () => {
     it('should execute pending answer with custom headers when invite arrives', async () => {
       // This test would require more complex mocking of the invite processing
       // For now, we verify the conceptual flow
-      
+
       // Setup pending answer
       const customHeaders = { 'X-Push-Answer': 'true' };
       client.queueAnswerFromCallKit(customHeaders);
-      
+
       // Verify pending state
       expect((client as any).pendingAnswerAction).toBe(true);
       expect((client as any).pendingCustomHeaders).toEqual(customHeaders);

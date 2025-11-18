@@ -15,8 +15,6 @@ export declare class SessionManager {
     private _sessionId;
     private _disposed;
     private _onClientReady?;
-    private _callActionPollingInterval?;
-    private _callActionPollingCallback?;
     constructor();
     /**
      * Observable stream of connection state changes

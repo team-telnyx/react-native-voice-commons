@@ -313,7 +313,12 @@ export class TelnyxVoipClient {
       console.log('TelnyxVoipClient: Creating new call to:', destination);
     }
 
-    return await this._callStateController.newCall(destination, callerName, callerNumber, customHeaders);
+    return await this._callStateController.newCall(
+      destination,
+      callerName,
+      callerNumber,
+      customHeaders
+    );
   }
 
   // ========== Push Notification Methods ==========

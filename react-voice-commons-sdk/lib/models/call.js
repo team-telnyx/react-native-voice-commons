@@ -46,15 +46,22 @@ const react_native_1 = require("react-native");
  * integrate with any state management solution.
  */
 class Call {
-    constructor(_telnyxCall, _callId, _destination, _isIncoming) {
+    constructor(_telnyxCall, _callId, _destination, _isIncoming, isReattached = false, _originalCallerName, _originalCallerNumber) {
         this._telnyxCall = _telnyxCall;
         this._callId = _callId;
         this._destination = _destination;
         this._isIncoming = _isIncoming;
+        this._originalCallerName = _originalCallerName;
+        this._originalCallerNumber = _originalCallerNumber;
         this._callState = new rxjs_1.BehaviorSubject(call_state_1.TelnyxCallState.RINGING);
         this._isMuted = new rxjs_1.BehaviorSubject(false);
         this._isHeld = new rxjs_1.BehaviorSubject(false);
         this._duration = new rxjs_1.BehaviorSubject(0);
+        // Set initial state based on whether this is a reattached call
+        if (isReattached) {
+            console.log('Call: Setting initial state to ACTIVE for reattached call');
+            this._callState.next(call_state_1.TelnyxCallState.ACTIVE);
+        }
         this._setupCallListeners();
     }
     /**
@@ -199,21 +206,6 @@ class Call {
             this._callState.next(call_state_1.TelnyxCallState.CONNECTING);
             // Pass custom headers to the underlying Telnyx call
             await this._telnyxCall.answer(customHeaders);
-            // On Android, show ongoing call notification to keep app alive in background
-            if (react_native_1.Platform.OS === 'android') {
-                try {
-                    const { VoicePnBridge } = await Promise.resolve().then(() => __importStar(require('../internal/voice-pn-bridge')));
-                    // Extract caller information from destination or use defaults
-                    const callerNumber = this._destination;
-                    const callerName = "Unknown Caller"; // Could be enhanced with caller ID lookup
-                    await VoicePnBridge.showOngoingCallNotification(callerName, callerNumber, this._callId);
-                    console.log('Call: Showed ongoing call notification on Android');
-                }
-                catch (error) {
-                    console.error('Call: Failed to show ongoing call notification:', error);
-                    // Don't fail the answer if notification showing fails
-                }
-            }
         }
         catch (error) {
             console.error('Failed to answer call:', error);
@@ -360,10 +352,68 @@ class Call {
             // Start duration timer when call becomes active
             if (telnyxState === call_state_1.TelnyxCallState.ACTIVE && !this._startTime) {
                 this._startDurationTimer();
+                // Show ongoing call notification on Android when call becomes active
+                // This covers both locally answered calls and calls that become active from remote side
+                if (react_native_1.Platform.OS === 'android') {
+                    (async () => {
+                        try {
+                            const { VoicePnBridge } = await Promise.resolve().then(() => __importStar(require('../internal/voice-pn-bridge')));
+                            // Extract caller information based on call direction
+                            let callerNumber;
+                            let callerName;
+                            if (this._isIncoming) {
+                                // For incoming calls, use the remote caller ID (who's calling us)
+                                callerNumber = this._telnyxCall.remoteCallerIdNumber;
+                                callerName = this._telnyxCall.remoteCallerIdName;
+                            }
+                            else {
+                                // For outgoing calls, use our own caller ID (what we're showing to them)
+                                // These are the values we set when making the call
+                                callerNumber = this._telnyxCall.localCallerIdNumber || this._originalCallerNumber;
+                                callerName = this._telnyxCall.localCallerIdName || this._originalCallerName;
+                            }
+                            // Fallback logic for better notification display - avoid "Unknown" when possible
+                            let displayName;
+                            let displayNumber;
+                            if (this._isIncoming) {
+                                // For incoming calls: use caller name or fall back to caller number, then destination
+                                displayName = callerName || callerNumber || this._destination;
+                                displayNumber = callerNumber || this._destination;
+                            }
+                            else {
+                                // For outgoing calls: use our caller ID or descriptive text
+                                displayName = callerName || `${this._destination}`;
+                                displayNumber = callerNumber || this._destination;
+                            }
+                            await VoicePnBridge.showOngoingCallNotification(displayName, displayNumber, this._callId);
+                            console.log('Call: Showed ongoing call notification on Android (call active)', {
+                                isIncoming: this._isIncoming,
+                                callerName: displayName,
+                                callerNumber: displayNumber,
+                            });
+                        }
+                        catch (error) {
+                            console.error('Call: Failed to show ongoing call notification on active:', error);
+                        }
+                    })();
+                }
             }
             // Stop duration timer when call ends
             if (call_state_1.CallStateHelpers.isTerminated(telnyxState)) {
                 this._stopDurationTimer();
+                // Clean up ongoing call notification on Android when call ends
+                if (react_native_1.Platform.OS === 'android') {
+                    (async () => {
+                        try {
+                            const { VoicePnBridge } = await Promise.resolve().then(() => __importStar(require('../internal/voice-pn-bridge')));
+                            await VoicePnBridge.endCall(this._callId);
+                            console.log('Call: Cleaned up ongoing call notification (call terminated)');
+                        }
+                        catch (error) {
+                            console.error('Call: Failed to clean up ongoing call notification on termination:', error);
+                        }
+                    })();
+                }
             }
         });
     }
@@ -377,6 +427,8 @@ class Call {
             case 'ringing':
             case 'new':
                 return call_state_1.TelnyxCallState.RINGING;
+            case 'connecting':
+                return call_state_1.TelnyxCallState.CONNECTING;
             case 'active':
             case 'answered':
                 return call_state_1.TelnyxCallState.ACTIVE;
@@ -388,6 +440,8 @@ class Call {
             case 'failed':
             case 'rejected':
                 return call_state_1.TelnyxCallState.FAILED;
+            case 'dropped':
+                return call_state_1.TelnyxCallState.DROPPED;
             default:
                 console.warn(`Unknown call state: ${telnyxState}`);
                 return call_state_1.TelnyxCallState.RINGING;

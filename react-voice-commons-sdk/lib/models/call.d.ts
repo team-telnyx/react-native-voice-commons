@@ -13,13 +13,15 @@ export declare class Call {
     private readonly _callId;
     private readonly _destination;
     private readonly _isIncoming;
+    private readonly _originalCallerName?;
+    private readonly _originalCallerNumber?;
     private readonly _callState;
     private readonly _isMuted;
     private readonly _isHeld;
     private readonly _duration;
     private _durationTimer?;
     private _startTime?;
-    constructor(_telnyxCall: TelnyxCall, _callId: string, _destination: string, _isIncoming: boolean);
+    constructor(_telnyxCall: TelnyxCall, _callId: string, _destination: string, _isIncoming: boolean, isReattached?: boolean, _originalCallerName?: string, _originalCallerNumber?: string);
     /**
      * Unique identifier for this call
      */

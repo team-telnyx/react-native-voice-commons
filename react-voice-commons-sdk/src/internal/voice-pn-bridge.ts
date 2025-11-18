@@ -13,7 +13,7 @@ export interface VoicePnBridgeInterface {
   }>;
   setPendingPushAction(action: string, metadata: string): Promise<boolean>;
   clearPendingPushAction(): Promise<boolean>;
-  
+
   // Call action methods (reliable @ReactMethod pattern)
   getPendingCallAction(): Promise<{
     action: string | null;
@@ -21,13 +21,17 @@ export interface VoicePnBridgeInterface {
     timestamp: number | null;
   }>;
   clearPendingCallAction(): Promise<boolean>;
-  
+
   // Call control methods (Android specific)
   endCall(callId: string | null): Promise<boolean>;
-  showOngoingCallNotification(callerName: string | null, callerNumber: string | null, callId: string | null): Promise<boolean>;
+  showOngoingCallNotification(
+    callerName: string | null,
+    callerNumber: string | null,
+    callId: string | null
+  ): Promise<boolean>;
   hideOngoingCallNotification(): Promise<boolean>;
   hideIncomingCallNotification(): Promise<boolean>;
-  
+
   // Additional UserDefaults methods
   getVoipToken(): Promise<string | null>;
   getPendingVoipPush(): Promise<string | null>;
@@ -239,9 +243,7 @@ export class VoicePnBridge {
    * Android → React Native: Listen for immediate call action events from notification buttons
    * Use this for active calls where immediate response is needed (e.g., ending ongoing calls)
    */
-  static addCallActionListener(
-    listener: (event: CallActionEvent) => void
-  ): EmitterSubscription {
+  static addCallActionListener(listener: (event: CallActionEvent) => void): EmitterSubscription {
     return DeviceEventEmitter.addListener('TelnyxCallAction', listener);
   }
 

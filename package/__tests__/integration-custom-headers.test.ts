@@ -172,9 +172,7 @@ describe('Custom Headers Integration Tests', () => {
   describe('Header Validation and Edge Cases', () => {
     it('should handle maximum length headers', () => {
       const longValue = 'x'.repeat(1000); // Very long header value
-      const customHeaders = [
-        { name: 'X-Long-Header', value: longValue },
-      ];
+      const customHeaders = [{ name: 'X-Long-Header', value: longValue }];
 
       const message = createAnswerMessage({
         callId: 'call-123',
@@ -234,7 +232,7 @@ describe('Custom Headers Integration Tests', () => {
         customHeaders,
       });
 
-      const headerNames = message.params.dialogParams.custom_headers.map(h => h.name);
+      const headerNames = message.params.dialogParams.custom_headers.map((h) => h.name);
       expect(headerNames).toEqual([
         'X-CamelCase-Header',
         'x-lowercase-header',

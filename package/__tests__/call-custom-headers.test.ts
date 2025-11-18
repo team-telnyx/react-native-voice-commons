@@ -252,7 +252,9 @@ describe('Call Custom Headers', () => {
       // Verify CallKit UUID was assigned
       expect((inboundCall as any)._callKitUUID).toBe('test-callkit-uuid');
       expect((inboundCall as any)._isPushNotificationCall).toBe(true);
-      expect(mockConnectionWithClient._client.setPushNotificationCallKitUUID).toHaveBeenCalledWith(null);
+      expect(mockConnectionWithClient._client.setPushNotificationCallKitUUID).toHaveBeenCalledWith(
+        null
+      );
     });
   });
 });
@@ -330,7 +332,7 @@ describe('Message Creation Functions', () => {
     it('should expose inviteCustomHeaders property for inbound calls', async () => {
       const inviteHeaders = [
         { name: 'X-Custom-Header-1', value: 'invite-value-1' },
-        { name: 'X-Custom-Header-2', value: 'invite-value-2' }
+        { name: 'X-Custom-Header-2', value: 'invite-value-2' },
       ];
 
       const inboundCall = await Call.createInboundCall({
@@ -351,7 +353,7 @@ describe('Message Creation Functions', () => {
     it('should expose answerCustomHeaders property when answer is received', async () => {
       const answerHeaders = [
         { name: 'X-Answer-Header-1', value: 'answer-value-1' },
-        { name: 'X-Answer-Header-2', value: 'answer-value-2' }
+        { name: 'X-Answer-Header-2', value: 'answer-value-2' },
       ];
 
       // Create a call with a peer for testing
@@ -372,10 +374,10 @@ describe('Message Creation Functions', () => {
           callID: testCall.callId,
           sdp: 'mock-answer-sdp',
           dialogParams: {
-            custom_headers: answerHeaders
-          }
+            custom_headers: answerHeaders,
+          },
         },
-        id: 123
+        id: 123,
       };
 
       // Mock peer.setRemoteDescription
@@ -391,14 +393,14 @@ describe('Message Creation Functions', () => {
     it('should store invite custom headers for outbound calls', async () => {
       const outgoingHeaders = [
         { name: 'X-Outgoing-Header-1', value: 'outgoing-value-1' },
-        { name: 'X-Outgoing-Header-2', value: 'outgoing-value-2' }
+        { name: 'X-Outgoing-Header-2', value: 'outgoing-value-2' },
       ];
 
       const callWithHeaders = new Call({
         connection: mockConnection,
         options: {
           ...mockCallOptions,
-          customHeaders: outgoingHeaders
+          customHeaders: outgoingHeaders,
         },
         sessionId: 'test-session-id',
         direction: 'outbound',
@@ -410,10 +412,10 @@ describe('Message Creation Functions', () => {
       // Mock invite method dependencies
       const mockMsg = { result: { callID: 'updated-call-id' } };
       mockConnection.sendAndWait = jest.fn().mockResolvedValue(mockMsg);
-      
+
       // Mock Peer.createOffer
       const mockOfferPeer = {
-        localDescription: { sdp: 'mock-local-sdp' }
+        localDescription: { sdp: 'mock-local-sdp' },
       } as any;
       (Peer.createOffer as jest.Mock).mockResolvedValue(mockOfferPeer);
 

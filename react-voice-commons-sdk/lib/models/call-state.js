@@ -22,6 +22,8 @@ var TelnyxCallState;
     TelnyxCallState["ENDED"] = "ENDED";
     /** Call failed to connect or was rejected */
     TelnyxCallState["FAILED"] = "FAILED";
+    /** Call was dropped due to network issues */
+    TelnyxCallState["DROPPED"] = "DROPPED";
 })(TelnyxCallState || (exports.TelnyxCallState = TelnyxCallState = {}));
 /**
  * Type guard to check if a value is a valid TelnyxCallState
@@ -70,7 +72,9 @@ exports.CallStateHelpers = {
      * Is the call in a terminated state?
      */
     isTerminated(state) {
-        return state === TelnyxCallState.ENDED || state === TelnyxCallState.FAILED;
+        return (state === TelnyxCallState.ENDED ||
+            state === TelnyxCallState.FAILED ||
+            state === TelnyxCallState.DROPPED);
     },
     /**
      * Is the call in an active state (can have media)?
