@@ -1,6 +1,6 @@
 # Interface: CallKitEvent
 
-Defined in: [callkit/callkit.ts:32](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/callkit/callkit.ts#L32)
+Defined in: [callkit/callkit.ts:32](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/callkit/callkit.ts#L32)
 
 ## Indexable
 
@@ -12,4 +12,4 @@ Defined in: [callkit/callkit.ts:32](https://github.com/team-telnyx/react-native-
 
 > **callUUID**: `string`
 
-Defined in: [callkit/callkit.ts:33](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/callkit/callkit.ts#L33)
+Defined in: [callkit/callkit.ts:33](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/callkit/callkit.ts#L33)

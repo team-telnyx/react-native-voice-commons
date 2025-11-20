@@ -1,7 +1,6 @@
-# Telnyx React Voice Commons SDK 
+# Telnyx React Voice Commons SDK
 
 A high-level, state-agnostic, drop-in module for the Telnyx React Native SDK that simplifies WebRTC voice calling integration. This library provides a comprehensive solution for building VoIP applications with native call UI support, push notifications, and seamless background handling.
-
 
 ### Key Features
 

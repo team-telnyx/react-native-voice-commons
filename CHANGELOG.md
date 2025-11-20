@@ -1,5 +1,24 @@
 # CHANGELOG.md
 
+## [0.1.3](https://www.npmjs.com/package/@telnyx/react-voice-commons-sdk/v/0.1.3) (2025-11-20)
+
+### Enhancement
+
+• Enhanced `newCall()` method with additional parameters (callerName, callerNumber, customHeaders)
+• Invite custom headers support for outgoing calls
+• Call reconnection functionality for network stability
+• Improved network reconnection handling with automatic call reattachment
+• Enhanced caller ID handling with smart fallback logic
+• Fixed React version compatibility issues for local development
+• Session management improvements for reliable reconnection
+
+### Bug Fixes
+
+• Fixed React version conflicts between 19.0.0 and 19.2.0
+• Resolved notification lifecycle management with proper foreground service handling
+• Enhanced call state transitions during network reconnection
+• Improved authentication storage and auto-reconnection reliability
+
 ## [0.1.2](https://www.npmjs.com/package/@telnyx/react-voice-commons-sdk/v/0.1.2) (2025-11-04)
 
 ### Enhancement

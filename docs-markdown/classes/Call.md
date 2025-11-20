@@ -1,6 +1,6 @@
 # Class: Call
 
-Defined in: [models/call.ts:14](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L14)
+Defined in: [models/call.ts:14](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L14)
 
 Represents a call with reactive state streams.
 
@@ -12,9 +12,9 @@ integrate with any state management solution.
 
 ### Constructor
 
-> **new Call**(`_telnyxCall`, `_callId`, `_destination`, `_isIncoming`): `Call`
+> **new Call**(`_telnyxCall`, `_callId`, `_destination`, `_isIncoming`, `isReattached`, `_originalCallerName?`, `_originalCallerNumber?`): `Call`
 
-Defined in: [models/call.ts:23](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L23)
+Defined in: [models/call.ts:23](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L23)
 
 #### Parameters
 
@@ -34,6 +34,18 @@ Defined in: [models/call.ts:23](https://github.com/team-telnyx/react-native-voic
 
 `boolean`
 
+##### isReattached
+
+`boolean` = `false`
+
+##### \_originalCallerName?
+
+`string`
+
+##### \_originalCallerNumber?
+
+`string`
+
 #### Returns
 
 `Call`
@@ -46,7 +58,7 @@ Defined in: [models/call.ts:23](https://github.com/team-telnyx/react-native-voic
 
 > **get** **callId**(): `string`
 
-Defined in: [models/call.ts:35](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L35)
+Defined in: [models/call.ts:44](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L44)
 
 Unique identifier for this call
 
@@ -62,7 +74,7 @@ Unique identifier for this call
 
 > **get** **destination**(): `string`
 
-Defined in: [models/call.ts:42](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L42)
+Defined in: [models/call.ts:51](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L51)
 
 The destination number or SIP URI
 
@@ -78,7 +90,7 @@ The destination number or SIP URI
 
 > **get** **isIncoming**(): `boolean`
 
-Defined in: [models/call.ts:49](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L49)
+Defined in: [models/call.ts:58](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L58)
 
 Whether this is an incoming call
 
@@ -94,7 +106,7 @@ Whether this is an incoming call
 
 > **get** **isOutgoing**(): `boolean`
 
-Defined in: [models/call.ts:56](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L56)
+Defined in: [models/call.ts:65](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L65)
 
 Whether this is an outgoing call
 
@@ -110,7 +122,7 @@ Whether this is an outgoing call
 
 > **get** **currentState**(): [`TelnyxCallState`](../enumerations/TelnyxCallState.md)
 
-Defined in: [models/call.ts:63](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L63)
+Defined in: [models/call.ts:72](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L72)
 
 Current call state (synchronous access)
 
@@ -126,7 +138,7 @@ Current call state (synchronous access)
 
 > **get** **currentIsMuted**(): `boolean`
 
-Defined in: [models/call.ts:70](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L70)
+Defined in: [models/call.ts:79](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L79)
 
 Current mute state (synchronous access)
 
@@ -142,7 +154,7 @@ Current mute state (synchronous access)
 
 > **get** **currentIsHeld**(): `boolean`
 
-Defined in: [models/call.ts:77](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L77)
+Defined in: [models/call.ts:86](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L86)
 
 Current hold state (synchronous access)
 
@@ -158,7 +170,7 @@ Current hold state (synchronous access)
 
 > **get** **currentDuration**(): `number`
 
-Defined in: [models/call.ts:84](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L84)
+Defined in: [models/call.ts:93](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L93)
 
 Current call duration in seconds (synchronous access)
 
@@ -168,13 +180,49 @@ Current call duration in seconds (synchronous access)
 
 ***
 
+### inviteCustomHeaders
+
+#### Get Signature
+
+> **get** **inviteCustomHeaders**(): `object`[]
+
+Defined in: [models/call.ts:102](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L102)
+
+Custom headers received from the WebRTC INVITE message.
+These headers are passed during call initiation and can contain application-specific information.
+Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+
+##### Returns
+
+`object`[]
+
+***
+
+### answerCustomHeaders
+
+#### Get Signature
+
+> **get** **answerCustomHeaders**(): `object`[]
+
+Defined in: [models/call.ts:111](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L111)
+
+Custom headers received from the WebRTC ANSWER message.
+These headers are passed during call acceptance and can contain application-specific information.
+Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+
+##### Returns
+
+`object`[]
+
+***
+
 ### telnyxCall
 
 #### Get Signature
 
 > **get** **telnyxCall**(): [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-Defined in: [models/call.ts:92](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L92)
+Defined in: [models/call.ts:119](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L119)
 
 **`Internal`**
 
@@ -192,7 +240,7 @@ Get the underlying Telnyx Call object (for internal use)
 
 > **get** **callState$**(): `Observable`\<[`TelnyxCallState`](../enumerations/TelnyxCallState.md)\>
 
-Defined in: [models/call.ts:99](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L99)
+Defined in: [models/call.ts:126](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L126)
 
 Observable stream of call state changes
 
@@ -208,7 +256,7 @@ Observable stream of call state changes
 
 > **get** **isMuted$**(): `Observable`\<`boolean`\>
 
-Defined in: [models/call.ts:106](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L106)
+Defined in: [models/call.ts:133](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L133)
 
 Observable stream of mute state changes
 
@@ -224,7 +272,7 @@ Observable stream of mute state changes
 
 > **get** **isHeld$**(): `Observable`\<`boolean`\>
 
-Defined in: [models/call.ts:113](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L113)
+Defined in: [models/call.ts:140](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L140)
 
 Observable stream of hold state changes
 
@@ -240,7 +288,7 @@ Observable stream of hold state changes
 
 > **get** **duration$**(): `Observable`\<`number`\>
 
-Defined in: [models/call.ts:120](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L120)
+Defined in: [models/call.ts:147](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L147)
 
 Observable stream of call duration changes (in seconds)
 
@@ -256,7 +304,7 @@ Observable stream of call duration changes (in seconds)
 
 > **get** **canAnswer$**(): `Observable`\<`boolean`\>
 
-Defined in: [models/call.ts:127](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L127)
+Defined in: [models/call.ts:154](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L154)
 
 Observable that emits true when the call can be answered
 
@@ -272,7 +320,7 @@ Observable that emits true when the call can be answered
 
 > **get** **canHangup$**(): `Observable`\<`boolean`\>
 
-Defined in: [models/call.ts:137](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L137)
+Defined in: [models/call.ts:164](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L164)
 
 Observable that emits true when the call can be hung up
 
@@ -288,7 +336,7 @@ Observable that emits true when the call can be hung up
 
 > **get** **canHold$**(): `Observable`\<`boolean`\>
 
-Defined in: [models/call.ts:147](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L147)
+Defined in: [models/call.ts:174](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L174)
 
 Observable that emits true when the call can be put on hold
 
@@ -304,7 +352,7 @@ Observable that emits true when the call can be put on hold
 
 > **get** **canResume$**(): `Observable`\<`boolean`\>
 
-Defined in: [models/call.ts:157](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L157)
+Defined in: [models/call.ts:184](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L184)
 
 Observable that emits true when the call can be resumed from hold
 
@@ -316,11 +364,19 @@ Observable that emits true when the call can be resumed from hold
 
 ### answer()
 
-> **answer**(): `Promise`\<`void`\>
+> **answer**(`customHeaders?`): `Promise`\<`void`\>
 
-Defined in: [models/call.ts:167](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L167)
+Defined in: [models/call.ts:195](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L195)
 
 Answer the incoming call
+
+#### Parameters
+
+##### customHeaders?
+
+`object`[]
+
+Optional custom headers to include with the answer
 
 #### Returns
 
@@ -330,11 +386,19 @@ Answer the incoming call
 
 ### hangup()
 
-> **hangup**(): `Promise`\<`void`\>
+> **hangup**(`customHeaders?`): `Promise`\<`void`\>
 
-Defined in: [models/call.ts:197](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L197)
+Defined in: [models/call.ts:227](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L227)
 
 Hang up the call
+
+#### Parameters
+
+##### customHeaders?
+
+`object`[]
+
+Optional custom headers to include with the hangup request
 
 #### Returns
 
@@ -346,7 +410,7 @@ Hang up the call
 
 > **hold**(): `Promise`\<`void`\>
 
-Defined in: [models/call.ts:224](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L224)
+Defined in: [models/call.ts:266](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L266)
 
 Put the call on hold
 
@@ -360,7 +424,7 @@ Put the call on hold
 
 > **resume**(): `Promise`\<`void`\>
 
-Defined in: [models/call.ts:240](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L240)
+Defined in: [models/call.ts:282](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L282)
 
 Resume the call from hold
 
@@ -374,7 +438,7 @@ Resume the call from hold
 
 > **mute**(): `Promise`\<`void`\>
 
-Defined in: [models/call.ts:256](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L256)
+Defined in: [models/call.ts:298](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L298)
 
 Mute the call
 
@@ -388,7 +452,7 @@ Mute the call
 
 > **unmute**(): `Promise`\<`void`\>
 
-Defined in: [models/call.ts:273](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L273)
+Defined in: [models/call.ts:315](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L315)
 
 Unmute the call
 
@@ -402,7 +466,7 @@ Unmute the call
 
 > **toggleMute**(): `Promise`\<`void`\>
 
-Defined in: [models/call.ts:290](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L290)
+Defined in: [models/call.ts:332](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L332)
 
 Toggle mute state
 
@@ -416,7 +480,7 @@ Toggle mute state
 
 > **setConnecting**(): `void`
 
-Defined in: [models/call.ts:302](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L302)
+Defined in: [models/call.ts:344](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L344)
 
 **`Internal`**
 
@@ -432,7 +496,7 @@ Set the call to connecting state (used for push notification calls when answered
 
 > **dispose**(): `void`
 
-Defined in: [models/call.ts:310](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call.ts#L310)
+Defined in: [models/call.ts:352](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L352)
 
 Clean up resources when the call is disposed
 

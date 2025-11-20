@@ -1,24 +1,16 @@
-**@telnyx/react-voice-commons-sdk v0.1.2**
+# Telnyx React Voice Commons SDK 
 
-***
+A high-level, state-agnostic, drop-in module for the Telnyx React Native SDK that simplifies WebRTC voice calling integration. This library provides a comprehensive solution for building VoIP applications with native call UI support, push notifications, and seamless background handling.
 
-# Telnyx React Native Voice SDK Demo
-
-A comprehensive demo application showcasing the **@telnyx/react-voice-commons-sdk** library - a high-level, state-agnostic, drop-in module for the Telnyx React Native SDK that simplifies WebRTC voice calling integration.
-
-## Overview
-
-This demo app demonstrates how to integrate the `@telnyx/react-voice-commons-sdk` library to create a fully functional VoIP calling application with native call UI support, push notifications, and background handling.
-
-### Key Features Demonstrated
+### Key Features
 
 - **TelnyxVoiceApp Integration**: Automatic lifecycle management and push notification handling
 - **Native Call UI**: CallKit (iOS) and ConnectionService (Android) integration
 - **Background Handling**: Seamless app state transitions and background call processing
 - **Push Notifications**: Firebase (Android) and APNs (iOS) integration
 - **Reactive State Management**: RxJS-based state streams for real-time UI updates
-- **Modern UI Components**: Built with NativeWind v4 and react-native-reusables
-- **Dark/Light Mode**: Persistent theme support with system navigation bar matching
+- **TypeScript Support**: Full TypeScript definitions for better developer experience
+- **Cross-Platform**: Built for both iOS and Android with React Native
 
 ## About @telnyx/react-voice-commons-sdk
 
@@ -33,18 +25,31 @@ The `@telnyx/react-voice-commons-sdk` library provides:
 - **Push Notification Support**: Built-in handling for background push notifications
 - **TypeScript Support**: Full TypeScript definitions for better developer experience
 
-## Quick Start
+## Integration Guide
 
-Ready to get started? Check out our **[Quick Start Guide](./quickstart/README.md)** to build your first VoIP app in minutes!
+### Basic Setup
 
-The quickstart covers:
-- **Installation** - Get the SDK installed
-- **Basic Setup** - Wrap your app and create a client
-- **Make Your First Call** - Simple dialer implementation
-- **Authentication** - Login with credentials or tokens
-- **Next Steps** - Push notifications and native integration
+Integrate the library using the `TelnyxVoiceApp` component for automatic lifecycle management:
 
-## Core Components Used in Demo
+```tsx
+import { TelnyxVoiceApp, createTelnyxVoipClient } from '@telnyx/react-voice-commons-sdk';
+
+// Create the VoIP client instance
+const voipClient = createTelnyxVoipClient({
+  enableAppStateManagement: true, // Optional: Enable automatic app state management (default: true)
+  debug: true, // Optional: Enable debug logging
+});
+
+export default function App() {
+  return (
+    <TelnyxVoiceApp voipClient={voipClient} enableAutoReconnect={false} debug={true}>
+      <YourAppContent />
+    </TelnyxVoiceApp>
+  );
+}
+```
+
+### Core Components
 
 #### 1. VoIP Client Configuration
 
@@ -169,7 +174,7 @@ if (!success) {
 - Network reconnection after connectivity loss
 - App state changes (foreground/background transitions)
 
-**Demo App Note**: The demo app's `TelnyxLoginForm` component does additional storage for UI convenience (pre-filling the login form). This is separate from the library's internal authentication storage and is not required for production apps.
+**Demo App Note**: When using the library in a demo application, the `TelnyxLoginForm` component may do additional storage for UI convenience (pre-filling login forms). This is separate from the library's internal authentication storage and is not required for production apps.
 
 ##### Manual Storage Management (Advanced Use Only)
 
@@ -191,7 +196,7 @@ await AsyncStorage.multiRemove([
 
 ### Native Integration
 
-The demo app shows complete native integration for both platforms. These integrations are required for production apps using the library.
+The library provides complete native integration for both platforms. These integrations are required for production apps using the library.
 
 #### Android Integration
 
@@ -455,6 +460,19 @@ useEffect(() => {
 }, []);
 ```
 
+## Documentation
+
+For complete API documentation and advanced usage patterns, see the [TelnyxVoiceApp Documentation](./react-voice-commons-sdk/TELNYX_VOICE_APP.md).
+
+## Contributing
+
+When contributing to this demo or the underlying library:
+
+1. Maintain compatibility with both iOS and Android platforms
+2. Add comprehensive tests for new features
+3. Update documentation for any API changes
+4. Follow the existing code style and patterns
+5. Test with both foreground and background scenarios
 
 ## License
 

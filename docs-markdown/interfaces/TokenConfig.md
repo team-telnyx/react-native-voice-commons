@@ -1,6 +1,6 @@
 # Interface: TokenConfig
 
-Defined in: [models/config.ts:15](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/config.ts#L15)
+Defined in: [models/config.ts:15](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/config.ts#L15)
 
 Configuration for token-based authentication
 
@@ -10,7 +10,7 @@ Configuration for token-based authentication
 
 > **type**: `"token"`
 
-Defined in: [models/config.ts:16](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/config.ts#L16)
+Defined in: [models/config.ts:16](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/config.ts#L16)
 
 ***
 
@@ -18,7 +18,7 @@ Defined in: [models/config.ts:16](https://github.com/team-telnyx/react-native-vo
 
 > **token**: `string`
 
-Defined in: [models/config.ts:17](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/config.ts#L17)
+Defined in: [models/config.ts:17](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/config.ts#L17)
 
 ***
 
@@ -26,7 +26,7 @@ Defined in: [models/config.ts:17](https://github.com/team-telnyx/react-native-vo
 
 > `optional` **debug**: `boolean`
 
-Defined in: [models/config.ts:18](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/config.ts#L18)
+Defined in: [models/config.ts:18](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/config.ts#L18)
 
 ***
 
@@ -34,4 +34,4 @@ Defined in: [models/config.ts:18](https://github.com/team-telnyx/react-native-vo
 
 > `optional` **pushNotificationDeviceToken**: `string`
 
-Defined in: [models/config.ts:19](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/config.ts#L19)
+Defined in: [models/config.ts:19](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/config.ts#L19)

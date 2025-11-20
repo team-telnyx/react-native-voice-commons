@@ -1,8 +1,4 @@
-[**@telnyx/react-voice-commons-sdk v0.1.2**](README.md)
-
-***
-
-# @telnyx/react-voice-commons-sdk v0.1.2
+# @telnyx/react-voice-commons-sdk
 
 ## Enumerations
 

@@ -1,6 +1,6 @@
 # Interface: TelnyxVoiceAppProps
 
-Defined in: [telnyx-voice-app.tsx:37](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L37)
+Defined in: [telnyx-voice-app.tsx:37](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L37)
 
 Props for the TelnyxVoiceApp component
 
@@ -14,7 +14,7 @@ Props for the TelnyxVoiceApp component
 
 > **voipClient**: [`TelnyxVoipClient`](../classes/TelnyxVoipClient.md)
 
-Defined in: [telnyx-voice-app.tsx:13](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L13)
+Defined in: [telnyx-voice-app.tsx:13](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L13)
 
 The TelnyxVoipClient instance to manage
 
@@ -28,7 +28,7 @@ The TelnyxVoipClient instance to manage
 
 > `optional` **onPushNotificationProcessingStarted**: () => `void`
 
-Defined in: [telnyx-voice-app.tsx:16](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L16)
+Defined in: [telnyx-voice-app.tsx:16](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L16)
 
 Optional callback when push notification processing starts
 
@@ -46,7 +46,7 @@ Optional callback when push notification processing starts
 
 > `optional` **onPushNotificationProcessingCompleted**: () => `void`
 
-Defined in: [telnyx-voice-app.tsx:19](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L19)
+Defined in: [telnyx-voice-app.tsx:19](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L19)
 
 Optional callback when push notification processing completes
 
@@ -64,7 +64,7 @@ Optional callback when push notification processing completes
 
 > `optional` **onAppStateChanged**: (`state`) => `void`
 
-Defined in: [telnyx-voice-app.tsx:22](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L22)
+Defined in: [telnyx-voice-app.tsx:22](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L22)
 
 Optional callback for additional background/foreground handling
 
@@ -88,7 +88,7 @@ Optional callback for additional background/foreground handling
 
 > `optional` **enableAutoReconnect**: `boolean`
 
-Defined in: [telnyx-voice-app.tsx:25](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L25)
+Defined in: [telnyx-voice-app.tsx:25](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L25)
 
 Whether to enable automatic login/reconnection (default: true)
 
@@ -102,7 +102,7 @@ Whether to enable automatic login/reconnection (default: true)
 
 > `optional` **skipWebBackgroundDetection**: `boolean`
 
-Defined in: [telnyx-voice-app.tsx:28](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L28)
+Defined in: [telnyx-voice-app.tsx:28](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L28)
 
 Whether to skip web platform for background detection (default: true)
 
@@ -116,7 +116,7 @@ Whether to skip web platform for background detection (default: true)
 
 > `optional` **debug**: `boolean`
 
-Defined in: [telnyx-voice-app.tsx:31](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L31)
+Defined in: [telnyx-voice-app.tsx:31](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L31)
 
 Enable debug logging
 
@@ -130,6 +130,6 @@ Enable debug logging
 
 > **children**: `ReactNode`
 
-Defined in: [telnyx-voice-app.tsx:39](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L39)
+Defined in: [telnyx-voice-app.tsx:39](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L39)
 
 The child components to render

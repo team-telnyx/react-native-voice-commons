@@ -1,6 +1,6 @@
 # Interface: TelnyxCall
 
-Defined in: [types/telnyx-sdk.d.ts:42](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L42)
+Defined in: [types/telnyx-sdk.d.ts:42](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L42)
 
 ## Extends
 
@@ -12,7 +12,7 @@ Defined in: [types/telnyx-sdk.d.ts:42](https://github.com/team-telnyx/react-nati
 
 > **callId**: `string`
 
-Defined in: [types/telnyx-sdk.d.ts:43](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L43)
+Defined in: [types/telnyx-sdk.d.ts:43](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L43)
 
 ***
 
@@ -20,7 +20,7 @@ Defined in: [types/telnyx-sdk.d.ts:43](https://github.com/team-telnyx/react-nati
 
 > **state**: `CallState`
 
-Defined in: [types/telnyx-sdk.d.ts:44](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L44)
+Defined in: [types/telnyx-sdk.d.ts:44](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L44)
 
 ***
 
@@ -28,7 +28,7 @@ Defined in: [types/telnyx-sdk.d.ts:44](https://github.com/team-telnyx/react-nati
 
 > **direction**: `"inbound"` \| `"outbound"`
 
-Defined in: [types/telnyx-sdk.d.ts:45](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L45)
+Defined in: [types/telnyx-sdk.d.ts:45](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L45)
 
 ***
 
@@ -36,7 +36,7 @@ Defined in: [types/telnyx-sdk.d.ts:45](https://github.com/team-telnyx/react-nati
 
 > `optional` **remoteCallerIdName**: `string`
 
-Defined in: [types/telnyx-sdk.d.ts:46](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L46)
+Defined in: [types/telnyx-sdk.d.ts:46](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L46)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [types/telnyx-sdk.d.ts:46](https://github.com/team-telnyx/react-nati
 
 > `optional` **remoteCallerIdNumber**: `string`
 
-Defined in: [types/telnyx-sdk.d.ts:47](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L47)
+Defined in: [types/telnyx-sdk.d.ts:47](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L47)
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: [types/telnyx-sdk.d.ts:47](https://github.com/team-telnyx/react-nati
 
 > `optional` **localCallerIdName**: `string`
 
-Defined in: [types/telnyx-sdk.d.ts:48](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L48)
+Defined in: [types/telnyx-sdk.d.ts:48](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L48)
 
 ***
 
@@ -60,15 +60,61 @@ Defined in: [types/telnyx-sdk.d.ts:48](https://github.com/team-telnyx/react-nati
 
 > `optional` **localCallerIdNumber**: `string`
 
-Defined in: [types/telnyx-sdk.d.ts:49](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L49)
+Defined in: [types/telnyx-sdk.d.ts:49](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L49)
+
+***
+
+### inviteCustomHeaders
+
+> **inviteCustomHeaders**: `object`[]
+
+Defined in: [types/telnyx-sdk.d.ts:56](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L56)
+
+Custom headers received from the WebRTC INVITE message.
+These headers are passed during call initiation and can contain application-specific information.
+Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+
+#### name
+
+> **name**: `string`
+
+#### value
+
+> **value**: `string`
+
+***
+
+### answerCustomHeaders
+
+> **answerCustomHeaders**: `object`[]
+
+Defined in: [types/telnyx-sdk.d.ts:63](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L63)
+
+Custom headers received from the WebRTC ANSWER message.
+These headers are passed during call acceptance and can contain application-specific information.
+Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+
+#### name
+
+> **name**: `string`
+
+#### value
+
+> **value**: `string`
 
 ## Methods
 
 ### answer()
 
-> **answer**(): `Promise`\<`void`\>
+> **answer**(`customHeaders?`): `Promise`\<`void`\>
 
-Defined in: [types/telnyx-sdk.d.ts:53](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L53)
+Defined in: [types/telnyx-sdk.d.ts:67](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L67)
+
+#### Parameters
+
+##### customHeaders?
+
+`object`[]
 
 #### Returns
 
@@ -78,9 +124,15 @@ Defined in: [types/telnyx-sdk.d.ts:53](https://github.com/team-telnyx/react-nati
 
 ### hangup()
 
-> **hangup**(): `Promise`\<`void`\>
+> **hangup**(`customHeaders?`): `Promise`\<`void`\>
 
-Defined in: [types/telnyx-sdk.d.ts:54](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L54)
+Defined in: [types/telnyx-sdk.d.ts:68](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L68)
+
+#### Parameters
+
+##### customHeaders?
+
+`object`[]
 
 #### Returns
 
@@ -92,7 +144,7 @@ Defined in: [types/telnyx-sdk.d.ts:54](https://github.com/team-telnyx/react-nati
 
 > **hold**(): `Promise`\<`void`\>
 
-Defined in: [types/telnyx-sdk.d.ts:55](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L55)
+Defined in: [types/telnyx-sdk.d.ts:69](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L69)
 
 #### Returns
 
@@ -104,7 +156,7 @@ Defined in: [types/telnyx-sdk.d.ts:55](https://github.com/team-telnyx/react-nati
 
 > **unhold**(): `Promise`\<`void`\>
 
-Defined in: [types/telnyx-sdk.d.ts:56](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L56)
+Defined in: [types/telnyx-sdk.d.ts:70](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L70)
 
 #### Returns
 
@@ -116,7 +168,7 @@ Defined in: [types/telnyx-sdk.d.ts:56](https://github.com/team-telnyx/react-nati
 
 > **mute**(): `Promise`\<`void`\>
 
-Defined in: [types/telnyx-sdk.d.ts:57](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L57)
+Defined in: [types/telnyx-sdk.d.ts:71](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L71)
 
 #### Returns
 
@@ -128,7 +180,7 @@ Defined in: [types/telnyx-sdk.d.ts:57](https://github.com/team-telnyx/react-nati
 
 > **unmute**(): `Promise`\<`void`\>
 
-Defined in: [types/telnyx-sdk.d.ts:58](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L58)
+Defined in: [types/telnyx-sdk.d.ts:72](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L72)
 
 #### Returns
 
@@ -140,7 +192,7 @@ Defined in: [types/telnyx-sdk.d.ts:58](https://github.com/team-telnyx/react-nati
 
 > **dtmf**(`digits`): `Promise`\<`void`\>
 
-Defined in: [types/telnyx-sdk.d.ts:59](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L59)
+Defined in: [types/telnyx-sdk.d.ts:73](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L73)
 
 #### Parameters
 
@@ -158,7 +210,7 @@ Defined in: [types/telnyx-sdk.d.ts:59](https://github.com/team-telnyx/react-nati
 
 > **on**(`event`, `listener`): `this`
 
-Defined in: [types/telnyx-sdk.d.ts:61](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L61)
+Defined in: [types/telnyx-sdk.d.ts:75](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L75)
 
 Add a listener for a given event.
 
@@ -186,7 +238,7 @@ Add a listener for a given event.
 
 > **off**(`event`, `listener`): `this`
 
-Defined in: [types/telnyx-sdk.d.ts:62](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L62)
+Defined in: [types/telnyx-sdk.d.ts:76](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L76)
 
 #### Parameters
 
@@ -212,7 +264,7 @@ Defined in: [types/telnyx-sdk.d.ts:62](https://github.com/team-telnyx/react-nati
 
 > **emit**(`event`, ...`args`): `boolean`
 
-Defined in: [types/telnyx-sdk.d.ts:63](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L63)
+Defined in: [types/telnyx-sdk.d.ts:77](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L77)
 
 Calls each of the listeners registered for a given event.
 

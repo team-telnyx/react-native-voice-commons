@@ -11,7 +11,7 @@
   ],
   "excludePrivate": true,
   "excludeProtected": false,
-  "includeVersion": true,
+  "includeVersion": false,
   "readme": "README.md",
   "plugin": ["typedoc-plugin-markdown"],
   "categorizeByGroup": true,
@@ -22,5 +22,8 @@
     "private": false,
     "inherited": true,
     "external": false
-  }
+  },
+  "hidePageHeader": true,
+  "hideBreadcrumbs": true,
+  "hidePageTitle": false
 }

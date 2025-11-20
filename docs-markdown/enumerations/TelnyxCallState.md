@@ -1,12 +1,6 @@
-[**@telnyx/react-voice-commons-sdk v0.1.2**](../README.md)
-
-***
-
-[@telnyx/react-voice-commons-sdk](../globals.md) / TelnyxCallState
-
 # Enumeration: TelnyxCallState
 
-Defined in: [models/call-state.ts:7](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call-state.ts#L7)
+Defined in: [models/call-state.ts:7](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call-state.ts#L7)
 
 Represents the state of a call in the Telnyx system.
 
@@ -19,7 +13,7 @@ the complexity of the underlying SIP call states.
 
 > **RINGING**: `"RINGING"`
 
-Defined in: [models/call-state.ts:9](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call-state.ts#L9)
+Defined in: [models/call-state.ts:9](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call-state.ts#L9)
 
 Call is being initiated (outgoing) or received (incoming)
 
@@ -29,7 +23,7 @@ Call is being initiated (outgoing) or received (incoming)
 
 > **CONNECTING**: `"CONNECTING"`
 
-Defined in: [models/call-state.ts:12](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call-state.ts#L12)
+Defined in: [models/call-state.ts:12](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call-state.ts#L12)
 
 Call is connecting after being answered (usually from push notification)
 
@@ -39,7 +33,7 @@ Call is connecting after being answered (usually from push notification)
 
 > **ACTIVE**: `"ACTIVE"`
 
-Defined in: [models/call-state.ts:15](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call-state.ts#L15)
+Defined in: [models/call-state.ts:15](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call-state.ts#L15)
 
 Call has been answered and media is flowing
 
@@ -49,7 +43,7 @@ Call has been answered and media is flowing
 
 > **HELD**: `"HELD"`
 
-Defined in: [models/call-state.ts:18](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call-state.ts#L18)
+Defined in: [models/call-state.ts:18](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call-state.ts#L18)
 
 Call is on hold
 
@@ -59,7 +53,7 @@ Call is on hold
 
 > **ENDED**: `"ENDED"`
 
-Defined in: [models/call-state.ts:21](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call-state.ts#L21)
+Defined in: [models/call-state.ts:21](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call-state.ts#L21)
 
 Call has ended normally
 
@@ -69,6 +63,16 @@ Call has ended normally
 
 > **FAILED**: `"FAILED"`
 
-Defined in: [models/call-state.ts:24](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/models/call-state.ts#L24)
+Defined in: [models/call-state.ts:24](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call-state.ts#L24)
 
 Call failed to connect or was rejected
+
+***
+
+### DROPPED
+
+> **DROPPED**: `"DROPPED"`
+
+Defined in: [models/call-state.ts:27](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call-state.ts#L27)
+
+Call was dropped due to network issues

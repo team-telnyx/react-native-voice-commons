@@ -1,14 +1,8 @@
-[**@telnyx/react-voice-commons-sdk v0.1.2**](../README.md)
-
-***
-
-[@telnyx/react-voice-commons-sdk](../globals.md) / useAppReadyNotifier
-
 # Function: useAppReadyNotifier()
 
 > **useAppReadyNotifier**(): `void`
 
-Defined in: [hooks/useAppReadyNotifier.ts:12](https://github.com/team-telnyx/react-native-voice-commons/blob/531778fc3b7534661b18c7521a35e184b595c2c0/react-voice-commons-sdk/src/hooks/useAppReadyNotifier.ts#L12)
+Defined in: [hooks/useAppReadyNotifier.ts:12](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/hooks/useAppReadyNotifier.ts#L12)
 
 Hook to notify the native side when React Native is ready
 Call this hook when your main screen/login screen is visible and ready
