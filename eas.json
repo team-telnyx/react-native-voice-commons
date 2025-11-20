@@ -2,12 +2,20 @@
   "build": {
     "preview": {
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "versionCode": 14
+      },
+      "ios": {
+        "buildNumber": "39"
       }
     },
     "production": {
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "versionCode": 14
+      },
+      "ios": {
+        "buildNumber": "39"
       }
     }
   }
