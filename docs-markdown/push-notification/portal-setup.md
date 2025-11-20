@@ -294,9 +294,7 @@ If you continue to experience issues:
    - [Firebase Cloud Messaging Documentation](https://firebase.google.com/docs/cloud-messaging)
    - [Apple Push Notification Service Documentation](https://developer.apple.com/documentation/usernotifications)
 
-3. **SDK Documentation**:
-   - Review the [App Setup Guide](./app-setup.md)
-   - Check the [API Documentation](../README.md)
+
 
 ## Next Steps
 

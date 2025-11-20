@@ -6,7 +6,7 @@ Represents a call with reactive state streams.
 
 This class wraps the underlying Telnyx Call object and provides
 reactive streams for all call state changes, making it easy to
-integrate with any state management solution.F
+integrate with any state management solution.
 
 ## Constructors
 

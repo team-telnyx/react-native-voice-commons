@@ -147,22 +147,22 @@ You now have a basic VoIP calling app! The SDK automatically handles:
 
 For incoming calls when your app is in the background:
 
-- **[Push Notification Setup](../push-notification/README.md)** - Complete push notification guide
+- **[Push Notification Setup](https://developers.telnyx.com/development/webrtc/react-native-sdk/push-notification/portal-setup)** - Complete push notification guide
 
 ### Native Integration
 
 For production apps, you'll need native integration:
 
-- **[Android Setup](../push-notification/app-setup.md#android-implementation)** - MainActivity and Firebase setup
-- **[iOS Setup](../push-notification/app-setup.md#ios-implementation)** - AppDelegate and VoIP push setup
+- **[Android Setup](https://developers.telnyx.com/development/webrtc/react-native-sdk/push-notification/app-setup#android-implementation)** - MainActivity and Firebase setup
+- **[iOS Setup](https://developers.telnyx.com/development/webrtc/react-native-sdk/push-notification/app-setup#ios-implementation)** - AppDelegate and VoIP push setup
 
 ### Advanced Features
 
 The SDK provides extensive capabilities for building production VoIP apps:
 
-- **Call Management** - Hold, mute, transfer, and conference calls (see [Call API](../classes/Call.md))
-- **Error Handling** - Robust error handling patterns (see [Error Handling Guide](../error-handling/ErrorHandling.mdx))  
-- **State Management** - RxJS observables and reactive patterns (see [TelnyxVoipClient API](../classes/TelnyxVoipClient.md))
+- **Call Management** - Hold, mute, transfer, and conference calls (see [Call API](https://team-telnyx.github.io/react-native-voice-commons/classes/Call.html))
+- **Error Handling** - Robust error handling patterns (see [Error Handling Guide](https://developers.telnyx.com/development/webrtc/react-native-sdk/error-handling))  
+- **State Management** - RxJS observables and reactive patterns (see [TelnyxVoipClient API](https://team-telnyx.github.io/react-native-voice-commons/classes/TelnyxVoipClient.html))
 
 ## Configuration Options
 
@@ -237,10 +237,10 @@ if (!success) {
 
 ## Need Help?
 
-- **[API Documentation](../README.md)** - Complete API reference
-- **[Push Notifications](../push-notification/README.md)** - Push notification setup
-- **[Troubleshooting](../README.md#troubleshooting)** - Common issues and solutions
-- **[Demo App](../../README.md)** - Full demo application source code
+- **[API Documentation](https://developers.telnyx.com/development/webrtc/react-native-sdk/classes)** - Complete API reference
+- **[Push Notifications](https://developers.telnyx.com/development/webrtc/react-native-sdk/push-notifications)** - Push notification setup
+- **[Troubleshooting](https://developers.telnyx.com/development/webrtc/react-native-sdk/error-handling)** - Common issues and solutions
+- **[Demo App](https://github.com/team-telnyx/react-native-voice-commons/)** - Full demo application source code
 
 ## You're Ready!
 

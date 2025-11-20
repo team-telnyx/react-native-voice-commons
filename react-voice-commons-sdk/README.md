@@ -1,20 +1,17 @@
-# Telnyx React Native Voice SDK Demo
+# Telnyx React Voice Commons SDK 
 
-A comprehensive demo application showcasing the **@telnyx/react-voice-commons-sdk** library - a high-level, state-agnostic, drop-in module for the Telnyx React Native SDK that simplifies WebRTC voice calling integration.
+A high-level, state-agnostic, drop-in module for the Telnyx React Native SDK that simplifies WebRTC voice calling integration. This library provides a comprehensive solution for building VoIP applications with native call UI support, push notifications, and seamless background handling.
 
-## Overview
 
-This demo app demonstrates how to integrate the `@telnyx/react-voice-commons-sdk` library to create a fully functional VoIP calling application with native call UI support, push notifications, and background handling.
-
-### Key Features Demonstrated
+### Key Features
 
 - **TelnyxVoiceApp Integration**: Automatic lifecycle management and push notification handling
 - **Native Call UI**: CallKit (iOS) and ConnectionService (Android) integration
 - **Background Handling**: Seamless app state transitions and background call processing
 - **Push Notifications**: Firebase (Android) and APNs (iOS) integration
 - **Reactive State Management**: RxJS-based state streams for real-time UI updates
-- **Modern UI Components**: Built with NativeWind v4 and react-native-reusables
-- **Dark/Light Mode**: Persistent theme support with system navigation bar matching
+- **TypeScript Support**: Full TypeScript definitions for better developer experience
+- **Cross-Platform**: Built for both iOS and Android with React Native
 
 ## About @telnyx/react-voice-commons-sdk
 
@@ -33,7 +30,7 @@ The `@telnyx/react-voice-commons-sdk` library provides:
 
 ### Basic Setup
 
-The demo shows how to integrate the library using the `TelnyxVoiceApp` component for automatic lifecycle management:
+Integrate the library using the `TelnyxVoiceApp` component for automatic lifecycle management:
 
 ```tsx
 import { TelnyxVoiceApp, createTelnyxVoipClient } from '@telnyx/react-voice-commons-sdk';
@@ -53,7 +50,7 @@ export default function App() {
 }
 ```
 
-### Core Components Used in Demo
+### Core Components
 
 #### 1. VoIP Client Configuration
 
@@ -178,7 +175,7 @@ if (!success) {
 - Network reconnection after connectivity loss
 - App state changes (foreground/background transitions)
 
-**Demo App Note**: The demo app's `TelnyxLoginForm` component does additional storage for UI convenience (pre-filling the login form). This is separate from the library's internal authentication storage and is not required for production apps.
+**Demo App Note**: When using the library in a demo application, the `TelnyxLoginForm` component may do additional storage for UI convenience (pre-filling login forms). This is separate from the library's internal authentication storage and is not required for production apps.
 
 ##### Manual Storage Management (Advanced Use Only)
 
@@ -200,7 +197,7 @@ await AsyncStorage.multiRemove([
 
 ### Native Integration
 
-The demo app shows complete native integration for both platforms. These integrations are required for production apps using the library.
+The library provides complete native integration for both platforms. These integrations are required for production apps using the library.
 
 #### Android Integration
 
