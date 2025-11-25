@@ -289,84 +289,134 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
       try {
         let pushData: Record<string, any> | null = null;
 
-        // Try to get push data from the native layer using our VoicePnBridge
-        try {
-          // Import the native bridge module dynamically
-          const { NativeModules } = require('react-native');
-          const VoicePnBridge = NativeModules.VoicePnBridge;
+        // Try to get push data from the native layer using platform-specific methods
+        if (Platform.OS === 'android') {
+          try {
+            // Import the native bridge module dynamically
+            const { NativeModules } = require('react-native');
+            const VoicePnBridge = NativeModules.VoicePnBridge;
 
-          if (VoicePnBridge) {
-            log('Checking for pending push actions via VoicePnBridge');
+            if (VoicePnBridge) {
+              log('Checking for pending push actions via VoicePnBridge');
 
-            // First check for pending call actions (notification button taps like hangup/answer)
-            const pendingCallAction = await VoicePnBridge.getPendingCallAction();
-            log('Raw pending call action response:', pendingCallAction);
+              // First check for pending call actions (notification button taps like hangup/answer)
+              const pendingCallAction = await VoicePnBridge.getPendingCallAction();
+              log('Raw pending call action response:', pendingCallAction);
 
-            if (pendingCallAction && pendingCallAction.action != null) {
-              log('Found pending call action:', pendingCallAction);
+              if (pendingCallAction && pendingCallAction.action != null) {
+                log('Found pending call action:', pendingCallAction);
 
-              // Handle call actions directly
-              if (pendingCallAction.action === 'hangup' && pendingCallAction.callId) {
-                log(
-                  'Processing hangup action from notification for call:',
-                  pendingCallAction.callId
-                );
+                // Handle call actions directly
+                if (pendingCallAction.action === 'hangup' && pendingCallAction.callId) {
+                  log(
+                    'Processing hangup action from notification for call:',
+                    pendingCallAction.callId
+                  );
 
-                // Find and hangup the call
-                const activeCall = voipClient.currentActiveCall;
-                if (activeCall && activeCall.callId === pendingCallAction.callId) {
-                  log('Hanging up active call from notification action');
-                  try {
-                    await activeCall.hangup();
-                    log('Call hung up successfully from notification action');
-                  } catch (error) {
-                    log('Error hanging up call from notification action:', error);
+                  // Find and hangup the call
+                  const activeCall = voipClient.currentActiveCall;
+                  if (activeCall && activeCall.callId === pendingCallAction.callId) {
+                    log('Hanging up active call from notification action');
+                    try {
+                      await activeCall.hangup();
+                      log('Call hung up successfully from notification action');
+                    } catch (error) {
+                      log('Error hanging up call from notification action:', error);
+                    }
+                  } else {
+                    log('No matching active call found for hangup action');
                   }
-                } else {
-                  log('No matching active call found for hangup action');
+
+                  // Clear the pending action
+                  await VoicePnBridge.clearPendingCallAction();
+                  return; // Don't process as push data
+                }
+              }
+
+              // Then check for regular push notification data
+              const pendingAction = await VoicePnBridge.getPendingPushAction();
+              log('Raw pending action response:', pendingAction);
+
+              if (pendingAction && pendingAction.action != null && pendingAction.metadata != null) {
+                log('Found pending push action:', pendingAction);
+
+                // Parse the metadata if it's a string
+                let metadata = pendingAction.metadata;
+                try {
+                  // First try parsing as JSON
+                  metadata = JSON.parse(metadata);
+                  log('Parsed metadata as JSON:', metadata);
+                } catch (e) {
+                  log('JSON parse failed, trying Android key-value format');
                 }
 
-                // Clear the pending action
-                await VoicePnBridge.clearPendingCallAction();
-                return; // Don't process as push data
+                // Create push data structure that matches what the VoIP client expects
+                pushData = {
+                  action: pendingAction.action,
+                  metadata: metadata,
+                  from_notification: true,
+                };
+
+                // Clear the pending action so it doesn't get processed again
+                await VoicePnBridge.clearPendingPushAction();
+                log('Cleared pending push action after retrieval');
+              } else {
+                log('No pending push actions found');
               }
-            }
-
-            // Then check for regular push notification data
-            const pendingAction = await VoicePnBridge.getPendingPushAction();
-            log('Raw pending action response:', pendingAction);
-
-            if (pendingAction && pendingAction.action != null && pendingAction.metadata != null) {
-              log('Found pending push action:', pendingAction);
-
-              // Parse the metadata if it's a string
-              let metadata = pendingAction.metadata;
-              try {
-                // First try parsing as JSON
-                metadata = JSON.parse(metadata);
-                log('Parsed metadata as JSON:', metadata);
-              } catch (e) {
-                log('JSON parse failed, trying Android key-value format');
-              }
-
-              // Create push data structure that matches what the VoIP client expects
-              pushData = {
-                action: pendingAction.action,
-                metadata: metadata,
-                from_notification: true,
-              };
-
-              // Clear the pending action so it doesn't get processed again
-              await VoicePnBridge.clearPendingPushAction();
-              log('Cleared pending push action after retrieval');
             } else {
-              log('No pending push actions found');
+              log('VoicePnBridge not available on Android');
             }
-          } else {
-            log('VoicePnBridge not available - this is expected on iOS');
+          } catch (bridgeError) {
+            log('Error accessing VoicePnBridge on Android:', bridgeError);
           }
-        } catch (bridgeError) {
-          log('Error accessing VoicePnBridge:', bridgeError);
+        } else if (Platform.OS === 'ios') {
+          try {
+            // Import the native bridge module dynamically (same as Android)
+            const { NativeModules } = require('react-native');
+            const VoicePnBridge = NativeModules.VoicePnBridge;
+            
+            if (VoicePnBridge) {
+              log('Checking for pending VoIP push data via iOS VoicePnBridge');
+
+              // Check for VoIP push notification data stored by the native push handler
+              const pendingVoipPushJson = await VoicePnBridge.getPendingVoipPush();
+              log('Raw pending VoIP push response:', pendingVoipPushJson);
+
+              if (pendingVoipPushJson) {
+                try {
+                  const pendingVoipPush = JSON.parse(pendingVoipPushJson);
+                  const voipPayload = pendingVoipPush?.payload;
+                  
+                  if (voipPayload && voipPayload.metadata) {
+                    log('Found pending VoIP push data:', voipPayload);
+
+                    // Create push data structure that matches what the VoIP client expects
+                    pushData = {
+                      action: 'incoming_call',
+                      metadata: voipPayload.metadata,
+                      from_notification: true,
+                    };
+
+                    // Clear the pending VoIP push data so it doesn't get processed again
+                    await VoicePnBridge.clearPendingVoipPush();
+                    log('Cleared pending VoIP push data after retrieval');
+                  } else {
+                    log('Invalid VoIP push data structure');
+                  }
+                } catch (parseError) {
+                  log('Error parsing VoIP push JSON:', parseError);
+                }
+              } else {
+                log('No pending VoIP push data found');
+              }
+            } else {
+              log('VoicePnBridge not available on iOS');
+            }
+          } catch (bridgeError) {
+            log('Error accessing VoicePnBridge on iOS:', bridgeError);
+          }
+        } else {
+          log('Push data check skipped - unsupported platform');
         }
 
         // Process the push notification if found
@@ -418,7 +468,8 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
 
           // Note: isHandlingForegroundCall will be reset when calls.length becomes 0
           // This prevents premature disconnection during CallKit answer flow
-        } else {
+        } 
+        else {
           log('No initial push data found');
         }
       } catch (e) {
