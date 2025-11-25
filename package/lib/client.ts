@@ -36,6 +36,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
   // Network reconnection state
   private reconnecting: boolean = false;
+  private lastNetworkType: string | null = null; // Track network type changes
   private credentialSessionConfig: any = null; // Store login credentials for reconnection
   private tokenSessionConfig: any = null; // Store login token for reconnection
   private reconnectionTimeoutHandle: any = null;
@@ -144,6 +145,14 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     console.log(
       `🔧 TelnyxRTC: Log level set to '${logLevel}' (dev: ${__DEV__}, requested: ${opts.logLevel})`
     );
+
+    // Initialize lastNetworkType with current network state
+    NetInfo.fetch().then((state) => {
+      this.lastNetworkType = state.type;
+      log.debug('[TelnyxRTC] Initial network type set to:', state.type);
+    }).catch((error) => {
+      log.warn('[TelnyxRTC] Failed to fetch initial network state:', error);
+    });
 
     this.netInfoSubscription = NetInfo.addEventListener(this.onNetInfoStateChange);
   }
@@ -567,8 +576,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       return;
     }
 
-    // Cancel any ongoing reconnection process
-    this.reconnecting = false;
+  
     this.cancelReconnectionTimer();
 
     // Clear stored configurations
@@ -598,6 +606,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       this.pushNotificationPayload = null;
       this.pendingInvite = null;
       this.pushNotificationCallKitUUID = null;
+        // Cancel any ongoing reconnection process
+      this.reconnecting = false;
       log.debug('[TelnyxRTC] Reset push flags on disconnect');
 
       // Clear stored push state from AsyncStorage
@@ -814,20 +824,72 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   };
 
   private onNetInfoStateChange = (state: NetInfoState) => {
-    log.debug(`[TelnyxRTC] Network state changed: ${state.isInternetReachable}`);
+    log.debug(`[TelnyxRTC] Network state changed:`, {
+      isConnected: state.isConnected,
+      isInternetReachable: state.isInternetReachable,
+      type: state.type,
+      details: state.details
+    });
 
-    if (state.isInternetReachable === false) {
+    // Handle complete network loss
+    if ((state.isInternetReachable === false || state.isConnected === false)) {
+      log.debug('[TelnyxRTC] Network completely unavailable');
       this.onNetworkUnavailable();
-    } else if (state.isInternetReachable === true && this.reconnecting) {
+      return;
+    }
+
+    // Handle network type changes (WiFi <-> Cellular transitions)
+    if (this.lastNetworkType && this.lastNetworkType !== state.type) {
+          // Update last known network type
+      this.lastNetworkType = state.type;
+      log.debug(`[TelnyxRTC] Network type changed: ${this.lastNetworkType} -> ${state.type}`);
+      this.onNetworkTypeChanged(state);
+
+      return;
+    }
+
+
+
+    // Handle network becoming available after being unavailable
+    if (state.isInternetReachable === true && this.reconnecting) {
       this.onNetworkAvailable();
     }
   };
+
+  /**
+   * Handles network type changes (WiFi <-> Cellular transitions)
+   * These transitions can disrupt WebRTC connections even when internet remains reachable
+   */
+  private onNetworkTypeChanged(state: NetInfoState) {
+    log.debug('[TelnyxRTC] Network type changed - checking connection stability');
+    
+    // Give the network transition a moment to stabilize before checking connection
+      if (state.isInternetReachable && this.reconnecting) {
+        log.debug('[TelnyxRTC] Network type change detected - triggering proactive reconnection');
+        this.onNetworkAvailable();
+      } else if (!state.isInternetReachable && !this.reconnecting) {
+        log.debug('[TelnyxRTC] Network type change led to loss of connectivity - starting reconnection process');
+        this.onNetworkUnavailable();
+      } else if (state.isInternetReachable) {
+        log.debug('[TelnyxRTC] Network type change detected - simulating brief network loss for reconnection');
+         this.onNetworkUnavailable();
+         setTimeout(() => {
+           this.onNetworkAvailable();
+         }, 1500); // 1.5 seconds delay
+      }
+  }
 
   /**
    * Handles network becoming unavailable
    * Matches Android SDK behavior: disconnect calls and start reconnection
    */
   private onNetworkUnavailable() {
+
+    if (this.reconnecting) {
+      log.debug('[TelnyxRTC] Already in reconnection process, ignoring network unavailable event');
+      return;
+    }
+
     log.debug('[TelnyxRTC] Network unavailable - starting reconnection process');
     this.reconnecting = true;
 
@@ -864,6 +926,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    */
   private async attemptReconnection() {
     if (!this.reconnecting) {
+      log.debug('[TelnyxRTC] Not in reconnection state, skipping reconnection attempt');
       return;
     }
 
