@@ -41,9 +41,21 @@ const CurrentCall = ({ call, callState }: Props) => {
       console.log('CurrentCall: Rendering ActiveCall for state:', callState);
       return <ActiveCall call={call} />;
     }
-    case TelnyxCallState.ENDED:
-    case TelnyxCallState.FAILED:
     case TelnyxCallState.DROPPED: {
+      console.log('CurrentCall: Rendering CallConnecting for dropped call (reconnecting)', { isPushNotificationCall });
+      const callDirection = call.isIncoming ? 'from' : 'to';
+      return (
+        <CallConnecting 
+          call={call} 
+          isPushNotificationCall={isPushNotificationCall}
+          title="Reconnecting..."
+          description={`Reconnecting call ${callDirection} ${call.destination}...`}
+          loadingText="Restoring connection"
+        />
+      );
+    }
+    case TelnyxCallState.ENDED:
+    case TelnyxCallState.FAILED: {
       console.log('CurrentCall: Not rendering - call state is', callState);
       return null;
     }

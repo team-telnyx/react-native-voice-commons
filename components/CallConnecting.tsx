@@ -5,9 +5,18 @@ import { useState, useEffect } from 'react';
 type Props = {
   call: Call;
   isPushNotificationCall?: boolean;
+  title?: string;
+  description?: string;
+  loadingText?: string;
 };
 
-export function CallConnecting({ call, isPushNotificationCall = false }: Props) {
+export function CallConnecting({ 
+  call, 
+  isPushNotificationCall = false,
+  title = "Connecting call...",
+  description,
+  loadingText
+}: Props) {
   const [isOpen, setIsOpen] = useState(true);
 
   console.log('CallConnecting: Rendering with call:', {
@@ -39,13 +48,17 @@ export function CallConnecting({ call, isPushNotificationCall = false }: Props) 
     },
   ];
 
+  // Default values based on call state
+  const defaultDescription = `Connecting to ${call.destination}...`;
+  const defaultLoadingText = call.destination;
+
   return (
     <CallModal
       visible={isOpen}
-      title="Connecting call..."
-      description={`Connecting to ${call.destination}...`}
+      title={title}
+      description={description || defaultDescription}
       isLoading={true}
-      loadingText={call.destination}
+      loadingText={loadingText || defaultLoadingText}
       buttons={buttons}
       onRequestClose={() => {}}
     />
