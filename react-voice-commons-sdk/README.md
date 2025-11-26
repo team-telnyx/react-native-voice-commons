@@ -464,16 +464,6 @@ useEffect(() => {
 
 For complete API documentation and advanced usage patterns, see the [TelnyxVoiceApp Documentation](./react-voice-commons-sdk/TELNYX_VOICE_APP.md).
 
-## Contributing
-
-When contributing to this demo or the underlying library:
-
-1. Maintain compatibility with both iOS and Android platforms
-2. Add comprehensive tests for new features
-3. Update documentation for any API changes
-4. Follow the existing code style and patterns
-5. Test with both foreground and background scenarios
-
 ## License
 
 MIT License - see LICENSE file for details.

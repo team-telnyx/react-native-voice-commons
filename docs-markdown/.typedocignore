@@ -1,0 +1,7 @@
+# Manual Documentation - DO NOT DELETE
+# These folders contain manually-written documentation guides
+# They should never be overridden by TypeDoc auto-generation
+
+error-handling/
+push-notification/
+quickstart/

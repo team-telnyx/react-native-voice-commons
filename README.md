@@ -470,16 +470,6 @@ For complete API documentation and advanced usage patterns, see:
 - **[API Reference](https://developers.telnyx.com/development/webrtc/react-native-sdk)** - Auto-generated TypeDoc documentation
 - **[TelnyxVoiceApp Documentation](https://developers.telnyx.com/development/webrtc/react-native-sdk)** - Detailed component guide
 
-## Contributing
-
-When contributing to this demo or the underlying library:
-
-1. Maintain compatibility with both iOS and Android platforms
-2. Add comprehensive tests for new features
-3. Update documentation for any API changes
-4. Follow the existing code style and patterns
-5. Test with both foreground and background scenarios
-
 ## License
 
 MIT License - see LICENSE file for details.
