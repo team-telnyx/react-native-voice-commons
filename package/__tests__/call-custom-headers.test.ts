@@ -24,7 +24,6 @@ const mockCallOptions = {
 };
 
 describe('Call Custom Headers', () => {
-
   beforeEach(() => {
     // Reset mocks
     jest.clearAllMocks();
@@ -235,8 +234,8 @@ describe('Call Custom Headers', () => {
         },
       };
 
-    // Mock Peer constructor to return our mock
-    (Peer as jest.MockedClass<typeof Peer>).mockImplementation(() => mockPeer);
+      // Mock Peer constructor to return our mock
+      (Peer as jest.MockedClass<typeof Peer>).mockImplementation(() => mockPeer);
       mockPeer.createPeerConnection = jest.fn();
       mockPeer.setRemoteDescription = jest.fn();
 
@@ -416,12 +415,12 @@ describe('Message Creation Functions', () => {
       });
 
       // Mock invite method dependencies
-      const mockMsg = { 
-        result: { 
+      const mockMsg = {
+        result: {
           callID: 'updated-call-id',
           sessid: 'test-session-id',
-          message: 'CALL CREATED'
-        } 
+          message: 'CALL CREATED',
+        },
       };
       mockConnection.sendAndWait = jest.fn().mockResolvedValue(mockMsg);
 

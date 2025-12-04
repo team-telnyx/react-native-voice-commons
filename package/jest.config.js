@@ -4,15 +4,18 @@ module.exports = {
   roots: ['<rootDir>/lib', '<rootDir>/__tests__'],
   testMatch: ['**/__tests__/**/*.+(ts|tsx|js)', '**/*.(test|spec).+(ts|tsx|js)'],
   transform: {
-    '^.+\\.(ts|tsx)$': ['ts-jest', {
-      isolatedModules: true,
-      skipLibCheck: true,
-      allowJs: true,
-      esModuleInterop: true,
-      moduleResolution: 'node',
-      target: 'ES2018',
-      transpileOnly: true,
-    }],
+    '^.+\\.(ts|tsx)$': [
+      'ts-jest',
+      {
+        isolatedModules: true,
+        skipLibCheck: true,
+        allowJs: true,
+        esModuleInterop: true,
+        moduleResolution: 'node',
+        target: 'ES2018',
+        transpileOnly: true,
+      },
+    ],
   },
   collectCoverageFrom: ['lib/**/*.{ts,tsx}', '!lib/**/*.d.ts', '!lib/index.ts'],
   coverageDirectory: 'coverage',
@@ -33,7 +36,5 @@ module.exports = {
     './keep-alive-handler': '<rootDir>/__mocks__/keep-alive-handler.js',
     './peer': '<rootDir>/__mocks__/peer.js',
   },
-  transformIgnorePatterns: [
-    'node_modules/(?!(react-native|@react-native|react-native-webrtc)/)',
-  ],
+  transformIgnorePatterns: ['node_modules/(?!(react-native|@react-native|react-native-webrtc)/)'],
 };

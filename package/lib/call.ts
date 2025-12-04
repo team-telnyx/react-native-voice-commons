@@ -237,7 +237,7 @@ export class Call extends EventEmitter<CallEvents> {
     this.setState('active');
   };
 
-   /**
+  /**
    * Accept an incoming call for attachment
    * This method will attach the local audio stream, create an answer,
    * and send the answer message to the Telnyx platform for call reattachment.
@@ -247,12 +247,12 @@ export class Call extends EventEmitter<CallEvents> {
    */
   public answerAttach = async () => {
     log.debug('[Call] Starting answerAttach process');
-    
+
     if (!this.peer) {
       log.error('[Call] No peer connection available for answerAttach');
       throw new Error('[Call] Peer is not created');
     }
-    
+
     try {
       log.debug('[Call] Attaching local stream and creating answer for reattachment');
       await this.peer
@@ -267,7 +267,7 @@ export class Call extends EventEmitter<CallEvents> {
         });
 
       log.debug('[Call] ICE gathering complete, preparing answer message');
-      
+
       if (!this.peer.localDescription?.sdp) {
         log.error('[Call] No local SDP available for answer message');
         throw new Error('[Call] Local SDP not available');
@@ -288,16 +288,15 @@ export class Call extends EventEmitter<CallEvents> {
       log.debug('[Call] Sending attach message for reattachment:', {
         callId: this.callId,
         sessionId: this.sessionId,
-        hasCustomHeaders: !!(this.inviteCustomHeaders && this.inviteCustomHeaders.length > 0)
+        hasCustomHeaders: !!(this.inviteCustomHeaders && this.inviteCustomHeaders.length > 0),
       });
 
       // Send attach message for call reattachment (critical for WebRTC media flow)
       await this.connection.sendAndWait(attachMessage);
-      
+
       log.debug('[Call] Attach message sent successfully, setting call to active');
       this.setState('active');
       log.debug('[Call] answerAttach completed successfully');
-      
     } catch (error) {
       log.error('[Call] answerAttach failed:', error);
       throw error;
@@ -515,7 +514,7 @@ export class Call extends EventEmitter<CallEvents> {
    */
   public handleEarlyMedia = (sdp: string) => {
     log.debug('[Call] Handling early media with SDP');
-    
+
     if (!this.peer) {
       log.warn('[Call] No peer connection available for early media setup');
       return;
@@ -525,7 +524,7 @@ export class Call extends EventEmitter<CallEvents> {
       // For outbound calls, the media SDP is an answer to our local offer
       // For inbound calls, the media SDP would be an offer (but inbound calls typically get SDP in invite)
       const sdpType = this.direction === 'outbound' ? 'answer' : 'offer';
-      
+
       log.debug(`[Call] Setting early media SDP as ${sdpType} for ${this.direction} call`);
       this.peer.setRemoteDescription({ type: sdpType, sdp });
       log.debug('[Call] Early media SDP set successfully');
@@ -564,7 +563,9 @@ export class Call extends EventEmitter<CallEvents> {
 
     // Handle video changes (if supported in the future)
     if (video !== undefined) {
-      log.debug(`[Call] Video media update received but not yet implemented: ${target} video ${video ? 'enabled' : 'disabled'}`);
+      log.debug(
+        `[Call] Video media update received but not yet implemented: ${target} video ${video ? 'enabled' : 'disabled'}`
+      );
       // TODO: Implement video handling when video calling is supported
     }
   };
@@ -638,7 +639,7 @@ export class Call extends EventEmitter<CallEvents> {
    */
   public handleRemoteAnswer = (sdp: string) => {
     log.debug('[Call] Handling remote answer SDP');
-    
+
     if (!this.peer) {
       log.warn('[Call] No peer connection available for remote answer SDP');
       return;

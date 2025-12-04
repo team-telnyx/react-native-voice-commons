@@ -50,7 +50,7 @@ export function createPasswordLoginMessage({
     login,
     passwd: password,
     reconnection,
-  'User-Agent': `${Platform.OS === 'android' ? 'Android' : 'iOS'}-${SDK_VERSION}`,
+    'User-Agent': `${Platform.OS === 'android' ? 'Android' : 'iOS'}-${SDK_VERSION}`,
   };
 
   // Add from_push flag if this is a push-initiated connection (matching iOS SDK behavior)

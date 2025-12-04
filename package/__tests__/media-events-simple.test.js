@@ -2,10 +2,7 @@
 describe('Media Event Functions', () => {
   // Mock the modules we need
   const isMediaEvent = (msg) => {
-    return !!(msg && 
-              msg.method === 'telnyx_rtc.media' && 
-              msg.params && 
-              msg.params.callID);
+    return !!(msg && msg.method === 'telnyx_rtc.media' && msg.params && msg.params.callID);
   };
 
   const createMediaMessage = (params) => {
@@ -62,10 +59,12 @@ describe('Media Event Functions', () => {
       expect(isMediaEvent({})).toBe(false);
       expect(isMediaEvent({ method: 'telnyx_rtc.invite' })).toBe(false);
       expect(isMediaEvent({ method: 'telnyx_rtc.media' })).toBe(false); // missing params
-      expect(isMediaEvent({ 
-        method: 'telnyx_rtc.media', 
-        params: {} 
-      })).toBe(false); // missing callID
+      expect(
+        isMediaEvent({
+          method: 'telnyx_rtc.media',
+          params: {},
+        })
+      ).toBe(false); // missing callID
     });
   });
 
@@ -121,9 +120,7 @@ describe('Media Event Functions', () => {
           callID: 'test-call-id',
           sdp: 'v=0\r\no=- answer123 answer123 IN IP4 192.168.1.4\r\n...',
           dialogParams: {
-            custom_headers: [
-              { name: 'X-Custom-Header', value: 'test-value' }
-            ],
+            custom_headers: [{ name: 'X-Custom-Header', value: 'test-value' }],
           },
         },
       };
@@ -140,21 +137,23 @@ describe('Media Event Functions', () => {
       if (mockCall && mockCall.callId === answerEvent.params.callID) {
         // Store custom headers
         mockCall.answerCustomHeaders = answerEvent.params.dialogParams?.custom_headers || null;
-        
+
         // Handle SDP if present
         if (answerEvent.params.sdp) {
           mockCall.handleRemoteAnswer(answerEvent.params.sdp);
         }
-        
+
         // Set call to active
         mockCall.setActive();
       }
 
       // Verify the logic worked
       expect(mockCall.answerCustomHeaders).toEqual([
-        { name: 'X-Custom-Header', value: 'test-value' }
+        { name: 'X-Custom-Header', value: 'test-value' },
       ]);
-      expect(mockCall.handleRemoteAnswer).toHaveBeenCalledWith('v=0\r\no=- answer123 answer123 IN IP4 192.168.1.4\r\n...');
+      expect(mockCall.handleRemoteAnswer).toHaveBeenCalledWith(
+        'v=0\r\no=- answer123 answer123 IN IP4 192.168.1.4\r\n...'
+      );
       expect(mockCall.setActive).toHaveBeenCalled();
     });
 
@@ -179,20 +178,20 @@ describe('Media Event Functions', () => {
       // Simulate processing
       if (mockCall && mockCall.callId === answerEvent.params.callID) {
         mockCall.answerCustomHeaders = answerEvent.params.dialogParams?.custom_headers || null;
-        
+
         if (answerEvent.params.sdp) {
           mockCall.handleRemoteAnswer(answerEvent.params.sdp);
         }
-        
+
         mockCall.setActive();
       }
 
       // Verify handleRemoteAnswer was NOT called (no SDP)
       expect(mockCall.handleRemoteAnswer).not.toHaveBeenCalled();
-      
+
       // Verify call was still set to active
       expect(mockCall.setActive).toHaveBeenCalled();
-      
+
       // Verify empty custom headers
       expect(mockCall.answerCustomHeaders).toBeNull();
     });
@@ -227,7 +226,7 @@ describe('Media Event Functions', () => {
         if (mediaEvent.params.sdp) {
           mockCall.handleEarlyMedia(mediaEvent.params.sdp);
         }
-        
+
         if (mediaEvent.params.audio !== undefined || mediaEvent.params.video !== undefined) {
           mockCall.handleMediaUpdate({
             audio: mediaEvent.params.audio,
@@ -238,7 +237,9 @@ describe('Media Event Functions', () => {
       }
 
       // Verify early media was processed
-      expect(mockCall.handleEarlyMedia).toHaveBeenCalledWith('v=0\r\no=- early123 early123 IN IP4 192.168.1.7\r\n...');
+      expect(mockCall.handleEarlyMedia).toHaveBeenCalledWith(
+        'v=0\r\no=- early123 early123 IN IP4 192.168.1.7\r\n...'
+      );
       expect(mockCall.handleMediaUpdate).toHaveBeenCalledWith({
         audio: true,
         video: undefined,
@@ -262,17 +263,17 @@ describe('Media Event Functions', () => {
       // Process answer event
       if (mockCall && mockCall.callId === answerEvent.params.callID) {
         mockCall.answerCustomHeaders = answerEvent.params.dialogParams?.custom_headers || null;
-        
+
         if (answerEvent.params.sdp) {
           mockCall.handleRemoteAnswer(answerEvent.params.sdp);
         }
-        
+
         mockCall.setActive();
       }
 
       // Verify remote answer was NOT called (no SDP in answer)
       expect(mockCall.handleRemoteAnswer).not.toHaveBeenCalled();
-      
+
       // Verify call was set to active
       expect(mockCall.setActive).toHaveBeenCalled();
     });
@@ -298,17 +299,19 @@ describe('Media Event Functions', () => {
       // Process answer event directly
       if (mockCall && mockCall.callId === answerEvent.params.callID) {
         mockCall.answerCustomHeaders = answerEvent.params.dialogParams?.custom_headers || null;
-        
+
         if (answerEvent.params.sdp) {
           mockCall.handleRemoteAnswer(answerEvent.params.sdp);
         }
-        
+
         mockCall.setActive();
       }
 
       // Verify remote answer was processed
-      expect(mockCall.handleRemoteAnswer).toHaveBeenCalledWith('v=0\r\no=- direct123 direct123 IN IP4 192.168.1.8\r\n...');
-      
+      expect(mockCall.handleRemoteAnswer).toHaveBeenCalledWith(
+        'v=0\r\no=- direct123 direct123 IN IP4 192.168.1.8\r\n...'
+      );
+
       // Verify call was set to active
       expect(mockCall.setActive).toHaveBeenCalled();
     });

@@ -82,10 +82,12 @@ describe('Media Event Handling', () => {
       expect(isMediaEvent({})).toBe(false);
       expect(isMediaEvent({ method: 'telnyx_rtc.invite' })).toBe(false);
       expect(isMediaEvent({ method: 'telnyx_rtc.media' })).toBe(false); // missing params
-      expect(isMediaEvent({ 
-        method: 'telnyx_rtc.media', 
-        params: {} 
-      })).toBe(false); // missing callID
+      expect(
+        isMediaEvent({
+          method: 'telnyx_rtc.media',
+          params: {},
+        })
+      ).toBe(false); // missing callID
     });
   });
 
@@ -218,7 +220,9 @@ describe('Media Event Handling', () => {
       (client as any).handleMediaEvent(mediaEvent);
 
       // Verify handleEarlyMedia was called with SDP
-      expect(mockCall.handleEarlyMedia).toHaveBeenCalledWith('v=0\r\no=- 123456789 123456789 IN IP4 192.168.1.1\r\n...');
+      expect(mockCall.handleEarlyMedia).toHaveBeenCalledWith(
+        'v=0\r\no=- 123456789 123456789 IN IP4 192.168.1.1\r\n...'
+      );
 
       // Verify handleMediaUpdate was called
       expect(mockCall.handleMediaUpdate).toHaveBeenCalledWith({
@@ -248,7 +252,9 @@ describe('Media Event Handling', () => {
       (client as any).handleMediaEvent(mediaEvent);
 
       // Verify only handleEarlyMedia was called
-      expect(mockCall.handleEarlyMedia).toHaveBeenCalledWith('v=0\r\no=- 987654321 987654321 IN IP4 192.168.1.2\r\n...');
+      expect(mockCall.handleEarlyMedia).toHaveBeenCalledWith(
+        'v=0\r\no=- 987654321 987654321 IN IP4 192.168.1.2\r\n...'
+      );
       expect(mockCall.handleMediaUpdate).not.toHaveBeenCalled();
     });
 
@@ -277,8 +283,6 @@ describe('Media Event Handling', () => {
       });
       expect(mockCall.handleEarlyMedia).not.toHaveBeenCalled();
     });
-
-
   });
 
   describe('Answer Event Handling', () => {
@@ -298,9 +302,7 @@ describe('Media Event Handling', () => {
           callID: 'test-call-id',
           sdp: 'v=0\r\no=- answer123 answer123 IN IP4 192.168.1.4\r\n...',
           dialogParams: {
-            custom_headers: [
-              { name: 'X-Custom-Header', value: 'test-value' }
-            ],
+            custom_headers: [{ name: 'X-Custom-Header', value: 'test-value' }],
           },
         },
       };
@@ -314,11 +316,13 @@ describe('Media Event Handling', () => {
 
       // Verify custom headers were stored
       expect(mockCall.answerCustomHeaders).toEqual([
-        { name: 'X-Custom-Header', value: 'test-value' }
+        { name: 'X-Custom-Header', value: 'test-value' },
       ]);
 
       // Verify remote answer was processed
-      expect(mockCall.handleRemoteAnswer).toHaveBeenCalledWith('v=0\r\no=- answer123 answer123 IN IP4 192.168.1.4\r\n...');
+      expect(mockCall.handleRemoteAnswer).toHaveBeenCalledWith(
+        'v=0\r\no=- answer123 answer123 IN IP4 192.168.1.4\r\n...'
+      );
 
       // Verify call was set to active
       expect(mockCall.setActive).toHaveBeenCalled();
@@ -438,7 +442,9 @@ describe('Media Event Handling', () => {
       (client as any).handleMediaEvent(mediaEvent);
 
       // Verify early media was processed
-      expect(mockCall.handleEarlyMedia).toHaveBeenCalledWith('v=0\r\no=- early123 early123 IN IP4 192.168.1.7\r\n...');
+      expect(mockCall.handleEarlyMedia).toHaveBeenCalledWith(
+        'v=0\r\no=- early123 early123 IN IP4 192.168.1.7\r\n...'
+      );
 
       // Clear mock calls
       jest.clearAllMocks();
@@ -482,7 +488,9 @@ describe('Media Event Handling', () => {
       (client as any).handleCallAnswer(answerEvent);
 
       // Verify remote answer was processed
-      expect(mockCall.handleRemoteAnswer).toHaveBeenCalledWith('v=0\r\no=- direct123 direct123 IN IP4 192.168.1.8\r\n...');
+      expect(mockCall.handleRemoteAnswer).toHaveBeenCalledWith(
+        'v=0\r\no=- direct123 direct123 IN IP4 192.168.1.8\r\n...'
+      );
 
       // Verify call was set to active
       expect(mockCall.setActive).toHaveBeenCalled();

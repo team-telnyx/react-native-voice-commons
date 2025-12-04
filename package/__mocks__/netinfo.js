@@ -5,7 +5,7 @@ const mockState = {
   details: {
     strength: 99,
     ssid: 'MockWiFi',
-  }
+  },
 };
 
 const mockFetch = jest.fn(() => Promise.resolve(mockState));

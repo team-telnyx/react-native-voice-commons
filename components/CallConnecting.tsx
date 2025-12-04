@@ -10,12 +10,12 @@ type Props = {
   loadingText?: string;
 };
 
-export function CallConnecting({ 
-  call, 
+export function CallConnecting({
+  call,
   isPushNotificationCall = false,
-  title = "Connecting call...",
+  title = 'Connecting call...',
   description,
-  loadingText
+  loadingText,
 }: Props) {
   const [isOpen, setIsOpen] = useState(true);
 

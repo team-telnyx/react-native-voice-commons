@@ -126,9 +126,7 @@ export function isAnswerEvent(msg: unknown): msg is AnswerEvent {
     return false;
   }
   const temp: Partial<AnswerEvent> = msg;
-  return (
-    temp.method === 'telnyx_rtc.answer' && Boolean(temp.params?.callID)
-  );
+  return temp.method === 'telnyx_rtc.answer' && Boolean(temp.params?.callID);
 }
 
 export function createAnswerAck(id: number) {
@@ -258,9 +256,7 @@ export function isInviteEvent(msg: unknown): msg is InviteEvent {
     return false;
   }
   const temp: Partial<InviteEvent> = msg;
-  return (
-    temp.method === 'telnyx_rtc.invite' && Boolean(temp.params?.callID)
-  );
+  return temp.method === 'telnyx_rtc.invite' && Boolean(temp.params?.callID);
 }
 
 type AnswerMessage = {

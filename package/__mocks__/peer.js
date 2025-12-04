@@ -1,4 +1,4 @@
-// Mock for peer module  
+// Mock for peer module
 const mockPeerInstance = {
   createPeerConnection: jest.fn(),
   setRemoteDescription: jest.fn(),
