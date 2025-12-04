@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd react-voice-commons-sdk
-          npm install
+          npm install --legacy-peer-deps
 
       - name: Generate documentation
         run: |
