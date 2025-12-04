@@ -4,7 +4,6 @@
 
 ### Enhancement
 
-
 • Automatic WiFi ↔ 4G/5G network transition detection and handling
 • Smart dependency management workflow (local vs published packages)
 
