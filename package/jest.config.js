@@ -4,7 +4,15 @@ module.exports = {
   roots: ['<rootDir>/lib', '<rootDir>/__tests__'],
   testMatch: ['**/__tests__/**/*.+(ts|tsx|js)', '**/*.(test|spec).+(ts|tsx|js)'],
   transform: {
-    '^.+\\.(ts|tsx)$': 'ts-jest',
+    '^.+\\.(ts|tsx)$': ['ts-jest', {
+      isolatedModules: true,
+      skipLibCheck: true,
+      allowJs: true,
+      esModuleInterop: true,
+      moduleResolution: 'node',
+      target: 'ES2018',
+      transpileOnly: true,
+    }],
   },
   collectCoverageFrom: ['lib/**/*.{ts,tsx}', '!lib/**/*.d.ts', '!lib/index.ts'],
   coverageDirectory: 'coverage',
@@ -14,5 +22,18 @@ module.exports = {
   moduleNameMapper: {
     '@react-native-community/netinfo': '<rootDir>/__mocks__/netinfo.js',
     '@react-native-async-storage/async-storage': '<rootDir>/__mocks__/async-storage.js',
+    'react-native': '<rootDir>/__mocks__/react-native.js',
+    'uuid-random': '<rootDir>/__mocks__/uuid-random.js',
+    '^../lib/connection$': '<rootDir>/__mocks__/connection.js',
+    '^../lib/login-handler$': '<rootDir>/__mocks__/login-handler.js',
+    '^../lib/keep-alive-handler$': '<rootDir>/__mocks__/keep-alive-handler.js',
+    '^../lib/peer$': '<rootDir>/__mocks__/peer.js',
+    './connection': '<rootDir>/__mocks__/connection.js',
+    './login-handler': '<rootDir>/__mocks__/login-handler.js',
+    './keep-alive-handler': '<rootDir>/__mocks__/keep-alive-handler.js',
+    './peer': '<rootDir>/__mocks__/peer.js',
   },
+  transformIgnorePatterns: [
+    'node_modules/(?!(react-native|@react-native|react-native-webrtc)/)',
+  ],
 };

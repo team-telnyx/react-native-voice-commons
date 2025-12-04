@@ -508,6 +508,68 @@ export class Call extends EventEmitter<CallEvents> {
   };
 
   /**
+   * Handle early media/ringback from media events with SDP
+   * This method sets up early media playback for ringback tones or announcements
+   * received before the call is answered.
+   * @param sdp - The SDP from the media event for early media setup
+   */
+  public handleEarlyMedia = (sdp: string) => {
+    log.debug('[Call] Handling early media with SDP');
+    
+    if (!this.peer) {
+      log.warn('[Call] No peer connection available for early media setup');
+      return;
+    }
+
+    try {
+      // For outbound calls, the media SDP is an answer to our local offer
+      // For inbound calls, the media SDP would be an offer (but inbound calls typically get SDP in invite)
+      const sdpType = this.direction === 'outbound' ? 'answer' : 'offer';
+      
+      log.debug(`[Call] Setting early media SDP as ${sdpType} for ${this.direction} call`);
+      this.peer.setRemoteDescription({ type: sdpType, sdp });
+      log.debug('[Call] Early media SDP set successfully');
+    } catch (error) {
+      log.error('[Call] Failed to set early media SDP:', error);
+    }
+  };
+
+  /**
+   * Handle media update events (audio/video enable/disable)
+   * @param mediaUpdate - Object containing audio/video states and target
+   */
+  public handleMediaUpdate = (mediaUpdate: {
+    audio?: boolean;
+    video?: boolean;
+    target?: 'local' | 'remote';
+  }) => {
+    log.debug('[Call] Handling media update:', mediaUpdate);
+
+    const { audio, video, target = 'remote' } = mediaUpdate;
+
+    // Handle audio changes
+    if (audio !== undefined) {
+      try {
+        if (target === 'local' && this.options.localStream) {
+          this.peer?.setMediaStreamState(this.options.localStream, audio);
+          log.debug(`[Call] ${audio ? 'Enabled' : 'Disabled'} local audio`);
+        } else if (target === 'remote' && this.options.remoteStream) {
+          this.peer?.setMediaStreamState(this.options.remoteStream, audio);
+          log.debug(`[Call] ${audio ? 'Enabled' : 'Disabled'} remote audio`);
+        }
+      } catch (error) {
+        log.error('[Call] Error handling audio media update:', error);
+      }
+    }
+
+    // Handle video changes (if supported in the future)
+    if (video !== undefined) {
+      log.debug(`[Call] Video media update received but not yet implemented: ${target} video ${video ? 'enabled' : 'disabled'}`);
+      // TODO: Implement video handling when video calling is supported
+    }
+  };
+
+  /**
    * Get the Telnyx IDs associated with the call
    * This method returns an object containing the Telnyx session ID, leg ID, and call control ID.
    * @returns {Object} An object containing the Telnyx IDs
@@ -563,6 +625,34 @@ export class Call extends EventEmitter<CallEvents> {
   };
 
   /**
+   * Set the call to active state (used when answer event is received)
+   */
+  public setActive = () => {
+    log.debug('[Call] Setting state to active');
+    this.setState('active');
+  };
+
+  /**
+   * Handle remote answer SDP from answer events
+   * @param sdp - The SDP from the answer event
+   */
+  public handleRemoteAnswer = (sdp: string) => {
+    log.debug('[Call] Handling remote answer SDP');
+    
+    if (!this.peer) {
+      log.warn('[Call] No peer connection available for remote answer SDP');
+      return;
+    }
+
+    try {
+      this.peer.setRemoteDescription({ type: 'answer', sdp });
+      log.debug('[Call] Remote answer SDP set successfully');
+    } catch (error) {
+      log.error('[Call] Failed to set remote answer SDP:', error);
+    }
+  };
+
+  /**
    * Dispose of the peer connection and clean up resources
    * This should be called before creating a new peer for the same call
    */
@@ -582,9 +672,8 @@ export class Call extends EventEmitter<CallEvents> {
       return this.handleRingingEvent(msg);
     }
 
-    if (isAnswerEvent(msg) && msg.params.callID === this.callId) {
-      return this.handleAnswerEvent(msg);
-    }
+    // Answer events are now handled by the TelnyxRTC client to avoid duplication
+    // The client will call handleRemoteAnswer() when needed
 
     if (isByeEvent(msg) && msg.params.callID === this.callId) {
       return this.handleHangupEvent(msg);
@@ -599,21 +688,8 @@ export class Call extends EventEmitter<CallEvents> {
     this.connection.send(createRingingAckMessage(msg.id));
   };
 
-  private handleAnswerEvent = async (msg: AnswerEvent) => {
-    if (!this.peer) {
-      throw new Error('[Call] Peer not created');
-    }
-
-    // Store custom headers from the ANSWER message
-    this.answerCustomHeaders = msg.params.dialogParams?.custom_headers || null;
-
-    await this.peer.setRemoteDescription({
-      type: 'answer',
-      sdp: msg.params.sdp,
-    });
-    this.connection.send(createAnswerAck(msg.id));
-    this.setState('active');
-  };
+  // Answer events are now handled by the TelnyxRTC client to avoid duplication
+  // The client calls handleRemoteAnswer() when needed
 
   private handleHangupEvent = (msg: ByeEvent) => {
     log.debug('[Call] Hangup event received', msg);

@@ -87,7 +87,7 @@
   },
   "dependencies": {
     "@react-native-community/eslint-config": "^3.2.0",
-    "@telnyx/react4-native-voice-sdk": "^0.2.0",
+    "@telnyx/react-native-voice-sdk": "^0.2.0",
     "eventemitter3": "^5.0.1",
     "expo": "~53.0.22",
     "react-native-voip-push-notification": "^3.3.3",
