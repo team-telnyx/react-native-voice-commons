@@ -976,15 +976,16 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       // Transition call to active state
       log.debug('[TelnyxRTC] Setting call state to active');
       this.call.setActive();
+        // Emit the answer event for applications to handle
+      log.debug('[TelnyxRTC] Emitting telnyx.call.answered event');
+      if (this.call) {
+        this.emit('telnyx.call.answered', this.call, msg);
+     }
     } else {
       log.warn('[TelnyxRTC] No active call or callID mismatch for answer event');
     }
 
-    // Emit the answer event for applications to handle
-    log.debug('[TelnyxRTC] Emitting telnyx.call.answered event');
-    if (this.call) {
-      this.emit('telnyx.call.answered', this.call, msg);
-    }
+  
 
     log.debug('[TelnyxRTC] ====== CALL ANSWER HANDLING COMPLETE ======');
   };
