@@ -149,7 +149,7 @@ This hook encapsulates:
 - Event handling for incoming/outgoing calls
 - Call control functions (mute, hold, hangup)
 
-See the complete implementation in [`src/hooks/useTelnyxVoice.ts`](file:///Users/isaacakakpo/Documents/rtc_prod/expo_starter/src/hooks/useTelnyxVoice.ts).
+See the complete implementation in [`src/hooks/useTelnyxVoice.ts`](https://github.com/team-telnyx/react-native-voice-commons/blob/main/examples/expo_starter/src/hooks/useTelnyxVoice.ts) in the example app.
 
 ### Step 2: Create UI Component
 
@@ -163,7 +163,7 @@ This component provides:
 - Call controls (answer, hangup, mute, hold)
 - Visual feedback for call states
 
-See the complete implementation in [`src/components/VoiceCallUI.tsx`](file:///Users/isaacakakpo/Documents/rtc_prod/expo_starter/src/components/VoiceCallUI.tsx).
+See the complete implementation in [`src/components/VoiceCallUI.tsx`](https://github.com/team-telnyx/react-native-voice-commons/blob/main/examples/expo_starter/src/components/VoiceCallUI.tsx) in the example app.
 
 ### Step 3: Update Main App Component
 

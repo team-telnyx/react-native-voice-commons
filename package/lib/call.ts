@@ -689,8 +689,6 @@ export class Call extends EventEmitter<CallEvents> {
     this.connection.send(createRingingAckMessage(msg.id));
   };
 
-  // Answer events are now handled by the TelnyxRTC client to avoid duplication
-  // The client calls handleRemoteAnswer() when needed
 
   private handleHangupEvent = (msg: ByeEvent) => {
     log.debug('[Call] Hangup event received', msg);
