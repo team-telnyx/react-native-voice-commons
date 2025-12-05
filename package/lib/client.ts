@@ -9,11 +9,18 @@ import { Connection } from './connection';
 import { KeepAliveHandler } from './keep-alive-handler';
 import { eventBus } from './legacy-event-bus';
 import { LoginHandler } from './login-handler';
-import type { InviteEvent } from './messages/call';
-import { createInviteAckMessage, isInviteEvent } from './messages/call';
+import type { InviteEvent, AnswerEvent } from './messages/call';
+import {
+  createInviteAckMessage,
+  isInviteEvent,
+  createAnswerAck,
+  isAnswerEvent,
+} from './messages/call';
 import { createAttachCallMessage } from './messages/attach';
 import type { AttachEvent } from './messages/attach';
 import { isAttachEvent } from './messages/attach';
+import type { MediaEvent } from './messages/media';
+import { isMediaEvent } from './messages/media';
 import { isValidGatewayStateResponse } from './messages/gateway';
 import { from } from 'rxjs';
 
@@ -22,6 +29,8 @@ type TelnyxRTCEvents = {
   'telnyx.client.error': (error: Error) => void;
   'telnyx.call.incoming': (call: Call, msg: InviteEvent) => void;
   'telnyx.call.reattached': (call: Call, msg: AttachEvent) => void;
+  'telnyx.media.received': (msg: MediaEvent) => void;
+  'telnyx.call.answered': (call: Call, msg: AnswerEvent) => void;
 };
 
 export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
@@ -48,6 +57,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private isCallFromPush: boolean = false;
   private pushNotificationPayload: any = null;
   private pendingInvite: InviteEvent | null = null;
+
+  // Early media/ringback support
+  private pendingMediaEvents: Map<string, MediaEvent> = new Map();
 
   // Pending call actions (matching iOS SDK behavior)
   private pendingAnswerAction: boolean = false;
@@ -147,14 +159,20 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     );
 
     // Initialize lastNetworkType with current network state
-    NetInfo.fetch().then((state) => {
-      this.lastNetworkType = state.type;
-      log.debug('[TelnyxRTC] Initial network type set to:', state.type);
-    }).catch((error) => {
-      log.warn('[TelnyxRTC] Failed to fetch initial network state:', error);
-    });
+    try {
+      NetInfo.fetch()
+        .then((state) => {
+          this.lastNetworkType = state.type;
+          log.debug('[TelnyxRTC] Initial network type set to:', state.type);
+        })
+        .catch((error) => {
+          log.warn('[TelnyxRTC] Failed to fetch initial network state:', error);
+        });
 
-    this.netInfoSubscription = NetInfo.addEventListener(this.onNetInfoStateChange);
+      this.netInfoSubscription = NetInfo.addEventListener(this.onNetInfoStateChange);
+    } catch (error) {
+      log.warn('[TelnyxRTC] NetInfo not available, network monitoring disabled:', error);
+    }
   }
 
   /**
@@ -522,7 +540,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     log.debug('[TelnyxRTC] Attempting login...');
     // The attach_call parameter and sessid are now handled automatically in the LoginHandler
-    log.debug('[TelnyxRTC] Login will include attach_call and sessid (if available) for reliable reconnection');
+    log.debug(
+      '[TelnyxRTC] Login will include attach_call and sessid (if available) for reliable reconnection'
+    );
 
     this.sessionId = await this.loginHandler.login(this.options);
     if (!this.sessionId) {
@@ -576,7 +596,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       return;
     }
 
-  
     this.cancelReconnectionTimer();
 
     // Clear stored configurations
@@ -589,7 +608,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     if (!fromReconnection) {
       log.debug('[TelnyxRTC] Disconnected due to reconnection process');
       this.removeAllListeners();
-      this.netInfoSubscription?.();
+      try {
+        this.netInfoSubscription?.();
+      } catch (error) {
+        log.warn('[TelnyxRTC] NetInfo subscription cleanup failed:', error);
+      }
 
       // Clear push-specific voice_sdk_id on disconnect to ensure clean state
       if ((this as any)._pushVoiceSDKId) {
@@ -598,7 +621,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       }
     }
 
-
     // Reset push flags on disconnect to ensure clean state for next connection
     // Preserve push-related flags during reconnection so they survive the disconnect
     if (!this.reconnecting) {
@@ -606,7 +628,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       this.pushNotificationPayload = null;
       this.pendingInvite = null;
       this.pushNotificationCallKitUUID = null;
-        // Cancel any ongoing reconnection process
+      // Cancel any ongoing reconnection process
       this.reconnecting = false;
       log.debug('[TelnyxRTC] Reset push flags on disconnect');
 
@@ -624,7 +646,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   public get connected() {
     return this.connection !== null && this.connection.isConnected;
   }
-
 
   private onSocketMessage = (msg: unknown) => {
     log.debug('[TelnyxRTC] Processing socket message:', msg);
@@ -650,12 +671,30 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       return this.handleCallAttach(msg);
     }
 
+    if (isMediaEvent(msg)) {
+      log.debug('[TelnyxRTC] Detected media event, processing...');
+      console.log(
+        '[TelnyxRTC] RELEASE DEBUG - Detected media event, processing...',
+        JSON.stringify(msg)
+      );
+      return this.handleMediaEvent(msg);
+    }
+
+    if (isAnswerEvent(msg)) {
+      log.debug('[TelnyxRTC] Detected answer event, processing...');
+      console.log(
+        '[TelnyxRTC] RELEASE DEBUG - Detected answer event, processing...',
+        JSON.stringify(msg)
+      );
+      return this.handleCallAnswer(msg);
+    }
+
     // Check if this is an invite message that's not being detected
     if (msg && typeof msg === 'object' && (msg as any).method === 'telnyx_rtc.invite') {
       log.warn('[TelnyxRTC] Received invite message but isInviteEvent returned false:', msg);
     }
 
-    log.debug('[TelnyxRTC] Message not processed as invite or attach');
+    log.debug('[TelnyxRTC] Message not processed as invite, attach, media, or answer');
     return;
   };
 
@@ -699,9 +738,27 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
 
     log.debug('[TelnyxRTC] Creating inbound call object');
+
+    // Check if we have SDP from invite or from a pending media event
+    let remoteSDP = msg.params.sdp;
+    const pendingMediaEvent = this.pendingMediaEvents.get(msg.params.callID);
+
+    if (!remoteSDP && pendingMediaEvent?.params.sdp) {
+      log.debug('[TelnyxRTC] Using SDP from pending media event for early media/ringback');
+      remoteSDP = pendingMediaEvent.params.sdp;
+    }
+
+    if (!remoteSDP) {
+      log.warn(
+        '[TelnyxRTC] No SDP available from invite or media event - call may not have early media'
+      );
+      // Use empty SDP as fallback - peer connection will handle this gracefully
+      remoteSDP = '';
+    }
+
     this.call = await Call.createInboundCall({
       connection: this.connection!,
-      remoteSDP: msg.params.sdp,
+      remoteSDP,
       sessionId: this.sessionId!,
       callId: msg.params.callID,
       telnyxLegId: msg.params.telnyx_leg_id,
@@ -714,6 +771,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     //(this.call as any).state = 'connecting';
     //this.call.emit('telnyx.call.state', this.call, 'connecting');
     log.debug('[TelnyxRTC] Call state set to connecting after creation');
+
+    // Clean up the pending media event since we've processed it
+    if (pendingMediaEvent) {
+      this.pendingMediaEvents.delete(msg.params.callID);
+      log.debug('[TelnyxRTC] Cleaned up pending media event for call:', msg.params.callID);
+    }
 
     log.debug('[TelnyxRTC] Call object created, checking for pending actions');
 
@@ -784,11 +847,10 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     this.reconnecting = false;
     this.cancelReconnectionTimer();
 
-
     log.debug('[TelnyxRTC] Creating new call object from attach message');
 
     // Create new inbound call from attach message (like Android SDK)
-    this.call  = await Call.createInboundCall({
+    this.call = await Call.createInboundCall({
       connection: this.connection!,
       remoteSDP: msg.params.sdp,
       sessionId: this.sessionId!,
@@ -796,22 +858,26 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       telnyxLegId: msg.params.telnyx_leg_id,
       telnyxSessionId: msg.params.telnyx_session_id,
       options: {
-        destinationNumber: msg.params.caller_id_number
+        destinationNumber: msg.params.caller_id_number,
       },
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
       initialState: 'connecting', // Set initial state to connecting
     });
 
-
-    await this.call.answerAttach().then(() => {
-      log.debug('[TelnyxRTC] AnswerAttach completed successfully');
-    }).catch((error: Error) => {
-      log.error('[TelnyxRTC] Failed to execute answerAttach:', error);
-    });
-
+    await this.call
+      .answerAttach()
+      .then(() => {
+        log.debug('[TelnyxRTC] AnswerAttach completed successfully');
+      })
+      .catch((error: Error) => {
+        log.error('[TelnyxRTC] Failed to execute answerAttach:', error);
+      });
 
     log.debug('[TelnyxRTC] Emitting telnyx.call.reattached event for reattached call');
-    log.debug('[TelnyxRTC] Listeners for telnyx.call.reattached:', this.listenerCount('telnyx.call.reattached'));
+    log.debug(
+      '[TelnyxRTC] Listeners for telnyx.call.reattached:',
+      this.listenerCount('telnyx.call.reattached')
+    );
     this.emit('telnyx.call.reattached', this.call, msg);
 
     log.debug('[TelnyxRTC] Emitting legacy event bus notification for reattached call');
@@ -823,16 +889,117 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     log.debug('[TelnyxRTC] ====== CALL ATTACH HANDLING COMPLETE ======');
   };
 
+  private handleMediaEvent = (msg: MediaEvent) => {
+    log.debug('[TelnyxRTC] ====== HANDLING MEDIA EVENT ======');
+    log.debug('[TelnyxRTC] Media message:', msg);
+
+    const callID = msg.params.callID;
+    const sdp = msg.params.sdp;
+    const audio = msg.params.audio;
+    const video = msg.params.video;
+    const target = msg.params.target || 'remote';
+
+    log.debug(`[TelnyxRTC] Media event for call ${callID}:`, {
+      sdp: sdp ? 'present' : 'not present',
+      audio,
+      video,
+      target,
+    });
+
+    // Store media event for later use (in case invite comes after)
+    this.pendingMediaEvents.set(callID, msg);
+
+    // If we have an active call and it matches the callID, apply media changes
+    if (this.call && this.call.callId === callID) {
+      log.debug('[TelnyxRTC] Active call matches media event callID, applying changes');
+
+      // If media event has SDP, handle early media setup
+      if (sdp) {
+        log.debug('[TelnyxRTC] Media event contains SDP - setting up early media/ringback');
+        this.call.handleEarlyMedia(sdp);
+      }
+
+      // Apply audio/video changes if specified
+      if (audio !== undefined || video !== undefined) {
+        this.call.handleMediaUpdate({
+          audio,
+          video,
+          target,
+        });
+      }
+    } else {
+      log.debug(
+        '[TelnyxRTC] No active call or callID mismatch, storing media event for later processing'
+      );
+      // Media event received before invite - this is valid and expected for early media
+    }
+
+    // Always emit the media event for applications to handle
+    log.debug('[TelnyxRTC] Emitting telnyx.media.received event');
+    this.emit('telnyx.media.received', msg);
+
+    log.debug('[TelnyxRTC] ====== MEDIA EVENT HANDLING COMPLETE ======');
+  };
+
+  private handleCallAnswer = (msg: AnswerEvent) => {
+    log.debug('[TelnyxRTC] ====== HANDLING CALL ANSWER ======');
+    log.debug('[TelnyxRTC] Answer message:', msg);
+
+    const callID = msg.params.callID;
+    const sdp = msg.params.sdp;
+
+    log.debug(`[TelnyxRTC] Answer event for call ${callID}:`, {
+      sdp: sdp ? 'present' : 'not present',
+    });
+
+    // Send ACK for the answer event
+    if (this.connection) {
+      log.debug('[TelnyxRTC] Sending answer acknowledgment');
+      this.connection.send(createAnswerAck(msg.id));
+    }
+
+    // If we have an active call and it matches the callID, handle the answer
+    if (this.call && this.call.callId === callID) {
+      log.debug('[TelnyxRTC] Active call matches answer event callID, processing answer');
+
+      // Store custom headers from the ANSWER message
+      this.call.answerCustomHeaders = msg.params.dialogParams?.custom_headers || null;
+
+      // If answer event has SDP, set it as remote description
+      if (sdp) {
+        log.debug('[TelnyxRTC] Answer event contains SDP - setting as remote description');
+        this.call.handleRemoteAnswer(sdp);
+      } else {
+        log.debug('[TelnyxRTC] Answer event has no SDP - assuming SDP was handled via media event');
+      }
+
+      // Transition call to active state
+      log.debug('[TelnyxRTC] Setting call state to active');
+      this.call.setActive();
+        // Emit the answer event for applications to handle
+      log.debug('[TelnyxRTC] Emitting telnyx.call.answered event');
+      if (this.call) {
+        this.emit('telnyx.call.answered', this.call, msg);
+     }
+    } else {
+      log.warn('[TelnyxRTC] No active call or callID mismatch for answer event');
+    }
+
+  
+
+    log.debug('[TelnyxRTC] ====== CALL ANSWER HANDLING COMPLETE ======');
+  };
+
   private onNetInfoStateChange = (state: NetInfoState) => {
     log.debug(`[TelnyxRTC] Network state changed:`, {
       isConnected: state.isConnected,
       isInternetReachable: state.isInternetReachable,
       type: state.type,
-      details: state.details
+      details: state.details,
     });
 
     // Handle complete network loss
-    if ((state.isInternetReachable === false || state.isConnected === false)) {
+    if (state.isInternetReachable === false || state.isConnected === false) {
       log.debug('[TelnyxRTC] Network completely unavailable');
       this.onNetworkUnavailable();
       return;
@@ -840,15 +1007,13 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     // Handle network type changes (WiFi <-> Cellular transitions)
     if (this.lastNetworkType && this.lastNetworkType !== state.type) {
-          // Update last known network type
+      // Update last known network type
       this.lastNetworkType = state.type;
       log.debug(`[TelnyxRTC] Network type changed: ${this.lastNetworkType} -> ${state.type}`);
       this.onNetworkTypeChanged(state);
 
       return;
     }
-
-
 
     // Handle network becoming available after being unavailable
     if (state.isInternetReachable === true && this.reconnecting) {
@@ -862,21 +1027,25 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    */
   private onNetworkTypeChanged(state: NetInfoState) {
     log.debug('[TelnyxRTC] Network type changed - checking connection stability');
-    
+
     // Give the network transition a moment to stabilize before checking connection
-      if (state.isInternetReachable && this.reconnecting) {
-        log.debug('[TelnyxRTC] Network type change detected - triggering proactive reconnection');
+    if (state.isInternetReachable && this.reconnecting) {
+      log.debug('[TelnyxRTC] Network type change detected - triggering proactive reconnection');
+      this.onNetworkAvailable();
+    } else if (!state.isInternetReachable && !this.reconnecting) {
+      log.debug(
+        '[TelnyxRTC] Network type change led to loss of connectivity - starting reconnection process'
+      );
+      this.onNetworkUnavailable();
+    } else if (state.isInternetReachable) {
+      log.debug(
+        '[TelnyxRTC] Network type change detected - simulating brief network loss for reconnection'
+      );
+      this.onNetworkUnavailable();
+      setTimeout(() => {
         this.onNetworkAvailable();
-      } else if (!state.isInternetReachable && !this.reconnecting) {
-        log.debug('[TelnyxRTC] Network type change led to loss of connectivity - starting reconnection process');
-        this.onNetworkUnavailable();
-      } else if (state.isInternetReachable) {
-        log.debug('[TelnyxRTC] Network type change detected - simulating brief network loss for reconnection');
-         this.onNetworkUnavailable();
-         setTimeout(() => {
-           this.onNetworkAvailable();
-         }, 1500); // 1.5 seconds delay
-      }
+      }, 1500); // 1.5 seconds delay
+    }
   }
 
   /**
@@ -884,7 +1053,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * Matches Android SDK behavior: disconnect calls and start reconnection
    */
   private onNetworkUnavailable() {
-
     if (this.reconnecting) {
       log.debug('[TelnyxRTC] Already in reconnection process, ignoring network unavailable event');
       return;
@@ -901,14 +1069,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       log.debug('[TelnyxRTC] Call state updated to dropped due to network disconnection');
     }
 
-
     // Start reconnection timeout timer
     this.startReconnectionTimer();
 
     // Disconnect existing connection (this clears the connection and handlers)
     this.disconnect(true);
     this.call?.disposePeer();
-
   }
 
   /**
@@ -932,7 +1098,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     this.reconnecting = false;
 
-
     try {
       log.debug('[TelnyxRTC] Starting reconnection process...');
 
@@ -944,7 +1109,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
       // If there was an active call, the attach message will be handled in onAttachReceived
       log.debug('[TelnyxRTC] Waiting for attach message to reestablish call...');
-
     } catch (error) {
       log.error('[TelnyxRTC] Reconnection attempt failed:', error);
     }

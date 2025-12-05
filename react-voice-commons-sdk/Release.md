@@ -2,7 +2,6 @@
 
 A high-level, state-agnostic, drop-in module for the Telnyx React Native SDK that simplifies WebRTC voice calling integration with advanced features like network reconnection and push notification support.
 
-
 ## 📦 Package Structure
 
 ```
@@ -91,6 +90,7 @@ npm publish            # 🎯 Automatic dependency switching!
 ```
 
 **What happens automatically:**
+
 1. `prepublishOnly` → Switches to published dependency + npm install
 2. `npm publish` → Publishes with correct npm dependencies
 3. `postpublish` → Switches back to local dependency + npm install
@@ -159,7 +159,7 @@ function CallScreen() {
       {callState === 'ACTIVE' && <Text>Call Active</Text>}
       {callState === 'DROPPED' && <Text>Reconnecting...</Text>}
       {callState === 'ENDED' && <Text>Call Ended</Text>}
-      
+
       <Button title="Connect" onPress={handleConnect} />
       <Button title="Call" onPress={handleCall} />
     </View>
@@ -212,6 +212,7 @@ function MyApp() {
 ### Peer Dependencies
 
 Users need these in their app:
+
 - React Native (^0.79.0)
 - React (19.0.0)
 - Expo Router (^5.1.0) - for navigation integration
@@ -248,11 +249,13 @@ npm run ios          # Test on iOS
 ## 📚 Documentation & Resources
 
 ### Live Documentation
+
 - **API Docs**: https://team-telnyx.github.io/react-native-voice-commons/
 - **GitHub Repository**: https://github.com/team-telnyx/react-native-voice-commons
 - **npm Package**: https://www.npmjs.com/package/@telnyx/react-voice-commons-sdk
 
 ### Auto-Generated Documentation
+
 - TypeDoc generates comprehensive API documentation from `src/` comments
 - Updates automatically via GitHub Actions on every push to main
 - Available in both HTML and Markdown formats
@@ -278,6 +281,7 @@ open docs/index.html # View locally
 ## 🎯 Roadmap
 
 ### Upcoming Features
+
 - [ ] Android native bridge implementation
 - [ ] Advanced call controls (hold, transfer, conference)
 - [ ] Call recording integration
@@ -285,6 +289,7 @@ open docs/index.html # View locally
 - [ ] Performance optimizations for large-scale deployments
 
 ### Current Focus
+
 - ✅ Network resilience and reconnection
 - ✅ iOS push notification integration
 - ✅ Automated development workflow

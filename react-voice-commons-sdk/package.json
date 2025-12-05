@@ -64,8 +64,8 @@
   "peerDependencies": {
     "@react-native-async-storage/async-storage": "^2.1.0",
     "expo-router": "^5.1.0",
-    "react": "19.0.0",
-    "react-native": "^0.79.0",
+    "react": ">=19.0.0 <20.0.0",
+    "react-native": ">=0.79.0 <1.0.0",
     "react-native-webrtc": "^124.0.5"
   },
   "peerDependenciesMeta": {

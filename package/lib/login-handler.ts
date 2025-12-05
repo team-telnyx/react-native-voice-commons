@@ -21,7 +21,7 @@ export class LoginHandler {
   private shouldAttachCall: boolean = false;
   private isFromPush: boolean = false;
   private lastSessionId: string | null = null; // Store sessid from login response
-  
+
   // AsyncStorage key for persisting sessid
   private static readonly SESSID_STORAGE_KEY = '@telnyx_last_sessid';
 
@@ -30,7 +30,7 @@ export class LoginHandler {
     this.connection.addListener('telnyx.socket.message', this.onSocketMessage);
     this.clientIsReady = null;
   }
-  
+
   /**
    * Load previously stored sessid from AsyncStorage
    */
@@ -47,7 +47,7 @@ export class LoginHandler {
       log.error('[LoginHandler] Failed to load persisted sessid:', error);
     }
   }
-  
+
   /**
    * Persist sessid to AsyncStorage
    */
@@ -73,7 +73,7 @@ export class LoginHandler {
   public login = async (options: ClientOptions): Promise<string | null> => {
     // Ensure sessid is loaded before creating login message
     await this.loadPersistedSessionId();
-    
+
     const message = this.createLoginMessage(options);
     this.clientIsReady = createDeferredPromise<boolean>();
 
@@ -86,7 +86,7 @@ export class LoginHandler {
     // Store the sessid from login response for future use
     this.lastSessionId = resp.result.sessid;
     log.debug('[LoginHandler] Stored sessid from login response:', this.lastSessionId);
-    
+
     // Persist to AsyncStorage for future TelnyxRTC instances
     this.persistSessionId(this.lastSessionId);
 
@@ -147,4 +147,3 @@ export class LoginHandler {
     }
   };
 }
- 

@@ -1,5 +1,18 @@
 # CHANGELOG.md
 
+## [0.1.4](https://www.npmjs.com/package/@telnyx/react-voice-commons-sdk/v/0.1.4) (2025-11-26)
+
+### Enhancement
+
+• Automatic WiFi ↔ 4G/5G network transition detection and handling
+• Smart dependency management workflow (local vs published packages)
+
+### Bug Fixes
+
+• Fixed missing initial network state tracking in TelnyxRTC client
+• Resolved network type change detection for seamless call transitions
+• Fixed documentation generation to preserve manual guides
+
 ## [0.1.3](https://www.npmjs.com/package/@telnyx/react-voice-commons-sdk/v/0.1.3) (2025-11-20)
 
 ### Enhancement

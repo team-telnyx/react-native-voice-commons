@@ -5,16 +5,16 @@
  * abstracting away the complexity of the underlying WebSocket states.
  */
 export declare enum TelnyxConnectionState {
-    /** Initial state before any connection attempt */
-    DISCONNECTED = "DISCONNECTED",
-    /** Attempting to establish connection */
-    CONNECTING = "CONNECTING",
-    /** Successfully connected and authenticated */
-    CONNECTED = "CONNECTED",
-    /** Connection lost, attempting to reconnect */
-    RECONNECTING = "RECONNECTING",
-    /** Connection failed or authentication error */
-    ERROR = "ERROR"
+  /** Initial state before any connection attempt */
+  DISCONNECTED = 'DISCONNECTED',
+  /** Attempting to establish connection */
+  CONNECTING = 'CONNECTING',
+  /** Successfully connected and authenticated */
+  CONNECTED = 'CONNECTED',
+  /** Connection lost, attempting to reconnect */
+  RECONNECTING = 'RECONNECTING',
+  /** Connection failed or authentication error */
+  ERROR = 'ERROR',
 }
 /**
  * Type guard to check if a value is a valid TelnyxConnectionState

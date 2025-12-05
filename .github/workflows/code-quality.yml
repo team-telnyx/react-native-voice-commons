@@ -22,8 +22,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm install
-          cd react-voice-commons-sdk && npm install
+          npm install --legacy-peer-deps
+          cd react-voice-commons-sdk && npm install --legacy-peer-deps
 
       - name: Prettier Format Check
         run: |
@@ -65,8 +65,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm install
-          cd react-voice-commons-sdk && npm install
+          npm install --legacy-peer-deps
+          cd react-voice-commons-sdk && npm install --legacy-peer-deps
 
       - name: npm audit - All Projects
         run: |

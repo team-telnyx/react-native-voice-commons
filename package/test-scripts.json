@@ -1,0 +1,11 @@
+{
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:passing": "jest --testPathPatterns=\"integration-custom-headers|media-events-simple\" --verbose --colors",
+    "test:ci": "jest --testPathPatterns=\"integration-custom-headers|media-events-simple\" --ci --coverage --watchAll=false",
+    "test:debug": "jest --verbose --colors",
+    "test:all": "jest --verbose --colors --detectOpenHandles"
+  }
+}

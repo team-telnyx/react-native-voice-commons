@@ -53,7 +53,10 @@ export class Connection extends EventEmitter<ConnectionEvents> {
       try {
         this.emit('telnyx.socket.open');
       } catch (error) {
-        log.error('[Connection]: Failed to emit socket.open event - bridge may be disconnected:', error);
+        log.error(
+          '[Connection]: Failed to emit socket.open event - bridge may be disconnected:',
+          error
+        );
       }
       this.flushMessageQueue();
     });
@@ -63,7 +66,10 @@ export class Connection extends EventEmitter<ConnectionEvents> {
       try {
         this.emit('telnyx.socket.error', error as any);
       } catch (emitError) {
-        log.error('[Connection]: Failed to emit socket.error event - bridge may be disconnected:', emitError);
+        log.error(
+          '[Connection]: Failed to emit socket.error event - bridge may be disconnected:',
+          emitError
+        );
       }
     });
 
@@ -73,9 +79,11 @@ export class Connection extends EventEmitter<ConnectionEvents> {
       try {
         this.emit('telnyx.socket.close');
       } catch (error) {
-        log.error('[Connection]: Failed to emit socket.close event - bridge may be disconnected:', error);
+        log.error(
+          '[Connection]: Failed to emit socket.close event - bridge may be disconnected:',
+          error
+        );
       }
-      
     });
 
     this.socket.onMessage((message: string) => {
@@ -94,7 +102,10 @@ export class Connection extends EventEmitter<ConnectionEvents> {
       try {
         this.emit('telnyx.socket.message', parsedMessage);
       } catch (error) {
-        log.error('[Connection]: Failed to emit socket.message event - bridge may be disconnected:', error);
+        log.error(
+          '[Connection]: Failed to emit socket.message event - bridge may be disconnected:',
+          error
+        );
       }
     });
 
@@ -117,7 +128,10 @@ export class Connection extends EventEmitter<ConnectionEvents> {
       log.debug('Sending message to gateway', msg);
       this.socket.send(JSON.stringify(msg));
     } catch (error) {
-      log.error('[Connection]: Failed to send WebSocket message - bridge may be disconnected:', error);
+      log.error(
+        '[Connection]: Failed to send WebSocket message - bridge may be disconnected:',
+        error
+      );
       // Don't throw the error, just log it to prevent app crashes during app state transitions
       // The message will be lost, but this is better than crashing the entire app
     }
