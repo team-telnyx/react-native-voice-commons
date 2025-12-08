@@ -1,5 +1,5 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
+'use strict';
+Object.defineProperty(exports, '__esModule', { value: true });
 exports.isCredentialConfig = isCredentialConfig;
 exports.isTokenConfig = isTokenConfig;
 exports.validateCredentialConfig = validateCredentialConfig;
@@ -11,50 +11,48 @@ exports.createTokenConfig = createTokenConfig;
  * Type guard to check if config is credential-based
  */
 function isCredentialConfig(config) {
-    return config.type === 'credential';
+  return config.type === 'credential';
 }
 /**
  * Type guard to check if config is token-based
  */
 function isTokenConfig(config) {
-    return config.type === 'token';
+  return config.type === 'token';
 }
 /**
  * Validates a credential configuration
  */
 function validateCredentialConfig(config) {
-    const errors = [];
-    if (!config.sipUser || config.sipUser.trim() === '') {
-        errors.push('sipUser is required');
-    }
-    if (!config.sipPassword || config.sipPassword.trim() === '') {
-        errors.push('sipPassword is required');
-    }
-    return errors;
+  const errors = [];
+  if (!config.sipUser || config.sipUser.trim() === '') {
+    errors.push('sipUser is required');
+  }
+  if (!config.sipPassword || config.sipPassword.trim() === '') {
+    errors.push('sipPassword is required');
+  }
+  return errors;
 }
 /**
  * Validates a token configuration
  */
 function validateTokenConfig(config) {
-    const errors = [];
-    if (!config.token || config.token.trim() === '') {
-        errors.push('token is required');
-    }
-    return errors;
+  const errors = [];
+  if (!config.token || config.token.trim() === '') {
+    errors.push('token is required');
+  }
+  return errors;
 }
 /**
  * Validates any configuration
  */
 function validateConfig(config) {
-    if (isCredentialConfig(config)) {
-        return validateCredentialConfig(config);
-    }
-    else if (isTokenConfig(config)) {
-        return validateTokenConfig(config);
-    }
-    else {
-        return ['Invalid configuration type'];
-    }
+  if (isCredentialConfig(config)) {
+    return validateCredentialConfig(config);
+  } else if (isTokenConfig(config)) {
+    return validateTokenConfig(config);
+  } else {
+    return ['Invalid configuration type'];
+  }
 }
 /**
  * Creates a credential configuration
@@ -67,12 +65,12 @@ function validateConfig(config) {
  * @returns Complete credential configuration object
  */
 function createCredentialConfig(sipUser, sipPassword, options) {
-    return {
-        type: 'credential',
-        sipUser,
-        sipPassword,
-        ...options,
-    };
+  return {
+    type: 'credential',
+    sipUser,
+    sipPassword,
+    ...options,
+  };
 }
 /**
  * Creates a token-based configuration
@@ -84,9 +82,9 @@ function createCredentialConfig(sipUser, sipPassword, options) {
  * @returns Complete token configuration object
  */
 function createTokenConfig(sipToken, options) {
-    return {
-        type: 'token',
-        token: sipToken,
-        ...options,
-    };
+  return {
+    type: 'token',
+    token: sipToken,
+    ...options,
+  };
 }

@@ -1,5 +1,26 @@
 # CHANGELOG.md
 
+## [0.1.5](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.5) (2025-12-08)
+
+### Enhancement
+
+• Updated to use @telnyx/react-native-voice-sdk@0.3.0 with advanced media events support
+
+## [0.1.4](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.4) (2025-11-25)
+
+### Enhancement
+
+• Enhanced 4G/WiFi reconnection mechanism for better network handling
+• iOS version integration improvements
+
+## [0.1.3](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.3) (2025-11-20)
+
+### Enhancement
+
+• Fixed background answer functionality for iOS
+• Added connecting state to Telnyx client
+• Improved reconnection logic for Android using foreground service implementation
+
 ## [0.1.2](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.2) (2025-11-04)
 
 ### Enhancement

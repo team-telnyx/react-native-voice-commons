@@ -42,11 +42,13 @@ const CurrentCall = ({ call, callState }: Props) => {
       return <ActiveCall call={call} />;
     }
     case TelnyxCallState.DROPPED: {
-      console.log('CurrentCall: Rendering CallConnecting for dropped call (reconnecting)', { isPushNotificationCall });
+      console.log('CurrentCall: Rendering CallConnecting for dropped call (reconnecting)', {
+        isPushNotificationCall,
+      });
       const callDirection = call.isIncoming ? 'from' : 'to';
       return (
-        <CallConnecting 
-          call={call} 
+        <CallConnecting
+          call={call}
           isPushNotificationCall={isPushNotificationCall}
           title="Reconnecting..."
           description={`Reconnecting call ${callDirection} ${call.destination}...`}

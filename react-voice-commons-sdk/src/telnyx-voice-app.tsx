@@ -374,7 +374,7 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
             // Import the native bridge module dynamically (same as Android)
             const { NativeModules } = require('react-native');
             const VoicePnBridge = NativeModules.VoicePnBridge;
-            
+
             if (VoicePnBridge) {
               log('Checking for pending VoIP push data via iOS VoicePnBridge');
 
@@ -386,7 +386,7 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
                 try {
                   const pendingVoipPush = JSON.parse(pendingVoipPushJson);
                   const voipPayload = pendingVoipPush?.payload;
-                  
+
                   if (voipPayload && voipPayload.metadata) {
                     log('Found pending VoIP push data:', voipPayload);
 
@@ -468,8 +468,7 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
 
           // Note: isHandlingForegroundCall will be reset when calls.length becomes 0
           // This prevents premature disconnection during CallKit answer flow
-        } 
-        else {
+        } else {
           log('No initial push data found');
         }
       } catch (e) {

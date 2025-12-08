@@ -113,7 +113,7 @@ export type AnswerEvent = {
   params: {
     callID: string;
     dialogParams: { custom_headers: { name: string; value: string }[] };
-    sdp: string;
+    sdp?: string; // Made optional since SDP might come via media event instead
     variables: {
       'Core-UUID': string;
     };
@@ -126,9 +126,7 @@ export function isAnswerEvent(msg: unknown): msg is AnswerEvent {
     return false;
   }
   const temp: Partial<AnswerEvent> = msg;
-  return (
-    temp.method === 'telnyx_rtc.answer' && Boolean(temp.params?.callID) && Boolean(temp.params?.sdp)
-  );
+  return temp.method === 'telnyx_rtc.answer' && Boolean(temp.params?.callID);
 }
 
 export function createAnswerAck(id: number) {
@@ -232,7 +230,7 @@ export type InviteEvent = {
       custom_headers: { name: string; value: string }[];
     };
     display_direction: string;
-    sdp: string;
+    sdp?: string; // Made optional since SDP can come via media event
     telnyx_leg_id: string;
     telnyx_session_id: string;
   };
@@ -258,9 +256,7 @@ export function isInviteEvent(msg: unknown): msg is InviteEvent {
     return false;
   }
   const temp: Partial<InviteEvent> = msg;
-  return (
-    temp.method === 'telnyx_rtc.invite' && Boolean(temp.params?.callID) && Boolean(temp.params?.sdp)
-  );
+  return temp.method === 'telnyx_rtc.invite' && Boolean(temp.params?.callID);
 }
 
 type AnswerMessage = {

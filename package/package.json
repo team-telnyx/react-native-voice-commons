@@ -1,6 +1,6 @@
 {
   "name": "@telnyx/react-native-voice-sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Telnyx React Native Voice SDK - A complete WebRTC voice calling solution",
   "main": "lib/index.ts",
   "module": "lib/index.ts",
@@ -13,7 +13,12 @@
   ],
   "scripts": {
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:passing": "jest --testPathPatterns=\"integration-custom-headers|media-events-simple\" --verbose --colors",
+    "test:ci": "jest --testPathPatterns=\"integration-custom-headers|media-events-simple\" --ci --coverage --watchAll=false",
+    "test:debug": "jest --verbose --colors",
+    "test:all": "jest --verbose --colors --detectOpenHandles"
   },
   "keywords": [
     "react-native",
