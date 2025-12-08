@@ -11,8 +11,7 @@
 ### Enhancement
 
 • Enhanced 4G/WiFi reconnection mechanism for better network handling
-• iOS version integration improvements  
-
+• iOS version integration improvements
 
 ## [0.1.3](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.3) (2025-11-20)
 
@@ -21,8 +20,6 @@
 • Fixed background answer functionality for iOS
 • Added connecting state to Telnyx client
 • Improved reconnection logic for Android using foreground service implementation
-
-
 
 ## [0.1.2](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.2) (2025-11-04)
 
