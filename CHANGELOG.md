@@ -1,68 +1,75 @@
 # CHANGELOG.md
 
-## [0.1.4](https://www.npmjs.com/package/@telnyx/react-voice-commons-sdk/v/0.1.4) (2025-11-26)
+## [0.1.6](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.6) (2025-12-09)
 
 ### Enhancement
 
-• Automatic WiFi ↔ 4G/5G network transition detection and handling
-• Smart dependency management workflow (local vs published packages)
+• Added Android native components to npm package for proper distribution
+• Complete Android native integration support for Firebase messaging and call management
 
-### Bug Fixes
+### Bug Fixing
 
-• Fixed missing initial network state tracking in TelnyxRTC client
-• Resolved network type change detection for seamless call transitions
-• Fixed documentation generation to preserve manual guides
+• Fixed missing Android directory in npm package files array
+• Resolved native component availability issues for Android integrations
 
-## [0.1.3](https://www.npmjs.com/package/@telnyx/react-voice-commons-sdk/v/0.1.3) (2025-11-20)
-
-### Enhancement
-
-• Enhanced `newCall()` method with additional parameters (callerName, callerNumber, customHeaders)
-• Invite custom headers support for outgoing calls
-• Call reconnection functionality for network stability
-• Improved network reconnection handling with automatic call reattachment
-• Enhanced caller ID handling with smart fallback logic
-• Fixed React version compatibility issues for local development
-• Session management improvements for reliable reconnection
-
-### Bug Fixes
-
-• Fixed React version conflicts between 19.0.0 and 19.2.0
-• Resolved notification lifecycle management with proper foreground service handling
-• Enhanced call state transitions during network reconnection
-• Improved authentication storage and auto-reconnection reliability
-
-## [0.1.2](https://www.npmjs.com/package/@telnyx/react-voice-commons-sdk/v/0.1.2) (2025-11-04)
+## [0.1.5](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.5) (2025-12-08)
 
 ### Enhancement
 
-• Automated documentation generation workflow (manual trigger)
-• HTML documentation output in `docs/` folder
-• Markdown documentation output in `docs-markdown/` folder
-• TypeDoc configuration for both HTML and Markdown formats
-• Package README with comprehensive integration guide
-• Documentation for authentication methods (credential and token-based)
-• Native integration examples for Android and iOS
+• Updated to use @telnyx/react-native-voice-sdk@0.3.0 with advanced media events support
 
-## [0.1.1](https://www.npmjs.com/package/@telnyx/react-voice-commons-sdk/v/0.1.1) (2025-11-02)
+## [0.1.4](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.4) (2025-11-25)
 
 ### Enhancement
 
-• Initial package setup
-• Core VoIP client functionality
-• CallKit integration for iOS
-• ConnectionService support for Android
-• Push notification handling
-• Reactive state management with RxJS
+• Enhanced 4G/WiFi reconnection mechanism for better network handling
+• iOS version integration improvements
 
-## [0.1.0](https://www.npmjs.com/package/@telnyx/react-voice-commons-sdk/v/0.1.0) (2025-11-01)
+## [0.1.3](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.3) (2025-11-20)
 
 ### Enhancement
 
-• Initial release of react-voice-commons-sdk
-• TelnyxVoipClient for managing VoIP connections
-• TelnyxVoiceApp component for automatic lifecycle management
-• Call management (make, answer, hold, mute, transfer, hangup)
+• Fixed background answer functionality for iOS
+• Added connecting state to Telnyx client
+• Improved reconnection logic for Android using foreground service implementation
+
+## [0.1.2](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.2) (2025-11-04)
+
+### Enhancement
+
+• Comprehensive package README with integration examples
+• Documentation for credential-based and token-based authentication
+• Native integration guides for Android (MainActivity) and iOS (AppDelegate)
+• Examples for push notification setup
+• Troubleshooting section
+
+### Bug Fixing
+
+• Package metadata and npm publishing configuration
+
+## [0.1.1](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.1) (2025-11-02)
+
+### Enhancement
+
+• Initial npm package release
+• Core VoIP client (`TelnyxVoipClient`)
+• TelnyxVoiceApp component for React Native lifecycle management
+• CallKit integration for iOS native call UI
+• Android ConnectionService support
+• Push notification handling (FCM for Android, APNs for iOS)
+• Reactive state streams with RxJS
+• Call management APIs (make, answer, hold, mute, transfer, hangup)
 • Connection state management
 • Call state machine
-• TypeScript definitions
+• Automatic reconnection logic
+• Session management
+• TypeScript type definitions
+
+## [0.1.0](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.0) (2025-11-01)
+
+### Enhancement
+
+• Initial development version
+• Basic VoIP functionality
+• Call management
+• State management interfaces
