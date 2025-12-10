@@ -1,6 +1,6 @@
 {
   "name": "@telnyx/react-voice-commons-sdk",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "A high-level, state-agnostic, drop-in module for the Telnyx React Native SDK that simplifies WebRTC voice calling integration",
   "main": "lib/index.js",
   "module": "lib/index.js",
@@ -17,6 +17,7 @@
   "files": [
     "lib",
     "src",
+    "android",
     "ios",
     "TelnyxVoiceCommons.podspec",
     "README.md",
@@ -36,9 +37,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "dev:local": "npm pkg set dependencies.@telnyx/react-native-voice-sdk=file:../package",
-    "dev:published": "npm pkg set dependencies.@telnyx/react-native-voice-sdk=^0.2.0",
-    "prepublishOnly": "npm run dev:published && npm install",
-    "postpublish": "npm run dev:local && npm install"
+    "dev:published": "npm pkg set dependencies.@telnyx/react-native-voice-sdk=^0.3.0",
+    "prepublishOnly": "npm run dev:published && npm install --legacy-peer-deps",
+    "postpublish": "npm run dev:local && npm install --legacy-peer-deps"
   },
   "keywords": [
     "react-native",
@@ -87,7 +88,7 @@
   },
   "dependencies": {
     "@react-native-community/eslint-config": "^3.2.0",
-    "@telnyx/react-native-voice-sdk": "^0.3.0",
+    "@telnyx/react-native-voice-sdk": "file:../package",
     "eventemitter3": "^5.0.1",
     "expo": "~53.0.22",
     "react-native-voip-push-notification": "^3.3.3",

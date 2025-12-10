@@ -1,5 +1,17 @@
 # CHANGELOG.md
 
+## [0.1.6](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.6) (2025-12-09)
+
+### Enhancement
+
+• Added Android native components to npm package for proper distribution
+• Complete Android native integration support for Firebase messaging and call management
+
+### Bug Fixing
+
+• Fixed missing Android directory in npm package files array
+• Resolved native component availability issues for Android integrations
+
 ## [0.1.5](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.5) (2025-12-08)
 
 ### Enhancement
