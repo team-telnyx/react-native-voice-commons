@@ -255,7 +255,7 @@ For initial testing without making actual calls:
 
 ### Common Issues
 
-#### Issue: "Unable to resolve dependency tree" during npm install
+#### Issue: Unable to resolve dependency tree" during npm install
 
 **Solution:** Use the `--legacy-peer-deps` flag:
 ```bash
