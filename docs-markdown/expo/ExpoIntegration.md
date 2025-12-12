@@ -2,17 +2,6 @@
 
 This guide provides step-by-step instructions for integrating the Telnyx React Voice Commons SDK into an Expo React Native project.
 
-## Table of Contents
-
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Implementation](#implementation)
-- [Usage](#usage)
-- [Testing](#testing)
-- [Troubleshooting](#troubleshooting)
-- [API Reference](#api-reference)
-
 ## Prerequisites
 
 Before you begin, ensure you have the following:
