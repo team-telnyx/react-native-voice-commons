@@ -46,7 +46,7 @@ npx expo install expo-notifications
 1. Download the `google-services.json` file from your Firebase project console
 2. Place it in your project root directory (same level as `package.json`)
 
-```
+```txt
 your-project/
 ├── google-services.json  ← Place here
 ├── package.json

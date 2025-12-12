@@ -190,7 +190,7 @@ Defined in: [models/call.ts:102](https://github.com/team-telnyx/react-native-voi
 
 Custom headers received from the WebRTC INVITE message.
 These headers are passed during call initiation and can contain application-specific information.
-Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+Format should be `[{"name": "X-Header-Name", "value": "Value"}]` where header names must start with "X-".
 
 ##### Returns
 
@@ -208,7 +208,7 @@ Defined in: [models/call.ts:111](https://github.com/team-telnyx/react-native-voi
 
 Custom headers received from the WebRTC ANSWER message.
 These headers are passed during call acceptance and can contain application-specific information.
-Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+Format should be `[{"name": "X-Header-Name", "value": "Value"}]` where header names must start with "X-".
 
 ##### Returns
 

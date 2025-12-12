@@ -32,8 +32,7 @@ Before you begin, ensure you have the following:
 - **iOS**: Xcode 12.0 or later (macOS only)
 - **Android**: Android Studio with Android SDK
 
-> [!IMPORTANT]
-> The Telnyx React Native Voice SDK requires native modules and **cannot run in Expo Go**. You must use a development build created with `expo prebuild`.
+> **IMPORTANT:** The Telnyx React Native Voice SDK requires native modules and **cannot run in Expo Go**. You must use a development build created with `expo prebuild`.
 
 ## Installation
 
@@ -54,8 +53,7 @@ cd my-telnyx-app
 npm install @telnyx/react-native-voice-sdk @telnyx/react-voice-commons-sdk --legacy-peer-deps
 ```
 
-> [!NOTE]
-> The `--legacy-peer-deps` flag is required due to React version peer dependency conflicts between Expo and the Telnyx SDK.
+> **NOTE:** The `--legacy-peer-deps` flag is required due to React version peer dependency conflicts between Expo and the Telnyx SDK.
 
 ### Step 3: Configure Permissions
 
@@ -132,8 +130,7 @@ export const telnyxConfig: TelnyxConfig = {
 4. Copy the **Username** and **Password** from the connection credentials
 5. Update the `telnyx.config.ts` file with your credentials
 
-> [!WARNING]
-> **Security Best Practice:** For production apps, use environment variables or secure storage (like `expo-secure-store`) instead of hardcoding credentials.
+> **WARNING - Security Best Practice:** For production apps, use environment variables or secure storage (like `expo-secure-store`) instead of hardcoding credentials.
 
 ## Implementation
 
@@ -245,16 +242,16 @@ npx expo run:android --device
 
 ### Test Checklist
 
-- [ ] App builds successfully for iOS
-- [ ] App builds successfully for Android
-- [ ] Connection to Telnyx succeeds with valid credentials
-- [ ] Connection fails gracefully with invalid credentials
-- [ ] Can make outbound calls
-- [ ] Can receive incoming calls
-- [ ] Mute/unmute functionality works
-- [ ] Hold/resume functionality works
-- [ ] Call hangup works correctly
-- [ ] UI updates reflect call state changes
+- App builds successfully for iOS
+- App builds successfully for Android
+- Connection to Telnyx succeeds with valid credentials
+- Connection fails gracefully with invalid credentials
+- Can make outbound calls
+- Can receive incoming calls
+- Mute/unmute functionality works
+- Hold/resume functionality works
+- Call hangup works correctly
+- UI updates reflect call state changes
 
 ### Testing Without Real Calls
 

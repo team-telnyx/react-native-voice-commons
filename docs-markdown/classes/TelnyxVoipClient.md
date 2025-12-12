@@ -60,7 +60,7 @@ Listen to this to show connection indicators in your UI.
 
 #### Get Signature
 
-> **get** **calls$**(): `Observable`\<[`Call`](Call.md)[]\>
+> **get** **calls$**(): `Observable`\<[`Call`](Call.md)\>
 
 Defined in: [telnyx-voip-client.ts:85](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L85)
 
@@ -72,7 +72,7 @@ conference calls).
 
 ##### Returns
 
-`Observable`\<[`Call`](Call.md)[]\>
+`Observable`\<[`Call`](Call.md)\>
 
 ***
 
@@ -116,7 +116,7 @@ Current connection state (synchronous access).
 
 #### Get Signature
 
-> **get** **currentCalls**(): [`Call`](Call.md)[]
+> **get** **currentCalls**(): [`Call`](Call.md)
 
 Defined in: [telnyx-voip-client.ts:112](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L112)
 
@@ -124,7 +124,7 @@ Current list of calls (synchronous access).
 
 ##### Returns
 
-[`Call`](Call.md)[]
+[`Call`](Call.md)
 
 ***
 

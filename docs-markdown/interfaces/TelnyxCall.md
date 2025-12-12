@@ -72,7 +72,7 @@ Defined in: [types/telnyx-sdk.d.ts:56](https://github.com/team-telnyx/react-nati
 
 Custom headers received from the WebRTC INVITE message.
 These headers are passed during call initiation and can contain application-specific information.
-Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+Format should be `[{"name": "X-Header-Name", "value": "Value"}]` where header names must start with "X-".
 
 #### name
 
@@ -92,7 +92,7 @@ Defined in: [types/telnyx-sdk.d.ts:63](https://github.com/team-telnyx/react-nati
 
 Custom headers received from the WebRTC ANSWER message.
 These headers are passed during call acceptance and can contain application-specific information.
-Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+Format should be `[{"name": "X-Header-Name", "value": "Value"}]` where header names must start with "X-".
 
 #### name
 

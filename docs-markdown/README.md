@@ -2,7 +2,7 @@
 
 A high-level, state-agnostic, drop-in module for the Telnyx React Native SDK that simplifies WebRTC voice calling integration. This library provides a comprehensive solution for building VoIP applications with native call UI support, push notifications, and seamless background handling.
 
-### Key Features
+## Key Features
 
 - **TelnyxVoiceApp Integration**: Automatic lifecycle management and push notification handling
 - **Native Call UI**: CallKit (iOS) and ConnectionService (Android) integration
