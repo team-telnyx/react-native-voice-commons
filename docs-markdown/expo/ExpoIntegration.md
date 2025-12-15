@@ -7,17 +7,20 @@ This guide provides step-by-step instructions for integrating the Telnyx React V
 Before you begin, ensure you have the following:
 
 ### Required Tools
+
 - **Node.js** (LTS version recommended)
 - **npm** or **yarn** package manager
 - **Expo CLI** (`npm install -g expo-cli`)
 - **macOS** (for iOS development) or **Windows/Linux** (for Android development)
 
 ### Telnyx Account
+
 - A Telnyx account ([Sign up here](https://telnyx.com/sign-up))
 - SIP Connection credentials from your Telnyx Portal
 - A Telnyx phone number (optional, for outbound calls)
 
 ### Development Environment
+
 - **iOS**: Xcode 12.0 or later (macOS only)
 - **Android**: Android Studio with Android SDK
 
@@ -48,7 +51,7 @@ npm install @telnyx/react-native-voice-sdk @telnyx/react-voice-commons-sdk --leg
 
 Update your `app.json` to include necessary permissions for microphone access and VoIP functionality.
 
-#### iOS Configuration
+### iOS Configuration
 
 Add the following to the `ios` section in `app.json`:
 
@@ -67,7 +70,7 @@ Add the following to the `ios` section in `app.json`:
 }
 ```
 
-#### Android Configuration
+### Android Configuration
 
 Add the following to the `android` section in `app.json`:
 
@@ -130,6 +133,7 @@ Create a custom React hook to manage the Telnyx SDK:
 **File:** `src/hooks/useTelnyxVoice.ts`
 
 This hook encapsulates:
+
 - Connection management to Telnyx servers
 - Call state management
 - Event handling for incoming/outgoing calls
@@ -144,6 +148,7 @@ Create a UI component for the voice calling interface:
 **File:** `src/components/VoiceCallUI.tsx`
 
 This component provides:
+
 - Connection status display
 - Phone number input and dialer
 - Call controls (answer, hangup, mute, hold)
@@ -180,7 +185,7 @@ export default function App() {
 
 ### Running the Application
 
-#### Step 1: Prebuild Native Projects
+### Step 1: Prebuild Native Projects
 
 Since the Telnyx SDK uses native modules, you need to generate native iOS and Android projects:
 
@@ -190,7 +195,7 @@ npx expo prebuild
 
 This command creates `ios/` and `android/` directories with the native project files.
 
-#### Step 2: Run on iOS
+### Step 2: Run on iOS
 
 ```bash
 # Run on iOS simulator
@@ -200,7 +205,7 @@ npx expo run:ios
 npx expo run:ios --device
 ```
 
-#### Step 3: Run on Android
+### Step 3: Run on Android
 
 ```bash
 # Run on Android emulator
@@ -255,26 +260,28 @@ For initial testing without making actual calls:
 
 ### Common Issues
 
-#### Issue: Unable to resolve dependency tree" during npm install
+### Issue: Unable to resolve dependency tree" during npm install
 
 **Solution:** Use the `--legacy-peer-deps` flag:
 ```bash
 npm install @telnyx/react-native-voice-sdk @telnyx/react-voice-commons-sdk --legacy-peer-deps
 ```
 
-#### Issue: App crashes on startup
+### Issue: App crashes on startup
 
 **Possible Causes:**
+
 - Native modules not properly linked
 - Missing permissions
 
 **Solution:**
+
 1. Clean and rebuild:
    ```bash
    # iOS
    cd ios && pod install && cd ..
    npx expo run:ios
-   
+
    # Android
    cd android && ./gradlew clean && cd ..
    npx expo run:android
@@ -282,30 +289,34 @@ npm install @telnyx/react-native-voice-sdk @telnyx/react-voice-commons-sdk --leg
 
 2. Verify permissions are correctly set in `app.json`
 
-#### Issue: "Connection failed" or "Authentication error"
+### Issue: "Connection failed" or "Authentication error"
 
 **Possible Causes:**
+
 - Invalid Telnyx credentials
 - Network connectivity issues
 - Firewall blocking WebRTC traffic
 
 **Solution:**
+
 1. Verify credentials in `src/config/telnyx.config.ts`
 2. Check internet connection
 3. Ensure WebRTC ports are not blocked (UDP ports 10000-20000)
 
-#### Issue: No audio during call
+### Issue: No audio during call
 
 **Possible Causes:**
+
 - Microphone permissions not granted
 - Audio routing issues
 
 **Solution:**
+
 1. Check that microphone permissions are granted
 2. On iOS, check Settings → Privacy → Microphone
 3. On Android, check App Settings → Permissions
 
-#### Issue: Cannot run in Expo Go
+### Issue: Cannot run in Expo Go
 
 **This is expected behavior.** The Telnyx SDK requires native modules and cannot run in Expo Go.
 
@@ -318,6 +329,7 @@ npx expo run:ios  # or npx expo run:android
 ### Debug Logging
 
 To enable detailed logging, check the console output when running the app. The `useTelnyxVoice` hook includes console.log statements for:
+
 - Connection events
 - Call state changes
 - Errors
@@ -326,7 +338,7 @@ To enable detailed logging, check the console output when running the app. The `
 
 ### `useTelnyxVoice` Hook
 
-#### Return Values
+### Return Values
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -342,7 +354,7 @@ To enable detailed logging, check the console output when running the app. The `
 | `toggleMute` | `() => void` | Toggle mute state |
 | `toggleHold` | `() => void` | Toggle hold state |
 
-#### CallInfo Interface
+### CallInfo Interface
 
 ```typescript
 interface CallInfo {
@@ -372,5 +384,8 @@ The SDK emits various events that are handled internally by the hook:
 - [Telnyx React Native Voice SDK on npm](https://www.npmjs.com/package/@telnyx/react-native-voice-sdk)
 - [Expo Documentation](https://docs.expo.dev/)
 - [Expo Development Builds](https://docs.expo.dev/develop/development-builds/introduction/)
+
+
+
 
 

@@ -84,7 +84,7 @@ import NetInfo from '@react-native-community/netinfo';
 const handleConnectionError = async (voipClient) => {
   // Check network connectivity
   const netInfo = await NetInfo.fetch();
-  
+
   if (!netInfo.isConnected) {
     console.error('No network connection');
     Alert.alert('Network Error', 'Please check your internet connection');
@@ -100,7 +100,7 @@ const handleConnectionError = async (voipClient) => {
         return;
       } catch (error) {
         console.warn(`Retry attempt ${i + 1} failed:`, error.message);
-        
+
         if (i === attempts - 1) {
           console.error('All retry attempts failed');
           // Handle final failure
@@ -236,12 +236,12 @@ const requestAudioPermissions = async () => {
           buttonPositive: 'OK',
         }
       );
-      
+
       if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
         throw new Error('MICROPHONE_PERMISSION_DENIED');
       }
     }
-    
+
     return true;
   } catch (error) {
     console.error('Audio permission error:', error);
@@ -301,16 +301,16 @@ const handlePushTokenError = async () => {
     // Clear and regenerate FCM token
     await messaging().deleteToken();
     const newToken = await messaging().getToken();
-    
+
     if (!newToken) {
       throw new Error('PUSH_TOKEN_GENERATION_FAILED');
     }
-    
+
     console.log('New push token:', newToken);
     return newToken;
   } catch (error) {
     console.error('Push token error:', error);
-    
+
     // Fallback: Continue without push notifications
     Alert.alert(
       'Push Notifications',
@@ -337,7 +337,7 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
     await TelnyxVoiceApp.handleBackgroundPush(remoteMessage.data);
   } catch (error) {
     console.error('Background processing failed:', error);
-    
+
     // Log error for debugging
     crashlytics().recordError(error);
   }
@@ -357,7 +357,7 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
 ```tsx
 const diagnoseNetworkIssues = async () => {
   const netInfo = await NetInfo.fetch();
-  
+
   console.log('Network diagnostics:', {
     isConnected: netInfo.isConnected,
     type: netInfo.type,
@@ -396,7 +396,7 @@ const checkNetworkRestrictions = () => {
   console.log('- Ensure UDP traffic is allowed');
   console.log('- Check if STUN/TURN servers are accessible');
   console.log('- Verify WebSocket connections are permitted');
-  
+
   Alert.alert(
     'Network Configuration',
     'If you\'re on a corporate network, please contact your IT administrator to ensure VoIP traffic is allowed.',
@@ -543,7 +543,7 @@ const createResilientVoipClient = () => {
   voipClient.connectionState$.subscribe((state) => {
     if (state === 'DISCONNECTED') {
       console.log('Connection lost, attempting recovery...');
-      
+
       setTimeout(async () => {
         try {
           await voipClient.loginFromStoredConfig();
@@ -568,17 +568,17 @@ const handleGracefulDegradation = (error) => {
       // Continue without push notifications
       console.warn('Push notifications disabled, app must stay foreground');
       break;
-    
+
     case 'MICROPHONE_PERMISSION_DENIED':
       // Disable calling features
       console.warn('Microphone access denied, calling disabled');
       break;
-    
+
     case 'NETWORK_UNREACHABLE':
       // Show offline mode
       console.warn('Network unreachable, entering offline mode');
       break;
-    
+
     default:
       // General error handling
       console.error('Unhandled error, continuing with limited functionality');
@@ -627,7 +627,7 @@ const testErrorScenarios = async (voipClient) => {
 
     // Test network disconnection
     // (manually disconnect network to test)
-    
+
     // Test invalid phone numbers
     try {
       await voipClient.newCall('invalid_number');

@@ -22,15 +22,15 @@ Defined in: [telnyx-voip-client.ts:41](https://github.com/team-telnyx/react-nati
 
 Creates a new TelnyxVoipClient instance.
 
-#### Parameters
+### Parameters
 
-##### options
+### options
 
 [`TelnyxVoipClientOptions`](../interfaces/TelnyxVoipClientOptions.md) = `{}`
 
 Configuration options for the client
 
-#### Returns
+### Returns
 
 `TelnyxVoipClient`
 
@@ -38,7 +38,7 @@ Configuration options for the client
 
 ### connectionState$
 
-#### Get Signature
+### Get Signature
 
 > **get** **connectionState$**(): `Observable`\<[`TelnyxConnectionState`](../enumerations/TelnyxConnectionState.md)\>
 
@@ -50,7 +50,7 @@ Emits the current status of the connection to the Telnyx backend.
 Values include connecting, connected, disconnected, and error states.
 Listen to this to show connection indicators in your UI.
 
-##### Returns
+### Returns
 
 `Observable`\<[`TelnyxConnectionState`](../enumerations/TelnyxConnectionState.md)\>
 
@@ -58,7 +58,7 @@ Listen to this to show connection indicators in your UI.
 
 ### calls$
 
-#### Get Signature
+### Get Signature
 
 > **get** **calls$**(): `Observable`\<[`Call`](Call.md)\>
 
@@ -70,7 +70,7 @@ Emits a list of all current Call objects. Use this for applications
 that need to support multiple simultaneous calls (e.g., call waiting,
 conference calls).
 
-##### Returns
+### Returns
 
 `Observable`\<[`Call`](Call.md)\>
 
@@ -78,7 +78,7 @@ conference calls).
 
 ### activeCall$
 
-#### Get Signature
+### Get Signature
 
 > **get** **activeCall$**(): `Observable`\<[`Call`](Call.md)\>
 
@@ -90,7 +90,7 @@ A convenience stream that emits the currently active Call object.
 It emits null when no call is in progress. Ideal for applications
 that only handle a single call at a time.
 
-##### Returns
+### Returns
 
 `Observable`\<[`Call`](Call.md)\>
 
@@ -98,7 +98,7 @@ that only handle a single call at a time.
 
 ### currentConnectionState
 
-#### Get Signature
+### Get Signature
 
 > **get** **currentConnectionState**(): [`TelnyxConnectionState`](../enumerations/TelnyxConnectionState.md)
 
@@ -106,7 +106,7 @@ Defined in: [telnyx-voip-client.ts:105](https://github.com/team-telnyx/react-nat
 
 Current connection state (synchronous access).
 
-##### Returns
+### Returns
 
 [`TelnyxConnectionState`](../enumerations/TelnyxConnectionState.md)
 
@@ -114,7 +114,7 @@ Current connection state (synchronous access).
 
 ### currentCalls
 
-#### Get Signature
+### Get Signature
 
 > **get** **currentCalls**(): [`Call`](Call.md)
 
@@ -122,7 +122,7 @@ Defined in: [telnyx-voip-client.ts:112](https://github.com/team-telnyx/react-nat
 
 Current list of calls (synchronous access).
 
-##### Returns
+### Returns
 
 [`Call`](Call.md)
 
@@ -130,7 +130,7 @@ Current list of calls (synchronous access).
 
 ### currentActiveCall
 
-#### Get Signature
+### Get Signature
 
 > **get** **currentActiveCall**(): [`Call`](Call.md)
 
@@ -138,7 +138,7 @@ Defined in: [telnyx-voip-client.ts:119](https://github.com/team-telnyx/react-nat
 
 Current active call (synchronous access).
 
-##### Returns
+### Returns
 
 [`Call`](Call.md)
 
@@ -146,7 +146,7 @@ Current active call (synchronous access).
 
 ### sessionId
 
-#### Get Signature
+### Get Signature
 
 > **get** **sessionId**(): `string`
 
@@ -154,7 +154,7 @@ Defined in: [telnyx-voip-client.ts:126](https://github.com/team-telnyx/react-nat
 
 Current session ID (UUID) for this connection.
 
-##### Returns
+### Returns
 
 `string`
 
@@ -162,7 +162,7 @@ Current session ID (UUID) for this connection.
 
 ### options
 
-#### Get Signature
+### Get Signature
 
 > **get** **options**(): `Required`\<[`TelnyxVoipClientOptions`](../interfaces/TelnyxVoipClientOptions.md)\>
 
@@ -170,7 +170,7 @@ Defined in: [telnyx-voip-client.ts:133](https://github.com/team-telnyx/react-nat
 
 Configuration options for this client instance.
 
-##### Returns
+### Returns
 
 `Required`\<[`TelnyxVoipClientOptions`](../interfaces/TelnyxVoipClientOptions.md)\>
 
@@ -184,15 +184,15 @@ Defined in: [telnyx-voip-client.ts:148](https://github.com/team-telnyx/react-nat
 
 Connects to the Telnyx platform using credential authentication.
 
-#### Parameters
+### Parameters
 
-##### config
+### config
 
 [`CredentialConfig`](../interfaces/CredentialConfig.md)
 
 The credential configuration containing SIP username and password
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -211,15 +211,15 @@ Defined in: [telnyx-voip-client.ts:175](https://github.com/team-telnyx/react-nat
 
 Connects to the Telnyx platform using token authentication.
 
-#### Parameters
+### Parameters
 
-##### config
+### config
 
 [`TokenConfig`](../interfaces/TokenConfig.md)
 
 The token configuration containing the authentication token
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -241,7 +241,7 @@ Disconnects from the Telnyx platform.
 This method terminates the connection, ends any active calls, and
 cleans up all related resources.
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -258,7 +258,7 @@ Attempts to reconnect using previously stored configuration.
 This method is used for auto-reconnection scenarios where the app
 comes back to the foreground and needs to restore the connection.
 
-#### Returns
+### Returns
 
 `Promise`\<`boolean`\>
 
@@ -274,33 +274,33 @@ Defined in: [telnyx-voip-client.ts:296](https://github.com/team-telnyx/react-nat
 
 Initiates a new outgoing call.
 
-#### Parameters
+### Parameters
 
-##### destination
+### destination
 
 `string`
 
 The destination number or SIP URI to call
 
-##### callerName?
+### callerName?
 
 `string`
 
 Optional caller name to display
 
-##### callerNumber?
+### callerNumber?
 
 `string`
 
 Optional caller ID number
 
-##### customHeaders?
+### customHeaders?
 
 `Record`\<`string`, `string`\>
 
 Optional custom headers to include with the call
 
-#### Returns
+### Returns
 
 `Promise`\<[`Call`](Call.md)\>
 
@@ -322,15 +322,15 @@ This is the unified entry point for all push notifications. It intelligently
 determines whether to show a new incoming call UI or to process an already
 actioned (accepted/declined) call upon app launch.
 
-#### Parameters
+### Parameters
 
-##### payload
+### payload
 
 `Record`\<`string`, `any`\>
 
 The push notification payload
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -347,7 +347,7 @@ Disables push notifications for the current session.
 This method sends a request to the Telnyx backend to disable push
 notifications for the current registered device/session.
 
-#### Returns
+### Returns
 
 `void`
 
@@ -363,15 +363,15 @@ Defined in: [telnyx-voip-client.ts:388](https://github.com/team-telnyx/react-nat
 
 Set a call to connecting state (used for push notification calls when answered via CallKit)
 
-#### Parameters
+### Parameters
 
-##### callId
+### callId
 
 `string`
 
 The ID of the call to set to connecting state
 
-#### Returns
+### Returns
 
 `void`
 
@@ -387,15 +387,15 @@ Defined in: [telnyx-voip-client.ts:397](https://github.com/team-telnyx/react-nat
 
 Find a call by its underlying Telnyx call object
 
-#### Parameters
+### Parameters
 
-##### telnyxCall
+### telnyxCall
 
 `any`
 
 The Telnyx call object to find
 
-#### Returns
+### Returns
 
 [`Call`](Call.md)
 
@@ -410,15 +410,15 @@ Defined in: [telnyx-voip-client.ts:406](https://github.com/team-telnyx/react-nat
 Queue an answer action for when the call invite arrives (for CallKit integration)
 This should be called when the user answers from CallKit before the socket connection is established
 
-#### Parameters
+### Parameters
 
-##### customHeaders
+### customHeaders
 
 `Record`\<`string`, `string`\> = `{}`
 
 Optional custom headers to include with the answer
 
-#### Returns
+### Returns
 
 `void`
 
@@ -433,7 +433,7 @@ Defined in: [telnyx-voip-client.ts:427](https://github.com/team-telnyx/react-nat
 Queue an end action for when the call invite arrives (for CallKit integration)
 This should be called when the user ends from CallKit before the socket connection is established
 
-#### Returns
+### Returns
 
 `void`
 
@@ -451,6 +451,8 @@ After calling this method, the client instance should not be used anymore.
 This is particularly important for background clients that should be
 disposed after handling push notifications.
 
-#### Returns
+### Returns
 
 `void`
+
+

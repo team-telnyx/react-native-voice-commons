@@ -14,13 +14,13 @@ Helper functions to determine what actions are available in each state
 
 Can the call be answered in this state?
 
-#### Parameters
+### Parameters
 
-##### state
+### state
 
 [`TelnyxCallState`](../enumerations/TelnyxCallState.md)
 
-#### Returns
+### Returns
 
 `boolean`
 
@@ -30,13 +30,13 @@ Can the call be answered in this state?
 
 Can the call be hung up in this state?
 
-#### Parameters
+### Parameters
 
-##### state
+### state
 
 [`TelnyxCallState`](../enumerations/TelnyxCallState.md)
 
-#### Returns
+### Returns
 
 `boolean`
 
@@ -46,13 +46,13 @@ Can the call be hung up in this state?
 
 Can the call be put on hold in this state?
 
-#### Parameters
+### Parameters
 
-##### state
+### state
 
 [`TelnyxCallState`](../enumerations/TelnyxCallState.md)
 
-#### Returns
+### Returns
 
 `boolean`
 
@@ -62,13 +62,13 @@ Can the call be put on hold in this state?
 
 Can the call be resumed from hold in this state?
 
-#### Parameters
+### Parameters
 
-##### state
+### state
 
 [`TelnyxCallState`](../enumerations/TelnyxCallState.md)
 
-#### Returns
+### Returns
 
 `boolean`
 
@@ -78,13 +78,13 @@ Can the call be resumed from hold in this state?
 
 Can the call be muted/unmuted in this state?
 
-#### Parameters
+### Parameters
 
-##### state
+### state
 
 [`TelnyxCallState`](../enumerations/TelnyxCallState.md)
 
-#### Returns
+### Returns
 
 `boolean`
 
@@ -94,13 +94,13 @@ Can the call be muted/unmuted in this state?
 
 Is the call in a terminated state?
 
-#### Parameters
+### Parameters
 
-##### state
+### state
 
 [`TelnyxCallState`](../enumerations/TelnyxCallState.md)
 
-#### Returns
+### Returns
 
 `boolean`
 
@@ -110,13 +110,13 @@ Is the call in a terminated state?
 
 Is the call in an active state (can have media)?
 
-#### Parameters
+### Parameters
 
-##### state
+### state
 
 [`TelnyxCallState`](../enumerations/TelnyxCallState.md)
 
-#### Returns
+### Returns
 
 `boolean`
 
@@ -126,12 +126,15 @@ Is the call in an active state (can have media)?
 
 Is the call in a connecting state (answered but not yet active)?
 
-#### Parameters
+### Parameters
 
-##### state
+### state
 
 [`TelnyxCallState`](../enumerations/TelnyxCallState.md)
 
-#### Returns
+### Returns
 
 `boolean`
+
+
+

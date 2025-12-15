@@ -74,11 +74,11 @@ Custom headers received from the WebRTC INVITE message.
 These headers are passed during call initiation and can contain application-specific information.
 Format should be `[{"name": "X-Header-Name", "value": "Value"}]` where header names must start with "X-".
 
-#### name
+### name
 
 > **name**: `string`
 
-#### value
+### value
 
 > **value**: `string`
 
@@ -94,11 +94,11 @@ Custom headers received from the WebRTC ANSWER message.
 These headers are passed during call acceptance and can contain application-specific information.
 Format should be `[{"name": "X-Header-Name", "value": "Value"}]` where header names must start with "X-".
 
-#### name
+### name
 
 > **name**: `string`
 
-#### value
+### value
 
 > **value**: `string`
 
@@ -110,13 +110,13 @@ Format should be `[{"name": "X-Header-Name", "value": "Value"}]` where header na
 
 Defined in: [types/telnyx-sdk.d.ts:67](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L67)
 
-#### Parameters
+### Parameters
 
-##### customHeaders?
+### customHeaders?
 
 `object`[]
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -128,13 +128,13 @@ Defined in: [types/telnyx-sdk.d.ts:67](https://github.com/team-telnyx/react-nati
 
 Defined in: [types/telnyx-sdk.d.ts:68](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L68)
 
-#### Parameters
+### Parameters
 
-##### customHeaders?
+### customHeaders?
 
 `object`[]
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -146,7 +146,7 @@ Defined in: [types/telnyx-sdk.d.ts:68](https://github.com/team-telnyx/react-nati
 
 Defined in: [types/telnyx-sdk.d.ts:69](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L69)
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -158,7 +158,7 @@ Defined in: [types/telnyx-sdk.d.ts:69](https://github.com/team-telnyx/react-nati
 
 Defined in: [types/telnyx-sdk.d.ts:70](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L70)
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -170,7 +170,7 @@ Defined in: [types/telnyx-sdk.d.ts:70](https://github.com/team-telnyx/react-nati
 
 Defined in: [types/telnyx-sdk.d.ts:71](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L71)
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -182,7 +182,7 @@ Defined in: [types/telnyx-sdk.d.ts:71](https://github.com/team-telnyx/react-nati
 
 Defined in: [types/telnyx-sdk.d.ts:72](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L72)
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -194,13 +194,13 @@ Defined in: [types/telnyx-sdk.d.ts:72](https://github.com/team-telnyx/react-nati
 
 Defined in: [types/telnyx-sdk.d.ts:73](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L73)
 
-#### Parameters
+### Parameters
 
-##### digits
+### digits
 
 `string`
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -214,21 +214,21 @@ Defined in: [types/telnyx-sdk.d.ts:75](https://github.com/team-telnyx/react-nati
 
 Add a listener for a given event.
 
-#### Parameters
+### Parameters
 
-##### event
+### event
 
 `string`
 
-##### listener
+### listener
 
 (...`args`) => `void`
 
-#### Returns
+### Returns
 
 `this`
 
-#### Overrides
+### Overrides
 
 `EventEmitter.on`
 
@@ -240,21 +240,21 @@ Add a listener for a given event.
 
 Defined in: [types/telnyx-sdk.d.ts:76](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/types/telnyx-sdk.d.ts#L76)
 
-#### Parameters
+### Parameters
 
-##### event
+### event
 
 `string`
 
-##### listener
+### listener
 
 (...`args`) => `void`
 
-#### Returns
+### Returns
 
 `this`
 
-#### Overrides
+### Overrides
 
 `EventEmitter.off`
 
@@ -268,20 +268,23 @@ Defined in: [types/telnyx-sdk.d.ts:77](https://github.com/team-telnyx/react-nati
 
 Calls each of the listeners registered for a given event.
 
-#### Parameters
+### Parameters
 
-##### event
+### event
 
 `string`
 
-##### args
+### args
 
 ...`any`[]
 
-#### Returns
+### Returns
 
 `boolean`
 
-#### Overrides
+### Overrides
 
 `EventEmitter.emit`
+
+
+

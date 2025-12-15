@@ -41,7 +41,7 @@ npx expo install expo-notifications
 
 ### 2. Firebase Configuration (Android)
 
-#### Step 1: Download Configuration File
+### Step 1: Download Configuration File
 
 1. Download the `google-services.json` file from your Firebase project console
 2. Place it in your project root directory (same level as `package.json`)
@@ -54,14 +54,14 @@ your-project/
 └── ios/
 ```
 
-#### Step 2: Configure Firebase in Android Manifest
+### Step 2: Configure Firebase in Android Manifest
 
 Ensure your `android/app/src/main/AndroidManifest.xml` includes Firebase services:
 
 ```xml
 <application>
     <!-- Your existing application configuration -->
-    
+
     <!-- Firebase Messaging Service -->
     <service
         android:name=".AppFirebaseMessagingService"
@@ -70,7 +70,7 @@ Ensure your `android/app/src/main/AndroidManifest.xml` includes Firebase service
             <action android:name="com.google.firebase.MESSAGING_EVENT" />
         </intent-filter>
     </service>
-    
+
     <!-- Telnyx Notification Action Receiver -->
     <receiver
         android:name=".AppNotificationActionReceiver"
@@ -85,9 +85,9 @@ Ensure your `android/app/src/main/AndroidManifest.xml` includes Firebase service
 
 ### 3. Native Implementation
 
-#### Android Implementation
+### Android Implementation
 
-##### Step 1: Extend TelnyxMainActivity
+### Step 1: Extend TelnyxMainActivity
 
 Your app's `MainActivity` should extend `TelnyxMainActivity` for automatic push notification handling:
 
@@ -100,7 +100,6 @@ import android.content.Intent
 import android.os.Bundle
 
 class MainActivity : TelnyxMainActivity() {
-    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Your app-specific initialization
@@ -120,7 +119,7 @@ class MainActivity : TelnyxMainActivity() {
 - Proper lifecycle management for VoIP functionality
 - Integration with `VoicePnManager` for push notification state
 
-##### Step 2: Create Firebase Messaging Service
+### Step 2: Create Firebase Messaging Service
 
 Create a Firebase messaging service that extends `TelnyxFirebaseMessagingService`:
 
@@ -139,7 +138,7 @@ class AppFirebaseMessagingService : TelnyxFirebaseMessagingService() {
 }
 ```
 
-##### Step 3: Create Notification Action Receiver
+### Step 3: Create Notification Action Receiver
 
 Create a notification action receiver for handling notification actions:
 
@@ -158,9 +157,9 @@ class AppNotificationActionReceiver : TelnyxNotificationActionReceiver() {
 }
 ```
 
-#### iOS Implementation
+### iOS Implementation
 
-##### Step 1: Configure AppDelegate
+### Step 1: Configure AppDelegate
 
 Your `AppDelegate` should implement `PKPushRegistryDelegate` and delegate to `TelnyxVoipPushHandler`:
 
@@ -187,17 +186,17 @@ public class AppDelegate: ExpoAppDelegate, PKPushRegistryDelegate {
 
   // MARK: - VoIP Push Notifications
   public func pushRegistry(
-    _ registry: PKPushRegistry, 
-    didUpdate pushCredentials: PKPushCredentials, 
+    _ registry: PKPushRegistry,
+    didUpdate pushCredentials: PKPushCredentials,
     for type: PKPushType
   ) {
     TelnyxVoipPushHandler.shared.handleVoipTokenUpdate(pushCredentials, type: type)
   }
 
   public func pushRegistry(
-    _ registry: PKPushRegistry, 
-    didReceiveIncomingPushWith payload: PKPushPayload, 
-    for type: PKPushType, 
+    _ registry: PKPushRegistry,
+    didReceiveIncomingPushWith payload: PKPushPayload,
+    for type: PKPushType,
     completion: @escaping () -> Void
   ) {
     TelnyxVoipPushHandler.shared.handleVoipPush(payload, type: type, completion: completion)
@@ -212,7 +211,7 @@ public class AppDelegate: ExpoAppDelegate, PKPushRegistryDelegate {
 - Audio session management is automatically handled
 - The `TelnyxVoipPushHandler` manages all VoIP push notification processing
 
-##### Step 2: Configure Info.plist
+### Step 2: Configure Info.plist
 
 Add the required background modes to your `ios/YourApp/Info.plist`:
 
@@ -226,7 +225,7 @@ Add the required background modes to your `ios/YourApp/Info.plist`:
 
 ### 4. JavaScript/TypeScript Integration
 
-#### Step 1: Configure TelnyxVoiceApp
+### Step 1: Configure TelnyxVoiceApp
 
 Wrap your app with `TelnyxVoiceApp` for automatic lifecycle management:
 
@@ -244,9 +243,9 @@ const voipClient = createTelnyxVoipClient({
 
 export default function App() {
   return (
-    <TelnyxVoiceApp 
-      voipClient={voipClient} 
-      enableAutoReconnect={true} 
+    <TelnyxVoiceApp
+      voipClient={voipClient}
+      enableAutoReconnect={true}
       debug={true}
     >
       <YourAppContent />
@@ -255,17 +254,18 @@ export default function App() {
 }
 ```
 
-#### Step 2: No Background Handler Required
+### Step 2: No Background Handler Required
 
 **Android push notifications are handled automatically by the SDK's native components.** You don't need to register any background message handlers in your JavaScript code.
 
 The SDK handles everything natively through:
+
 - `TelnyxMainActivity` (extends your MainActivity)
 - `TelnyxFirebaseMessagingService` (extends your FCM service)
 
 Simply extend these classes as shown in the native implementation steps above, and push notifications will work automatically.
 
-#### Step 3: Token Registration (Optional)
+### Step 3: Token Registration (Optional)
 
 Push tokens are handled automatically by the SDK during authentication. For most apps, you don't need to do anything additional.
 
@@ -290,11 +290,12 @@ export function YourLoginComponent() {
 ```
 
 The `VoipTokenFetcher` component automatically:
+
 - Requests notification permissions
 - Retrieves FCM tokens (Android) and VoIP tokens (iOS)
 - Handles platform-specific token registration
 
-#### Step 4: Authentication
+### Step 4: Authentication
 
 Include push tokens in your login configuration:
 
@@ -413,11 +414,11 @@ If you need to handle additional FCM messages beyond Telnyx voice calls, extend 
 ```kotlin
 // android/app/src/main/java/com/yourpackage/AppFirebaseMessagingService.kt
 class AppFirebaseMessagingService : TelnyxFirebaseMessagingService() {
-    
+
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         // Let Telnyx handle voice notifications first
         super.onMessageReceived(remoteMessage)
-        
+
         // Handle your app's other notifications
         if (remoteMessage.data.containsKey("your_app_notification_type")) {
             // Handle your custom notifications
@@ -445,33 +446,37 @@ const voipClient = createTelnyxVoipClient({
 
 ### Common Issues
 
-#### Push Notifications Not Received
+### Push Notifications Not Received
 
 **Android:**
+
 - Verify `google-services.json` is in the correct location
 - Check Firebase project configuration and FCM keys in Telnyx portal
 - Ensure `AppFirebaseMessagingService` is properly registered in AndroidManifest.xml
 - Verify app is not in battery optimization/doze mode
 
 **iOS:**
+
 - Ensure VoIP push certificates are configured in Apple Developer account
 - Verify certificates are uploaded to Telnyx portal
 - Check that `TelnyxVoipPushHandler.initializeVoipRegistration()` is called
 - Ensure app has proper VoIP background modes configured
 
-#### App Not Launching from Push
+### App Not Launching from Push
 
 **Android:**
+
 - Verify `MainActivity` extends `TelnyxMainActivity`
 - Check intent filters in AndroidManifest.xml
 - Ensure `onHandleIntent` is properly implemented
 
 **iOS:**
+
 - Verify AppDelegate implements `PKPushRegistryDelegate`
 - Ensure proper delegation to `TelnyxVoipPushHandler`
 - Check VoIP background modes in Info.plist
 
-#### Call Connection Issues
+### Call Connection Issues
 
 - Verify authentication is successful before push notification
 - Check network connectivity and Telnyx service availability
@@ -522,6 +527,9 @@ After completing the app setup:
 4. **Monitoring**: Implement logging and monitoring for production use
 
 For additional configuration and troubleshooting, see:
+
 - [Portal Setup Guide](./portal-setup.md)
 - [API Documentation](../README.md)
 - [Telnyx Developer Portal](https://developers.telnyx.com)
+
+

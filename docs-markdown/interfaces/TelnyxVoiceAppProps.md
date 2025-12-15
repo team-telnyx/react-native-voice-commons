@@ -18,7 +18,7 @@ Defined in: [telnyx-voice-app.tsx:13](https://github.com/team-telnyx/react-nativ
 
 The TelnyxVoipClient instance to manage
 
-#### Inherited from
+### Inherited from
 
 [`TelnyxVoiceAppOptions`](TelnyxVoiceAppOptions.md).[`voipClient`](TelnyxVoiceAppOptions.md#voipclient)
 
@@ -32,11 +32,11 @@ Defined in: [telnyx-voice-app.tsx:16](https://github.com/team-telnyx/react-nativ
 
 Optional callback when push notification processing starts
 
-#### Returns
+### Returns
 
 `void`
 
-#### Inherited from
+### Inherited from
 
 [`TelnyxVoiceAppOptions`](TelnyxVoiceAppOptions.md).[`onPushNotificationProcessingStarted`](TelnyxVoiceAppOptions.md#onpushnotificationprocessingstarted)
 
@@ -50,11 +50,11 @@ Defined in: [telnyx-voice-app.tsx:19](https://github.com/team-telnyx/react-nativ
 
 Optional callback when push notification processing completes
 
-#### Returns
+### Returns
 
 `void`
 
-#### Inherited from
+### Inherited from
 
 [`TelnyxVoiceAppOptions`](TelnyxVoiceAppOptions.md).[`onPushNotificationProcessingCompleted`](TelnyxVoiceAppOptions.md#onpushnotificationprocessingcompleted)
 
@@ -68,17 +68,17 @@ Defined in: [telnyx-voice-app.tsx:22](https://github.com/team-telnyx/react-nativ
 
 Optional callback for additional background/foreground handling
 
-#### Parameters
+### Parameters
 
-##### state
+### state
 
 `AppStateStatus`
 
-#### Returns
+### Returns
 
 `void`
 
-#### Inherited from
+### Inherited from
 
 [`TelnyxVoiceAppOptions`](TelnyxVoiceAppOptions.md).[`onAppStateChanged`](TelnyxVoiceAppOptions.md#onappstatechanged)
 
@@ -92,7 +92,7 @@ Defined in: [telnyx-voice-app.tsx:25](https://github.com/team-telnyx/react-nativ
 
 Whether to enable automatic login/reconnection (default: true)
 
-#### Inherited from
+### Inherited from
 
 [`TelnyxVoiceAppOptions`](TelnyxVoiceAppOptions.md).[`enableAutoReconnect`](TelnyxVoiceAppOptions.md#enableautoreconnect)
 
@@ -106,7 +106,7 @@ Defined in: [telnyx-voice-app.tsx:28](https://github.com/team-telnyx/react-nativ
 
 Whether to skip web platform for background detection (default: true)
 
-#### Inherited from
+### Inherited from
 
 [`TelnyxVoiceAppOptions`](TelnyxVoiceAppOptions.md).[`skipWebBackgroundDetection`](TelnyxVoiceAppOptions.md#skipwebbackgrounddetection)
 
@@ -120,7 +120,7 @@ Defined in: [telnyx-voice-app.tsx:31](https://github.com/team-telnyx/react-nativ
 
 Enable debug logging
 
-#### Inherited from
+### Inherited from
 
 [`TelnyxVoiceAppOptions`](TelnyxVoiceAppOptions.md).[`debug`](TelnyxVoiceAppOptions.md#debug)
 
@@ -133,3 +133,6 @@ Enable debug logging
 Defined in: [telnyx-voice-app.tsx:39](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L39)
 
 The child components to render
+
+
+

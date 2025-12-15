@@ -26,9 +26,9 @@ const voipClient = createTelnyxVoipClient({
 
 export default function App() {
   return (
-    <TelnyxVoiceApp 
-      voipClient={voipClient} 
-      enableAutoReconnect={true} 
+    <TelnyxVoiceApp
+      voipClient={voipClient}
+      enableAutoReconnect={true}
       debug={true}
     >
       <YourAppContent />
@@ -54,7 +54,7 @@ export function LoginScreen() {
     const config = createCredentialConfig(username, password, {
       debug: true,
     });
-    
+
     await voipClient.login(config);
   };
 
@@ -132,7 +132,7 @@ export function useConnectionState() {
 }
 ```
 
-## That's It!
+## That's It
 
 You now have a basic VoIP calling app! The SDK automatically handles:
 
@@ -161,7 +161,7 @@ For production apps, you'll need native integration:
 The SDK provides extensive capabilities for building production VoIP apps:
 
 - **Call Management** - Hold, mute, transfer, and conference calls (see [Call API](https://team-telnyx.github.io/react-native-voice-commons/classes/Call.html))
-- **Error Handling** - Robust error handling patterns (see [Error Handling Guide](https://developers.telnyx.com/development/webrtc/react-native-sdk/error-handling))  
+- **Error Handling** - Robust error handling patterns (see [Error Handling Guide](https://developers.telnyx.com/development/webrtc/react-native-sdk/error-handling))
 - **State Management** - RxJS observables and reactive patterns (see [TelnyxVoipClient API](https://team-telnyx.github.io/react-native-voice-commons/classes/TelnyxVoipClient.html))
 
 ## Configuration Options
@@ -178,7 +178,7 @@ const voipClient = createTelnyxVoipClient({
 ### TelnyxVoiceApp Options
 
 ```tsx
-<TelnyxVoiceApp 
+<TelnyxVoiceApp
   voipClient={voipClient}
   enableAutoReconnect={true}        // Auto-reconnect on app launch
   debug={true}                      // Enable debug logging
@@ -242,6 +242,6 @@ if (!success) {
 - **[Troubleshooting](https://developers.telnyx.com/development/webrtc/react-native-sdk/error-handling)** - Common issues and solutions
 - **[Demo App](https://github.com/team-telnyx/react-native-voice-commons/)** - Full demo application source code
 
-## You're Ready!
+## You're Ready
 
 Start building your VoIP application with the Telnyx React Voice Commons SDK. The SDK handles the complexity so you can focus on building great user experiences!

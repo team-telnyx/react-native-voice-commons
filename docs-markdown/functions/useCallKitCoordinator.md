@@ -12,21 +12,21 @@ Defined in: [hooks/use-callkit-coordinator.ts:6](https://github.com/team-telnyx/
 
 > **reportIncomingCall**: (`call`, `callerName`, `callerNumber`) => `Promise`\<`string`\>
 
-#### Parameters
+### Parameters
 
-##### call
+### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-##### callerName
+### callerName
 
 `string`
 
-##### callerNumber
+### callerNumber
 
 `string`
 
-#### Returns
+### Returns
 
 `Promise`\<`string`\>
 
@@ -34,21 +34,21 @@ Defined in: [hooks/use-callkit-coordinator.ts:6](https://github.com/team-telnyx/
 
 > **startOutgoingCall**: (`call`, `destinationNumber`, `displayName?`) => `Promise`\<`string`\>
 
-#### Parameters
+### Parameters
 
-##### call
+### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-##### destinationNumber
+### destinationNumber
 
 `string`
 
-##### displayName?
+### displayName?
 
 `string`
 
-#### Returns
+### Returns
 
 `Promise`\<`string`\>
 
@@ -56,13 +56,13 @@ Defined in: [hooks/use-callkit-coordinator.ts:6](https://github.com/team-telnyx/
 
 > **answerCallFromUI**: (`call`) => `Promise`\<`boolean`\>
 
-#### Parameters
+### Parameters
 
-##### call
+### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-#### Returns
+### Returns
 
 `Promise`\<`boolean`\>
 
@@ -70,13 +70,13 @@ Defined in: [hooks/use-callkit-coordinator.ts:6](https://github.com/team-telnyx/
 
 > **endCallFromUI**: (`call`) => `Promise`\<`boolean`\>
 
-#### Parameters
+### Parameters
 
-##### call
+### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-#### Returns
+### Returns
 
 `Promise`\<`boolean`\>
 
@@ -84,13 +84,13 @@ Defined in: [hooks/use-callkit-coordinator.ts:6](https://github.com/team-telnyx/
 
 > **getCallKitUUID**: (`call`) => `string`
 
-#### Parameters
+### Parameters
 
-##### call
+### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-#### Returns
+### Returns
 
 `string`
 
@@ -98,13 +98,13 @@ Defined in: [hooks/use-callkit-coordinator.ts:6](https://github.com/team-telnyx/
 
 > **getWebRTCCall**: (`callKitUUID`) => [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-#### Parameters
+### Parameters
 
-##### callKitUUID
+### callKitUUID
 
 `string`
 
-#### Returns
+### Returns
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
@@ -112,17 +112,17 @@ Defined in: [hooks/use-callkit-coordinator.ts:6](https://github.com/team-telnyx/
 
 > **linkExistingCallKitCall**: (`call`, `callKitUUID`) => `void`
 
-#### Parameters
+### Parameters
 
-##### call
+### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-##### callKitUUID
+### callKitUUID
 
 `string`
 
-#### Returns
+### Returns
 
 `void`
 
@@ -130,7 +130,7 @@ Defined in: [hooks/use-callkit-coordinator.ts:6](https://github.com/team-telnyx/
 
 > **isAvailable**: () => `boolean`
 
-#### Returns
+### Returns
 
 `boolean`
 
@@ -138,12 +138,14 @@ Defined in: [hooks/use-callkit-coordinator.ts:6](https://github.com/team-telnyx/
 
 > **setVoipClient**: (`voipClient`) => `void`
 
-#### Parameters
+### Parameters
 
-##### voipClient
+### voipClient
 
 [`TelnyxVoipClient`](../classes/TelnyxVoipClient.md)
 
-#### Returns
+### Returns
 
 `void`
+
+
