@@ -39,7 +39,7 @@ jobs:
       - name: Markdown Lint Check
         run: |
           echo "Running ESLint check on all Markdown files..."
-          npx eslint "**/*.md"
+          npm run lint:md
 
       - name: Code Quality Summary
         if: always()
