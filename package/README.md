@@ -60,13 +60,13 @@ client.on('telnyx.call.incoming', (call) => {
 
 The main client class for managing WebRTC connections and calls.
 
-#### Constructor
+### Constructor
 
 ```typescript
 new TelnyxRTC(options: ClientOptions)
 ```
 
-#### Methods
+### Methods
 
 - `connect()`: Connect to Telnyx infrastructure
 - `disconnect()`: Disconnect and cleanup
@@ -75,7 +75,7 @@ new TelnyxRTC(options: ClientOptions)
 - `queueAnswerFromCallKit()`: Queue answer action for push calls
 - `queueEndFromCallKit()`: Queue end action for push calls
 
-#### Events
+### Events
 
 - `telnyx.client.ready`: Client is connected and ready
 - `telnyx.client.error`: Connection or authentication error
@@ -85,7 +85,7 @@ new TelnyxRTC(options: ClientOptions)
 
 Represents an individual voice call.
 
-#### Methods
+### Methods
 
 - `answer()`: Answer an incoming call
 - `hangup()`: End the call
@@ -93,7 +93,7 @@ Represents an individual voice call.
 - `unhold()`: Resume call from hold
 - `dtmf(digits)`: Send DTMF tones
 
-#### Events
+### Events
 
 - `telnyx.call.state`: Call state changed ('new', 'ringing', 'active', 'ended', 'held')
 

@@ -118,7 +118,7 @@ The library supports both credential-based and token-based authentication with a
 
 ### Authentication Methods
 
-#### 1. Credential-Based Authentication
+### 1. Credential-Based Authentication
 
 ```tsx
 import { createCredentialConfig } from '@telnyx/react-voice-commons-sdk';
@@ -131,7 +131,7 @@ const config = createCredentialConfig('your_sip_username', 'your_sip_password', 
 await voipClient.login(config);
 ```
 
-#### 2. Token-Based Authentication
+### 2. Token-Based Authentication
 
 ```tsx
 import { createTokenConfig } from '@telnyx/react-voice-commons-sdk';
@@ -148,7 +148,7 @@ await voipClient.loginWithToken(config);
 
 The library automatically stores authentication data securely for seamless reconnection. **You don't need to manually manage these storage keys** - the library handles everything internally.
 
-#### Internal Storage (Managed Automatically)
+### Internal Storage (Managed Automatically)
 
 The library uses these AsyncStorage keys internally:
 
@@ -159,7 +159,7 @@ The library uses these AsyncStorage keys internally:
 
 **Note**: These are managed automatically by the library. You only need to call `login()` once, and the library will handle storage and future reconnections.
 
-#### Auto-Reconnection
+### Auto-Reconnection
 
 ```tsx
 // Automatically reconnects using internally stored credentials or token
@@ -180,7 +180,7 @@ if (!success) {
 
 **Demo App Note**: The demo app's `TelnyxLoginForm` component does additional storage for UI convenience (pre-filling the login form). This is separate from the library's internal authentication storage and is not required for production apps.
 
-#### Manual Storage Management (Advanced Use Only)
+### Manual Storage Management (Advanced Use Only)
 
 If you need to clear stored authentication data manually:
 
@@ -204,7 +204,7 @@ The demo app shows complete native integration for both platforms. These integra
 
 ### Android Integration
 
-#### 1. MainActivity Setup
+### 1. MainActivity Setup
 
 Your app's MainActivity should extend `TelnyxMainActivity` for automatic push notification handling:
 
@@ -229,7 +229,7 @@ The `TelnyxMainActivity` provides:
 - Proper lifecycle management for VoIP functionality
 - Integration with `VoicePnManager` for push notification state
 
-#### 2. Push Notification Setup
+### 2. Push Notification Setup
 
 1. Place `google-services.json` in the project root
 2. Register background message handler:
@@ -245,7 +245,7 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
 
 ### iOS Integration
 
-#### 1. AppDelegate Setup
+### 1. AppDelegate Setup
 
 Your AppDelegate only needs to implement `PKPushRegistryDelegate` for VoIP push notifications. CallKit integration is automatically handled by CallBridge:
 
@@ -281,7 +281,7 @@ public class AppDelegate: ExpoAppDelegate, PKPushRegistryDelegate {
 
 **Note**: CallKit integration (CXProvider, CXProviderDelegate, audio session management) is automatically handled by the internal CallBridge component. You don't need to implement any CallKit delegate methods manually.
 
-#### 2. VoIP Push Certificate Setup
+### 2. VoIP Push Certificate Setup
 
 - Configure VoIP push certificates in your Apple Developer account
 - The `TelnyxVoipPushHandler` automatically handles token registration and push processing
@@ -420,15 +420,15 @@ npx expo run:ios
 
 ### Common Integration Issues
 
-#### Double Login
+### Double Login
 
 Ensure you're not calling login methods manually when using `TelnyxVoiceApp` with auto-reconnection enabled.
 
-#### Background Disconnection
+### Background Disconnection
 
 Check if `enableAutoReconnect` is set appropriately for your use case in the `TelnyxVoiceApp` configuration.
 
-#### Push Notifications Not Working
+### Push Notifications Not Working
 
 - **Android**:
   - Verify `google-services.json` is in the correct location and Firebase is properly configured
@@ -440,19 +440,19 @@ Check if `enableAutoReconnect` is set appropriately for your use case in the `Te
   - Check that `TelnyxVoipPushHandler.initializeVoipRegistration()` is called in `didFinishLaunchingWithOptions`
 - **Both**: Check that background message handlers are properly registered
 
-#### Native Integration Issues
+### Native Integration Issues
 
 - **Android**: Ensure MainActivity extends `TelnyxMainActivity` for proper intent handling
 - **iOS**: Verify AppDelegate implements `PKPushRegistryDelegate` and delegates to `TelnyxVoipPushHandler`
 - **CallKit**: On iOS, CallKit integration is automatically handled by CallBridge - no manual setup required
 
-#### Audio Issues
+### Audio Issues
 
 - **iOS**: Audio session management is automatically handled by CallBridge
 - **Android**: Verify ConnectionService is properly configured for audio routing
 - **Both**: Ensure proper audio permissions are granted
 
-#### Memory Leaks
+### Memory Leaks
 
 Ensure you're unsubscribing from RxJS observables in your React components:
 
