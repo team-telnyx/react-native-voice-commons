@@ -301,7 +301,7 @@ npm install @telnyx/react-native-voice-sdk @telnyx/react-voice-commons-sdk --leg
 
 1. Verify credentials in `src/config/telnyx.config.ts`
 2. Check internet connection
-3. Ensure WebRTC ports are not blocked (UDP ports 10000-20000)
+
 
 ### Issue: No audio during call
 
@@ -345,7 +345,7 @@ To enable detailed logging, check the console output when running the app. The `
 | `isConnected` | `boolean` | Whether connected to Telnyx |
 | `isConnecting` | `boolean` | Whether connection is in progress |
 | `connectionError` | `string \| null` | Connection error message |
-| `callInfo` | `CallInfo` | Current call information |
+| `activeCall` | `Call \| null` | Current active call instance |
 | `connect` | `() => Promise<void>` | Connect to Telnyx |
 | `disconnect` | `() => void` | Disconnect from Telnyx |
 | `makeCall` | `(destination: string) => Promise<void>` | Make an outbound call |
@@ -354,19 +354,45 @@ To enable detailed logging, check the console output when running the app. The `
 | `toggleMute` | `() => void` | Toggle mute state |
 | `toggleHold` | `() => void` | Toggle hold state |
 
-### CallInfo Interface
+### Call Class
 
 ```typescript
-interface CallInfo {
-  callId: string | null;
-  state: CallState;
-  remoteNumber: string | null;
-  duration: number;
-  isMuted: boolean;
-  isOnHold: boolean;
+// The actual Call class from @telnyx/react-voice-commons-sdk
+class Call {
+  // Synchronous access to call properties
+  get callId(): string;
+  get destination(): string;
+  get currentState(): TelnyxCallState;
+  get currentIsMuted(): boolean;
+  get currentIsHeld(): boolean;
+  get currentDuration(): number; // in seconds
+  
+  // Reactive streams for real-time updates
+  get callState$(): Observable<TelnyxCallState>;
+  get isMuted$(): Observable<boolean>;
+  get isHeld$(): Observable<boolean>;
+  get duration$(): Observable<number>;
+  
+  // Call control methods
+  answer(): Promise<void>;
+  hangup(): Promise<void>;
+  hold(): Promise<void>;
+  resume(): Promise<void>;
+  mute(): Promise<void>;
+  unmute(): Promise<void>;
+  toggleMute(): Promise<void>;
 }
 
-type CallState = 'idle' | 'connecting' | 'ringing' | 'active' | 'held' | 'disconnected';
+// Call states from the actual SDK
+enum TelnyxCallState {
+  RINGING = 'RINGING',
+  CONNECTING = 'CONNECTING', 
+  ACTIVE = 'ACTIVE',
+  HELD = 'HELD',
+  ENDED = 'ENDED',
+  FAILED = 'FAILED',
+  DROPPED = 'DROPPED'
+}
 ```
 
 ### Telnyx SDK Events
