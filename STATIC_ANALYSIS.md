@@ -14,7 +14,7 @@ This runs: formatting check only (simplified and fast)
 
 ### Individual Checks
 
-#### 1. Code Formatting (Prettier)
+### 1. Code Formatting (Prettier)
 
 ```bash
 # Check formatting
@@ -24,7 +24,7 @@ npm run lint
 npm run lint:fix
 ```
 
-#### 2. Security Audit
+### 2. Security Audit
 
 ```bash
 npm run security:check

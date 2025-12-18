@@ -28,7 +28,7 @@ Defined in: [telnyx-voice-app.tsx:16](https://github.com/team-telnyx/react-nativ
 
 Optional callback when push notification processing starts
 
-#### Returns
+### Returns
 
 `void`
 
@@ -42,7 +42,7 @@ Defined in: [telnyx-voice-app.tsx:19](https://github.com/team-telnyx/react-nativ
 
 Optional callback when push notification processing completes
 
-#### Returns
+### Returns
 
 `void`
 
@@ -56,13 +56,13 @@ Defined in: [telnyx-voice-app.tsx:22](https://github.com/team-telnyx/react-nativ
 
 Optional callback for additional background/foreground handling
 
-#### Parameters
+### Parameters
 
-##### state
+### state
 
 `AppStateStatus`
 
-#### Returns
+### Returns
 
 `void`
 
@@ -95,3 +95,6 @@ Whether to skip web platform for background detection (default: true)
 Defined in: [telnyx-voice-app.tsx:31](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voice-app.tsx#L31)
 
 Enable debug logging
+
+
+

@@ -26,21 +26,21 @@ Defined in: [callkit/use-callkit.ts:19](https://github.com/team-telnyx/react-nat
 
 > **startOutgoingCall**: (`call`, `handle?`, `displayName?`) => `Promise`\<`string`\>
 
-#### Parameters
+### Parameters
 
-##### call
+### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-##### handle?
+### handle?
 
 `string`
 
-##### displayName?
+### displayName?
 
 `string`
 
-#### Returns
+### Returns
 
 `Promise`\<`string`\>
 
@@ -48,21 +48,21 @@ Defined in: [callkit/use-callkit.ts:19](https://github.com/team-telnyx/react-nat
 
 > **reportIncomingCall**: (`call`, `handle?`, `displayName?`) => `Promise`\<`string`\>
 
-#### Parameters
+### Parameters
 
-##### call
+### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-##### handle?
+### handle?
 
 `string`
 
-##### displayName?
+### displayName?
 
 `string`
 
-#### Returns
+### Returns
 
 `Promise`\<`string`\>
 
@@ -70,13 +70,13 @@ Defined in: [callkit/use-callkit.ts:19](https://github.com/team-telnyx/react-nat
 
 > **answerCall**: (`callUUID`) => `Promise`\<`boolean`\>
 
-#### Parameters
+### Parameters
 
-##### callUUID
+### callUUID
 
 `string`
 
-#### Returns
+### Returns
 
 `Promise`\<`boolean`\>
 
@@ -84,17 +84,17 @@ Defined in: [callkit/use-callkit.ts:19](https://github.com/team-telnyx/react-nat
 
 > **endCall**: (`callUUID`, `reason`) => `Promise`\<`boolean`\>
 
-#### Parameters
+### Parameters
 
-##### callUUID
+### callUUID
 
 `string`
 
-##### reason
+### reason
 
 [`CallEndReason`](../enumerations/CallEndReason.md) = `CallEndReason.RemoteEnded`
 
-#### Returns
+### Returns
 
 `Promise`\<`boolean`\>
 
@@ -102,13 +102,13 @@ Defined in: [callkit/use-callkit.ts:19](https://github.com/team-telnyx/react-nat
 
 > **reportCallConnected**: (`callUUID`) => `Promise`\<`boolean`\>
 
-#### Parameters
+### Parameters
 
-##### callUUID
+### callUUID
 
 `string`
 
-#### Returns
+### Returns
 
 `Promise`\<`boolean`\>
 
@@ -116,21 +116,21 @@ Defined in: [callkit/use-callkit.ts:19](https://github.com/team-telnyx/react-nat
 
 > **updateCall**: (`callUUID`, `displayName`, `handle`) => `Promise`\<`boolean`\>
 
-#### Parameters
+### Parameters
 
-##### callUUID
-
-`string`
-
-##### displayName
+### callUUID
 
 `string`
 
-##### handle
+### displayName
 
 `string`
 
-#### Returns
+### handle
+
+`string`
+
+### Returns
 
 `Promise`\<`boolean`\>
 
@@ -138,13 +138,13 @@ Defined in: [callkit/use-callkit.ts:19](https://github.com/team-telnyx/react-nat
 
 > **getCallKitUUID**: (`call`) => `string`
 
-#### Parameters
+### Parameters
 
-##### call
+### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-#### Returns
+### Returns
 
 `string`
 
@@ -152,17 +152,17 @@ Defined in: [callkit/use-callkit.ts:19](https://github.com/team-telnyx/react-nat
 
 > **integrateCall**: (`call`, `direction`) => `Promise`\<`string`\>
 
-#### Parameters
+### Parameters
 
-##### call
+### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-##### direction
+### direction
 
 `"incoming"` | `"outgoing"`
 
-#### Returns
+### Returns
 
 `Promise`\<`string`\>
 
@@ -170,6 +170,8 @@ Defined in: [callkit/use-callkit.ts:19](https://github.com/team-telnyx/react-nat
 
 > **generateCallUUID**: () => `string` = `CallKit.generateCallUUID`
 
-#### Returns
+### Returns
 
 `string`
+
+

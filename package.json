@@ -2,6 +2,7 @@
   "name": "telnyx-react-native-voice-sdk-demo",
   "main": "index.js",
   "version": "1.0.0",
+  "type": "module",
   "scripts": {
     "dev": "expo start -c",
     "dev:web": "expo start -c --web",
@@ -13,7 +14,9 @@
     "postinstall": "npx tailwindcss -i ./global.css -o ./node_modules/.cache/nativewind/global.css",
     "lint": "prettier --check \"**/*.{js,jsx,ts,tsx,json,md}\"",
     "lint:fix": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\"",
-    "quality:check": "echo '🎨 Running formatting checks...' && npm run lint && echo '✅ Quality checks passed!'",
+    "lint:md": "eslint \"**/*.md\"",
+    "lint:md:fix": "eslint \"**/*.md\" --fix",
+    "quality:check": "echo '🎨 Running formatting checks...' && npm run lint && echo '📝 Running markdown checks...' && npm run lint:md && echo '✅ Quality checks passed!'",
     "security:check": "npm audit --audit-level=high",
     "ci:checks": "npm run quality:check && npm run security:check"
   },
@@ -78,7 +81,9 @@
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
+    "@eslint/markdown": "^7.5.1",
     "@types/react": "~19.0.10",
+    "eslint": "^9.39.1",
     "prettier": "^3.2.5",
     "typescript": "~5.8.3"
   },

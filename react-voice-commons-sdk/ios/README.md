@@ -32,7 +32,7 @@ Add the following to your iOS app's `Info.plist`:
 
 ### 2. AppDelegate Integration
 
-#### Option A: Easy Integration (Recommended)
+### Option A: Easy Integration (Recommended)
 
 Import and use the `TelnyxVoiceAppDelegate` protocol:
 
@@ -77,7 +77,7 @@ extension AppDelegate: PKPushRegistryDelegate {}
 extension AppDelegate: CXProviderDelegate {}
 ```
 
-#### Option B: Manual Integration
+### Option B: Manual Integration
 
 If you prefer to implement the delegates manually:
 

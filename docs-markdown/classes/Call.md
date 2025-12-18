@@ -16,37 +16,37 @@ integrate with any state management solution.
 
 Defined in: [models/call.ts:23](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/call.ts#L23)
 
-#### Parameters
+### Parameters
 
-##### \_telnyxCall
+### \_telnyxCall
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-##### \_callId
+### \_callId
 
 `string`
 
-##### \_destination
+### \_destination
 
 `string`
 
-##### \_isIncoming
+### \_isIncoming
 
 `boolean`
 
-##### isReattached
+### isReattached
 
 `boolean` = `false`
 
-##### \_originalCallerName?
+### \_originalCallerName?
 
 `string`
 
-##### \_originalCallerNumber?
+### \_originalCallerNumber?
 
 `string`
 
-#### Returns
+### Returns
 
 `Call`
 
@@ -54,7 +54,7 @@ Defined in: [models/call.ts:23](https://github.com/team-telnyx/react-native-voic
 
 ### callId
 
-#### Get Signature
+### Get Signature
 
 > **get** **callId**(): `string`
 
@@ -62,7 +62,7 @@ Defined in: [models/call.ts:44](https://github.com/team-telnyx/react-native-voic
 
 Unique identifier for this call
 
-##### Returns
+### Returns
 
 `string`
 
@@ -70,7 +70,7 @@ Unique identifier for this call
 
 ### destination
 
-#### Get Signature
+### Get Signature
 
 > **get** **destination**(): `string`
 
@@ -78,7 +78,7 @@ Defined in: [models/call.ts:51](https://github.com/team-telnyx/react-native-voic
 
 The destination number or SIP URI
 
-##### Returns
+### Returns
 
 `string`
 
@@ -86,7 +86,7 @@ The destination number or SIP URI
 
 ### isIncoming
 
-#### Get Signature
+### Get Signature
 
 > **get** **isIncoming**(): `boolean`
 
@@ -94,7 +94,7 @@ Defined in: [models/call.ts:58](https://github.com/team-telnyx/react-native-voic
 
 Whether this is an incoming call
 
-##### Returns
+### Returns
 
 `boolean`
 
@@ -102,7 +102,7 @@ Whether this is an incoming call
 
 ### isOutgoing
 
-#### Get Signature
+### Get Signature
 
 > **get** **isOutgoing**(): `boolean`
 
@@ -110,7 +110,7 @@ Defined in: [models/call.ts:65](https://github.com/team-telnyx/react-native-voic
 
 Whether this is an outgoing call
 
-##### Returns
+### Returns
 
 `boolean`
 
@@ -118,7 +118,7 @@ Whether this is an outgoing call
 
 ### currentState
 
-#### Get Signature
+### Get Signature
 
 > **get** **currentState**(): [`TelnyxCallState`](../enumerations/TelnyxCallState.md)
 
@@ -126,7 +126,7 @@ Defined in: [models/call.ts:72](https://github.com/team-telnyx/react-native-voic
 
 Current call state (synchronous access)
 
-##### Returns
+### Returns
 
 [`TelnyxCallState`](../enumerations/TelnyxCallState.md)
 
@@ -134,7 +134,7 @@ Current call state (synchronous access)
 
 ### currentIsMuted
 
-#### Get Signature
+### Get Signature
 
 > **get** **currentIsMuted**(): `boolean`
 
@@ -142,7 +142,7 @@ Defined in: [models/call.ts:79](https://github.com/team-telnyx/react-native-voic
 
 Current mute state (synchronous access)
 
-##### Returns
+### Returns
 
 `boolean`
 
@@ -150,7 +150,7 @@ Current mute state (synchronous access)
 
 ### currentIsHeld
 
-#### Get Signature
+### Get Signature
 
 > **get** **currentIsHeld**(): `boolean`
 
@@ -158,7 +158,7 @@ Defined in: [models/call.ts:86](https://github.com/team-telnyx/react-native-voic
 
 Current hold state (synchronous access)
 
-##### Returns
+### Returns
 
 `boolean`
 
@@ -166,7 +166,7 @@ Current hold state (synchronous access)
 
 ### currentDuration
 
-#### Get Signature
+### Get Signature
 
 > **get** **currentDuration**(): `number`
 
@@ -174,7 +174,7 @@ Defined in: [models/call.ts:93](https://github.com/team-telnyx/react-native-voic
 
 Current call duration in seconds (synchronous access)
 
-##### Returns
+### Returns
 
 `number`
 
@@ -182,7 +182,7 @@ Current call duration in seconds (synchronous access)
 
 ### inviteCustomHeaders
 
-#### Get Signature
+### Get Signature
 
 > **get** **inviteCustomHeaders**(): `object`[]
 
@@ -190,9 +190,9 @@ Defined in: [models/call.ts:102](https://github.com/team-telnyx/react-native-voi
 
 Custom headers received from the WebRTC INVITE message.
 These headers are passed during call initiation and can contain application-specific information.
-Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+Format should be `[{"name": "X-Header-Name", "value": "Value"}]` where header names must start with "X-".
 
-##### Returns
+### Returns
 
 `object`[]
 
@@ -200,7 +200,7 @@ Format should be [{"name": "X-Header-Name", "value": "Value"}] where header name
 
 ### answerCustomHeaders
 
-#### Get Signature
+### Get Signature
 
 > **get** **answerCustomHeaders**(): `object`[]
 
@@ -208,9 +208,9 @@ Defined in: [models/call.ts:111](https://github.com/team-telnyx/react-native-voi
 
 Custom headers received from the WebRTC ANSWER message.
 These headers are passed during call acceptance and can contain application-specific information.
-Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+Format should be `[{"name": "X-Header-Name", "value": "Value"}]` where header names must start with "X-".
 
-##### Returns
+### Returns
 
 `object`[]
 
@@ -218,7 +218,7 @@ Format should be [{"name": "X-Header-Name", "value": "Value"}] where header name
 
 ### telnyxCall
 
-#### Get Signature
+### Get Signature
 
 > **get** **telnyxCall**(): [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
@@ -228,7 +228,7 @@ Defined in: [models/call.ts:119](https://github.com/team-telnyx/react-native-voi
 
 Get the underlying Telnyx Call object (for internal use)
 
-##### Returns
+### Returns
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
@@ -236,7 +236,7 @@ Get the underlying Telnyx Call object (for internal use)
 
 ### callState$
 
-#### Get Signature
+### Get Signature
 
 > **get** **callState$**(): `Observable`\<[`TelnyxCallState`](../enumerations/TelnyxCallState.md)\>
 
@@ -244,7 +244,7 @@ Defined in: [models/call.ts:126](https://github.com/team-telnyx/react-native-voi
 
 Observable stream of call state changes
 
-##### Returns
+### Returns
 
 `Observable`\<[`TelnyxCallState`](../enumerations/TelnyxCallState.md)\>
 
@@ -252,7 +252,7 @@ Observable stream of call state changes
 
 ### isMuted$
 
-#### Get Signature
+### Get Signature
 
 > **get** **isMuted$**(): `Observable`\<`boolean`\>
 
@@ -260,7 +260,7 @@ Defined in: [models/call.ts:133](https://github.com/team-telnyx/react-native-voi
 
 Observable stream of mute state changes
 
-##### Returns
+### Returns
 
 `Observable`\<`boolean`\>
 
@@ -268,7 +268,7 @@ Observable stream of mute state changes
 
 ### isHeld$
 
-#### Get Signature
+### Get Signature
 
 > **get** **isHeld$**(): `Observable`\<`boolean`\>
 
@@ -276,7 +276,7 @@ Defined in: [models/call.ts:140](https://github.com/team-telnyx/react-native-voi
 
 Observable stream of hold state changes
 
-##### Returns
+### Returns
 
 `Observable`\<`boolean`\>
 
@@ -284,7 +284,7 @@ Observable stream of hold state changes
 
 ### duration$
 
-#### Get Signature
+### Get Signature
 
 > **get** **duration$**(): `Observable`\<`number`\>
 
@@ -292,7 +292,7 @@ Defined in: [models/call.ts:147](https://github.com/team-telnyx/react-native-voi
 
 Observable stream of call duration changes (in seconds)
 
-##### Returns
+### Returns
 
 `Observable`\<`number`\>
 
@@ -300,7 +300,7 @@ Observable stream of call duration changes (in seconds)
 
 ### canAnswer$
 
-#### Get Signature
+### Get Signature
 
 > **get** **canAnswer$**(): `Observable`\<`boolean`\>
 
@@ -308,7 +308,7 @@ Defined in: [models/call.ts:154](https://github.com/team-telnyx/react-native-voi
 
 Observable that emits true when the call can be answered
 
-##### Returns
+### Returns
 
 `Observable`\<`boolean`\>
 
@@ -316,7 +316,7 @@ Observable that emits true when the call can be answered
 
 ### canHangup$
 
-#### Get Signature
+### Get Signature
 
 > **get** **canHangup$**(): `Observable`\<`boolean`\>
 
@@ -324,7 +324,7 @@ Defined in: [models/call.ts:164](https://github.com/team-telnyx/react-native-voi
 
 Observable that emits true when the call can be hung up
 
-##### Returns
+### Returns
 
 `Observable`\<`boolean`\>
 
@@ -332,7 +332,7 @@ Observable that emits true when the call can be hung up
 
 ### canHold$
 
-#### Get Signature
+### Get Signature
 
 > **get** **canHold$**(): `Observable`\<`boolean`\>
 
@@ -340,7 +340,7 @@ Defined in: [models/call.ts:174](https://github.com/team-telnyx/react-native-voi
 
 Observable that emits true when the call can be put on hold
 
-##### Returns
+### Returns
 
 `Observable`\<`boolean`\>
 
@@ -348,7 +348,7 @@ Observable that emits true when the call can be put on hold
 
 ### canResume$
 
-#### Get Signature
+### Get Signature
 
 > **get** **canResume$**(): `Observable`\<`boolean`\>
 
@@ -356,7 +356,7 @@ Defined in: [models/call.ts:184](https://github.com/team-telnyx/react-native-voi
 
 Observable that emits true when the call can be resumed from hold
 
-##### Returns
+### Returns
 
 `Observable`\<`boolean`\>
 
@@ -370,15 +370,15 @@ Defined in: [models/call.ts:195](https://github.com/team-telnyx/react-native-voi
 
 Answer the incoming call
 
-#### Parameters
+### Parameters
 
-##### customHeaders?
+### customHeaders?
 
 `object`[]
 
 Optional custom headers to include with the answer
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -392,15 +392,15 @@ Defined in: [models/call.ts:227](https://github.com/team-telnyx/react-native-voi
 
 Hang up the call
 
-#### Parameters
+### Parameters
 
-##### customHeaders?
+### customHeaders?
 
 `object`[]
 
 Optional custom headers to include with the hangup request
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -414,7 +414,7 @@ Defined in: [models/call.ts:266](https://github.com/team-telnyx/react-native-voi
 
 Put the call on hold
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -428,7 +428,7 @@ Defined in: [models/call.ts:282](https://github.com/team-telnyx/react-native-voi
 
 Resume the call from hold
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -442,7 +442,7 @@ Defined in: [models/call.ts:298](https://github.com/team-telnyx/react-native-voi
 
 Mute the call
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -456,7 +456,7 @@ Defined in: [models/call.ts:315](https://github.com/team-telnyx/react-native-voi
 
 Unmute the call
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -470,7 +470,7 @@ Defined in: [models/call.ts:332](https://github.com/team-telnyx/react-native-voi
 
 Toggle mute state
 
-#### Returns
+### Returns
 
 `Promise`\<`void`\>
 
@@ -486,7 +486,7 @@ Defined in: [models/call.ts:344](https://github.com/team-telnyx/react-native-voi
 
 Set the call to connecting state (used for push notification calls when answered via CallKit)
 
-#### Returns
+### Returns
 
 `void`
 
@@ -500,6 +500,6 @@ Defined in: [models/call.ts:352](https://github.com/team-telnyx/react-native-voi
 
 Clean up resources when the call is disposed
 
-#### Returns
+### Returns
 
 `void`

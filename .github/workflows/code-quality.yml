@@ -36,6 +36,11 @@ jobs:
           echo "Running ESLint check on react-voice-commons-sdk (non-blocking)..."
           cd react-voice-commons-sdk && npm run lint || echo "ESLint found issues in react-voice-commons-sdk but continuing..."
 
+      - name: Markdown Lint Check
+        run: |
+          echo "Running ESLint check on all Markdown files..."
+          npm run lint:md
+
       - name: Code Quality Summary
         if: always()
         run: |
@@ -45,7 +50,8 @@ jobs:
           echo "### Coverage:" >> $GITHUB_STEP_SUMMARY
           echo "- 🎨 **Prettier**: All files (*.js, *.jsx, *.ts, *.tsx, *.json, *.md)" >> $GITHUB_STEP_SUMMARY
           echo "- 🔍 **ESLint**: react-voice-commons-sdk/ (non-blocking)" >> $GITHUB_STEP_SUMMARY
-          echo "- 🔒 **Security**: npm audit on all projects" >> $GITHUB_STEP_SUMMARY
+          echo "- � **Markdown Lint**: All markdown files (*.md)" >> $GITHUB_STEP_SUMMARY
+          echo "- �🔒 **Security**: npm audit on all projects" >> $GITHUB_STEP_SUMMARY
           echo "- 🛡️ **CodeQL**: All JavaScript/TypeScript files" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Workflow completed successfully" >> $GITHUB_STEP_SUMMARY

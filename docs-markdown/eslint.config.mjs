@@ -1,0 +1,7 @@
+import markdown from "@eslint/markdown";
+import { defineConfig } from "eslint/config";
+
+export default defineConfig([
+  { ignores: ["**/*.js", "**/*.cjs", "**/*.mjs"] },
+  { files: ["**/*.md"], plugins: { markdown }, language: "markdown/commonmark", extends: ["markdown/recommended"] },
+]);
