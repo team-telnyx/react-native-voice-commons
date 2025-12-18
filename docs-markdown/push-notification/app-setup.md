@@ -10,6 +10,11 @@ The Telnyx React Voice Commons SDK provides comprehensive push notification supp
 - **Android**: Uses Firebase Cloud Messaging (FCM) for background call notifications
 - **Background Handling**: Automatic call processing when app is in background or terminated
 - **Native Call UI**: Integration with CallKit (iOS) and ConnectionService (Android)
+- **Multidevice Support**: Up to 5 devices can receive push notifications for the same user
+
+## Multidevice Push Notifications
+
+Telnyx WebRTC supports multidevice push notifications. A single user can have up to 5 device tokens (either iOS - APNs or Android - FCM). When a user logs into the socket and provides a push token, our services will register this token to that user - allowing it to receive push notifications for incoming calls. If a 6th registration is made, the least recently used token will be removed. This effectively means that you can have up to 5 devices that can receive push notifications for the same incoming call.
 
 ## Prerequisites
 
