@@ -126,26 +126,64 @@ export const telnyxConfig: TelnyxConfig = {
 
 ## Implementation
 
-### Step 1: Create Custom Hook
+### Step 1: Use the Telnyx Hook
 
-Create a custom React hook to manage the Telnyx SDK:
+The SDK provides a `useTelnyxVoice` hook that gives you access to the VoIP client and call management:
 
-**File:** `src/hooks/useTelnyxVoice.ts`
+```typescript
+import { useTelnyxVoice } from '@telnyx/react-voice-commons-sdk';
 
-This hook encapsulates:
+export function MyComponent() {
+  const { voipClient } = useTelnyxVoice();
+  
+  // Now you can use voipClient.login(), voipClient.newCall(), etc.
+}
+```
 
+This hook provides access to:
+
+- **voipClient**: The main VoIP client instance for connection management
 - Connection management to Telnyx servers
 - Call state management
 - Event handling for incoming/outgoing calls
 - Call control functions (mute, hold, hangup)
 
-See the complete implementation in [`src/hooks/useTelnyxVoice.ts`](https://github.com/team-telnyx/react-native-voice-commons/blob/main/examples/expo_starter/src/hooks/useTelnyxVoice.ts) in the example app.
+> **Note:** The `useTelnyxVoice` hook is only available when your components are wrapped with `TelnyxVoiceApp`. Make sure to use the wrapper component in your main App component.
 
 ### Step 2: Create UI Component
 
 Create a UI component for the voice calling interface:
 
 **File:** `src/components/VoiceCallUI.tsx`
+
+```typescript
+import React, { useState } from 'react';
+import { View, TextInput, TouchableOpacity, Text } from 'react-native';
+import { useTelnyxVoice, createCredentialConfig } from '@telnyx/react-voice-commons-sdk';
+
+export function VoiceCallUI() {
+  const { voipClient } = useTelnyxVoice();
+  const [phoneNumber, setPhoneNumber] = useState('');
+  
+  const makeCall = async () => {
+    const call = await voipClient.newCall(phoneNumber);
+    console.log('Call initiated:', call);
+  };
+
+  return (
+    <View>
+      <TextInput
+        placeholder="Enter phone number"
+        value={phoneNumber}
+        onChangeText={setPhoneNumber}
+      />
+      <TouchableOpacity onPress={makeCall}>
+        <Text>📞 Call</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+```
 
 This component provides:
 
@@ -154,31 +192,55 @@ This component provides:
 - Call controls (answer, hangup, mute, hold)
 - Visual feedback for call states
 
-See the complete implementation in [`src/components/VoiceCallUI.tsx`](https://github.com/team-telnyx/react-native-voice-commons/blob/main/examples/expo_starter/src/components/VoiceCallUI.tsx) in the example app.
+> **Note:** This is a basic example. You should implement comprehensive UI components that fit your app's design and handle all call states properly.
 
 ### Step 3: Update Main App Component
 
-Update your `App.tsx` to use the Telnyx integration:
+Update your `App.tsx` to use the Telnyx integration with the required `TelnyxVoiceApp` wrapper:
 
 ```typescript
 import React from 'react';
 import { StyleSheet, SafeAreaView, ScrollView } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { useTelnyxVoice } from './src/hooks/useTelnyxVoice';
+import { StatusBar } from 'expo-status-or';
+import { TelnyxVoiceApp, createTelnyxVoipClient } from '@telnyx/react-voice-commons-sdk';
 import { VoiceCallUI } from './src/components/VoiceCallUI';
 
-export default function App() {
-  const telnyxVoice = useTelnyxVoice();
+// Create the VoIP client instance
+const voipClient = createTelnyxVoipClient({
+  enableAppStateManagement: true, // Enable automatic app state management
+  debug: true, // Enable debug logging
+});
 
+export default function App() {
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="auto" />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <VoiceCallUI telnyxVoice={telnyxVoice} />
-      </ScrollView>
-    </SafeAreaView>
+    <TelnyxVoiceApp
+      voipClient={voipClient}
+      enableAutoReconnect={true}
+      debug={true}
+    >
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="auto" />
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <VoiceCallUI />
+        </ScrollView>
+      </SafeAreaView>
+    </TelnyxVoiceApp>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: 20,
+  },
+});
+```
+
+> **Important:** The `TelnyxVoiceApp` wrapper component is required to provide the Telnyx context to your entire app. All components that use the `useTelnyxVoice` hook must be descendants of this wrapper.
 ```
 
 ## Usage
@@ -342,56 +404,39 @@ To enable detailed logging, check the console output when running the app. The `
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `isConnected` | `boolean` | Whether connected to Telnyx |
-| `isConnecting` | `boolean` | Whether connection is in progress |
-| `connectionError` | `string \| null` | Connection error message |
-| `activeCall` | `Call \| null` | Current active call instance |
-| `connect` | `() => Promise<void>` | Connect to Telnyx |
-| `disconnect` | `() => void` | Disconnect from Telnyx |
-| `makeCall` | `(destination: string) => Promise<void>` | Make an outbound call |
-| `answerCall` | `() => void` | Answer incoming call |
-| `hangupCall` | `() => void` | Hang up current call |
-| `toggleMute` | `() => void` | Toggle mute state |
-| `toggleHold` | `() => void` | Toggle hold state |
+| `voipClient` | `VoipClient` | Main VoIP client instance for managing connections and calls |
 
-### Call Class
+### VoipClient Methods
+
+| Method | Parameters | Description |
+|--------|------------|-------------|
+| `login` | `config: CredentialConfig` | Connect to Telnyx with SIP credentials |
+| `logout` | None | Disconnect from Telnyx |
+| `newCall` | `destination: string` | Make an outbound call |
+
+### Call Instance (from `voipClient.newCall()`)
+
+| Property/Method | Type | Description |
+|-----------------|------|-------------|
+| `callId` | `string` | Unique identifier for the call |
+| `state` | `TelnyxCallState` | Current call state |
+| `remoteNumber` | `string` | Phone number of the remote party |
+| `answer()` | `() => void` | Answer an incoming call |
+| `hangup()` | `() => void` | End the call |
+| `mute()` | `() => void` | Mute the call |
+| `unmute()` | `() => void` | Unmute the call |
+| `hold()` | `() => void` | Put the call on hold |
+| `unhold()` | `() => void` | Resume the call from hold |
+
+### TelnyxCallState Enum
 
 ```typescript
-// The actual Call class from @telnyx/react-voice-commons-sdk
-class Call {
-  // Synchronous access to call properties
-  get callId(): string;
-  get destination(): string;
-  get currentState(): TelnyxCallState;
-  get currentIsMuted(): boolean;
-  get currentIsHeld(): boolean;
-  get currentDuration(): number; // in seconds
-  
-  // Reactive streams for real-time updates
-  get callState$(): Observable<TelnyxCallState>;
-  get isMuted$(): Observable<boolean>;
-  get isHeld$(): Observable<boolean>;
-  get duration$(): Observable<number>;
-  
-  // Call control methods
-  answer(): Promise<void>;
-  hangup(): Promise<void>;
-  hold(): Promise<void>;
-  resume(): Promise<void>;
-  mute(): Promise<void>;
-  unmute(): Promise<void>;
-  toggleMute(): Promise<void>;
-}
-
-// Call states from the actual SDK
 enum TelnyxCallState {
-  RINGING = 'RINGING',
-  CONNECTING = 'CONNECTING', 
-  ACTIVE = 'ACTIVE',
-  HELD = 'HELD',
-  ENDED = 'ENDED',
-  FAILED = 'FAILED',
-  DROPPED = 'DROPPED'
+  NEW = 'new',
+  RINGING = 'ringing', 
+  ACTIVE = 'active',
+  HELD = 'held',
+  DONE = 'done'
 }
 ```
 
