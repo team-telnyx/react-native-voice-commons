@@ -197,8 +197,8 @@ describe('Media Event Handling', () => {
     });
 
     it('should process media event with active call', () => {
-      // Set active call
-      (client as any).call = mockCall;
+      // Set active call using the calls Map
+      (client as any).calls.set(mockCall.callId, mockCall);
 
       const mediaEvent: MediaEvent = {
         id: '123',
@@ -236,7 +236,7 @@ describe('Media Event Handling', () => {
     });
 
     it('should handle media event with SDP only (no audio/video changes)', () => {
-      (client as any).call = mockCall;
+      (client as any).calls.set(mockCall.callId, mockCall);
 
       const mediaEvent: MediaEvent = {
         id: '123',
@@ -259,7 +259,7 @@ describe('Media Event Handling', () => {
     });
 
     it('should handle media event with audio/video changes only (no SDP)', () => {
-      (client as any).call = mockCall;
+      (client as any).calls.set(mockCall.callId, mockCall);
 
       const mediaEvent: MediaEvent = {
         id: '123',
@@ -307,7 +307,7 @@ describe('Media Event Handling', () => {
         },
       };
 
-      (client as any).call = mockCall;
+      (client as any).calls.set(mockCall.callId, mockCall);
       const eventSpy = jest.fn();
       client.on('telnyx.call.answered', eventSpy);
 
@@ -349,7 +349,7 @@ describe('Media Event Handling', () => {
         },
       };
 
-      (client as any).call = mockCall;
+      (client as any).calls.set(mockCall.callId, mockCall);
 
       // Handle answer event
       (client as any).handleCallAnswer(answerEvent);
@@ -375,8 +375,7 @@ describe('Media Event Handling', () => {
         },
       };
 
-      // No active call
-      (client as any).call = null;
+      // No active call - calls Map is empty by default
 
       const eventSpy = jest.fn();
       client.on('telnyx.call.answered', eventSpy);
@@ -408,8 +407,8 @@ describe('Media Event Handling', () => {
         },
       };
 
-      // Active call with different ID
-      (client as any).call = { ...mockCall, callId: 'test-call-id' };
+      // Active call with different ID - answer event has 'different-call-id' but we have 'test-call-id'
+      (client as any).calls.set('test-call-id', { ...mockCall, callId: 'test-call-id' });
 
       // Handle answer event
       (client as any).handleCallAnswer(answerEvent);
@@ -435,7 +434,7 @@ describe('Media Event Handling', () => {
         },
       };
 
-      (client as any).call = mockCall;
+      (client as any).calls.set(mockCall.callId, mockCall);
       (client as any).connection = { send: jest.fn() };
 
       // Handle media event
@@ -481,7 +480,7 @@ describe('Media Event Handling', () => {
         },
       };
 
-      (client as any).call = mockCall;
+      (client as any).calls.set(mockCall.callId, mockCall);
       (client as any).connection = { send: jest.fn() };
 
       // Handle answer event directly

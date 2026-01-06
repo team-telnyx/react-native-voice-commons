@@ -31,12 +31,40 @@ type TelnyxRTCEvents = {
   'telnyx.call.reattached': (call: Call, msg: AttachEvent) => void;
   'telnyx.media.received': (msg: MediaEvent) => void;
   'telnyx.call.answered': (call: Call, msg: AnswerEvent) => void;
+  'telnyx.call.stateChanged': (call: Call, state: string) => void;
+  'telnyx.call.removed': (callId: string) => void;
 };
 
 export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   public options: ClientOptions;
-  public call: Call | null;
   public sessionId: string | null;
+
+  /**
+   * Dictionary of all active calls tracked by their UUIDs.
+   * Calls are tracked from creation until they transition to the 'ended' state.
+   * This matches the iOS SDK behavior where `calls: [UUID: Call]` is used.
+   */
+  public calls: Map<string, Call> = new Map();
+
+  /**
+   * Returns the current/first active call for backward compatibility.
+   * New code should use `calls` Map or `getCall(callId)` instead.
+   * @deprecated Use `calls` or `getCall(callId)` for multi-call support
+   */
+  public get call(): Call | null {
+    // Return the first active call (non-ended) or null
+    for (const call of this.calls.values()) {
+      if (call.state !== 'ended') {
+        return call;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Current call ID for tracking the most recent call (used for push notifications)
+   */
+  private currentCallId: string | null = null;
 
   private connection: Connection | null;
   private loginHandler: LoginHandler | null;
@@ -143,7 +171,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     this.sessionId = null;
     this.loginHandler = null;
     this.keepAliveHandler = null;
-    this.call = null;
+    // calls Map is initialized in class declaration
 
     // Initialize pending actions
     this.pendingAnswerAction = false;
@@ -175,6 +203,93 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
   }
 
+  // ============================================================================
+  // MARK: - Call Management (Multi-call support matching iOS SDK)
+  // ============================================================================
+
+  /**
+   * Access any active call tracked by the SDK.
+   * A call will be accessible until it has ended (transitioned to the 'ended' state).
+   * This matches the iOS SDK `getCall(callId:)` method.
+   * 
+   * @param callId The unique identifier of a call.
+   * @returns The Call object that matches the requested callId, or null if not found.
+   * @example
+   * ```typescript
+   * const call = telnyxRTC.getCall('some-call-uuid');
+   * if (call) {
+   *   console.log('Call state:', call.state);
+   * }
+   * ```
+   */
+  public getCall(callId: string): Call | null {
+    return this.calls.get(callId) || null;
+  }
+
+  /**
+   * Get all active calls as an array.
+   * @returns Array of all tracked Call objects
+   */
+  public getActiveCalls(): Call[] {
+    return Array.from(this.calls.values()).filter(call => call.state !== 'ended');
+  }
+
+  /**
+   * Check if there are any active calls (not in 'ended' state).
+   * Matches iOS SDK `isCallsActive` property.
+   */
+  public get hasActiveCalls(): boolean {
+    for (const call of this.calls.values()) {
+      if (call.state !== 'ended' && call.state !== 'dropped') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Add a call to the calls dictionary and set up state change listener.
+   * @internal
+   */
+  private addCall(call: Call): void {
+    const callId = call.callId;
+    log.debug(`[TelnyxRTC] Adding call to tracking: ${callId}`);
+    
+    this.calls.set(callId, call);
+    this.currentCallId = callId;
+
+    // Listen for call state changes to emit events and handle cleanup
+    call.on('telnyx.call.state', (updatedCall, state) => {
+      log.debug(`[TelnyxRTC] Call ${callId} state changed to: ${state}`);
+      this.emit('telnyx.call.stateChanged', updatedCall, state);
+
+      // Remove call from tracking when it ends (matches iOS SDK behavior)
+      if (state === 'ended') {
+        log.debug(`[TelnyxRTC] Call ${callId} ended, removing from tracking`);
+        this.removeCall(callId);
+      }
+    });
+
+    log.debug(`[TelnyxRTC] Total calls tracked: ${this.calls.size}`);
+  }
+
+  /**
+   * Remove a call from the calls dictionary.
+   * @internal
+   */
+  private removeCall(callId: string): void {
+    if (this.calls.has(callId)) {
+      log.debug(`[TelnyxRTC] Removing call from tracking: ${callId}`);
+      this.calls.delete(callId);
+      this.emit('telnyx.call.removed', callId);
+      log.debug(`[TelnyxRTC] Total calls tracked: ${this.calls.size}`);
+    }
+  }
+
+  // ============================================================================
+  // MARK: - Call Creation
+  // ============================================================================
+
   /**
    * Initiates a new call.
    * @param options The options for the new call.
@@ -205,7 +320,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       throw new Error('[TelnyxRTC] No session ID exists. Please connect first.');
     }
 
-    this.call = new Call({
+    const newCall = new Call({
       connection: this.connection,
       direction: 'outbound',
       sessionId: this.sessionId,
@@ -215,8 +330,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       options,
     });
 
-    await this.call.invite();
-    return this.call;
+    // Add to calls tracking (matches iOS SDK behavior)
+    this.addCall(newCall);
+
+    await newCall.invite();
+    return newCall;
   };
 
   /**
@@ -756,7 +874,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       remoteSDP = '';
     }
 
-    this.call = await Call.createInboundCall({
+    const incomingCall = await Call.createInboundCall({
       connection: this.connection!,
       remoteSDP,
       sessionId: this.sessionId!,
@@ -767,9 +885,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
     });
 
+    // Add to calls tracking (matches iOS SDK behavior)
+    this.addCall(incomingCall);
+
     // Set call state to connecting after creation
-    //(this.call as any).state = 'connecting';
-    //this.call.emit('telnyx.call.state', this.call, 'connecting');
+    //(incomingCall as any).state = 'connecting';
+    //incomingCall.emit('telnyx.call.state', incomingCall, 'connecting');
     log.debug('[TelnyxRTC] Call state set to connecting after creation');
 
     // Clean up the pending media event since we've processed it
@@ -791,16 +912,14 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       if (fromNotification) {
         log.debug('[TelnyxRTC] <Call came from >notification Answer button - auto-answering');
         // Auto-answer the call since user already pressed Answer button
-        if (this.call) {
-          log.debug(
-            '[TelnyxRTC] Auto-answering push notification call, current state:',
-            this.call.state
-          );
-          if (action === 'answer') {
-            this.call.answer();
-          } else if (action === 'reject') {
-            this.call.hangup();
-          }
+        log.debug(
+          '[TelnyxRTC] Auto-answering push notification call, current state:',
+          incomingCall.state
+        );
+        if (action === 'answer') {
+          incomingCall.answer();
+        } else if (action === 'reject') {
+          incomingCall.hangup();
         }
       } else if (this.pendingAnswerAction) {
         log.debug('[TelnyxRTC] Found pending answer action, executing...');
@@ -818,12 +937,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
 
     log.debug('[TelnyxRTC] Emitting telnyx.call.incoming event');
-    this.emit('telnyx.call.incoming', this.call, msg);
+    this.emit('telnyx.call.incoming', incomingCall, msg);
 
     log.debug('[TelnyxRTC] Emitting legacy event bus notification');
     eventBus.emit('telnyx.notification', {
       type: 'callUpdate',
-      call: this.call,
+      call: incomingCall,
     });
 
     log.debug('[TelnyxRTC] ====== CALL INVITE HANDLING COMPLETE ======');
@@ -850,7 +969,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     log.debug('[TelnyxRTC] Creating new call object from attach message');
 
     // Create new inbound call from attach message (like Android SDK)
-    this.call = await Call.createInboundCall({
+    const attachedCall = await Call.createInboundCall({
       connection: this.connection!,
       remoteSDP: msg.params.sdp,
       sessionId: this.sessionId!,
@@ -864,7 +983,10 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       initialState: 'connecting', // Set initial state to connecting
     });
 
-    await this.call
+    // Add to calls tracking (matches iOS SDK behavior)
+    this.addCall(attachedCall);
+
+    await attachedCall
       .answerAttach()
       .then(() => {
         log.debug('[TelnyxRTC] AnswerAttach completed successfully');
@@ -878,12 +1000,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       '[TelnyxRTC] Listeners for telnyx.call.reattached:',
       this.listenerCount('telnyx.call.reattached')
     );
-    this.emit('telnyx.call.reattached', this.call, msg);
+    this.emit('telnyx.call.reattached', attachedCall, msg);
 
     log.debug('[TelnyxRTC] Emitting legacy event bus notification for reattached call');
     eventBus.emit('telnyx.notification', {
       type: 'callUpdate',
-      call: this.call,
+      call: attachedCall,
     });
 
     log.debug('[TelnyxRTC] ====== CALL ATTACH HANDLING COMPLETE ======');
@@ -909,19 +1031,20 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     // Store media event for later use (in case invite comes after)
     this.pendingMediaEvents.set(callID, msg);
 
-    // If we have an active call and it matches the callID, apply media changes
-    if (this.call && this.call.callId === callID) {
-      log.debug('[TelnyxRTC] Active call matches media event callID, applying changes');
+    // Look up the call by ID from our calls dictionary
+    const targetCall = this.getCall(callID);
+    if (targetCall) {
+      log.debug('[TelnyxRTC] Found call in tracking, applying media changes');
 
       // If media event has SDP, handle early media setup
       if (sdp) {
         log.debug('[TelnyxRTC] Media event contains SDP - setting up early media/ringback');
-        this.call.handleEarlyMedia(sdp);
+        targetCall.handleEarlyMedia(sdp);
       }
 
       // Apply audio/video changes if specified
       if (audio !== undefined || video !== undefined) {
-        this.call.handleMediaUpdate({
+        targetCall.handleMediaUpdate({
           audio,
           video,
           target,
@@ -929,7 +1052,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       }
     } else {
       log.debug(
-        '[TelnyxRTC] No active call or callID mismatch, storing media event for later processing'
+        '[TelnyxRTC] No call found for callID, storing media event for later processing'
       );
       // Media event received before invite - this is valid and expected for early media
     }
@@ -958,31 +1081,31 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       this.connection.send(createAnswerAck(msg.id));
     }
 
-    // If we have an active call and it matches the callID, handle the answer
-    if (this.call && this.call.callId === callID) {
-      log.debug('[TelnyxRTC] Active call matches answer event callID, processing answer');
+    // Look up the call by ID from our calls dictionary
+    const targetCall = this.getCall(callID);
+    if (targetCall) {
+      log.debug('[TelnyxRTC] Found call in tracking, processing answer');
 
       // Store custom headers from the ANSWER message
-      this.call.answerCustomHeaders = msg.params.dialogParams?.custom_headers || null;
+      targetCall.answerCustomHeaders = msg.params.dialogParams?.custom_headers || null;
 
       // If answer event has SDP, set it as remote description
       if (sdp) {
         log.debug('[TelnyxRTC] Answer event contains SDP - setting as remote description');
-        this.call.handleRemoteAnswer(sdp);
+        targetCall.handleRemoteAnswer(sdp);
       } else {
         log.debug('[TelnyxRTC] Answer event has no SDP - assuming SDP was handled via media event');
       }
 
       // Transition call to active state
       log.debug('[TelnyxRTC] Setting call state to active');
-      this.call.setActive();
-        // Emit the answer event for applications to handle
+      targetCall.setActive();
+      
+      // Emit the answer event for applications to handle
       log.debug('[TelnyxRTC] Emitting telnyx.call.answered event');
-      if (this.call) {
-        this.emit('telnyx.call.answered', this.call, msg);
-     }
+      this.emit('telnyx.call.answered', targetCall, msg);
     } else {
-      log.warn('[TelnyxRTC] No active call or callID mismatch for answer event');
+      log.warn('[TelnyxRTC] No call found for callID in answer event');
     }
 
   
@@ -1062,11 +1185,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     this.reconnecting = true;
 
     // Disconnect active calls (similar to Android SDK)
-    if (this.call && this.call.state !== 'ended' && this.call.state !== 'dropped') {
-      log.debug('[TelnyxRTC] Updating call state to dropped due to network loss');
-      // Update call state to indicate network issues - set to dropped since call is lost due to network
-      this.call.setDropped();
-      log.debug('[TelnyxRTC] Call state updated to dropped due to network disconnection');
+    // Update all active calls to dropped state due to network loss
+    for (const call of this.calls.values()) {
+      if (call.state !== 'ended' && call.state !== 'dropped') {
+        log.debug(`[TelnyxRTC] Updating call ${call.callId} state to dropped due to network loss`);
+        call.setDropped();
+      }
     }
 
     // Start reconnection timeout timer
@@ -1074,7 +1198,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     // Disconnect existing connection (this clears the connection and handlers)
     this.disconnect(true);
-    this.call?.disposePeer();
+    
+    // Dispose peer connections for all tracked calls
+    for (const call of this.calls.values()) {
+      call.disposePeer();
+    }
   }
 
   /**
@@ -1126,10 +1254,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         log.error('[TelnyxRTC] Reconnection timeout reached');
         this.reconnecting = false;
 
-        // Update call state to indicate timeout
-        if (this.call && this.call.state !== 'ended') {
-          log.debug('[TelnyxRTC] Setting call to failed state due to reconnection timeout');
-          // Call will handle the timeout state
+        // Update all non-ended calls state to indicate timeout
+        for (const call of this.calls.values()) {
+          if (call.state !== 'ended') {
+            log.debug(`[TelnyxRTC] Call ${call.callId} affected by reconnection timeout`);
+            // Call will handle the timeout state
+          }
         }
       }
     }, TelnyxRTC.RECONNECT_TIMEOUT);
@@ -1150,9 +1280,10 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * @param callId The ID of the call to set to connecting state
    */
   public setCallConnecting(callId: string): void {
-    if (this.call && this.call.callId === callId) {
+    const targetCall = this.getCall(callId);
+    if (targetCall) {
       log.debug('[TelnyxRTC] Setting call to connecting state:', callId);
-      this.call.setConnecting();
+      targetCall.setConnecting();
     } else {
       log.warn('[TelnyxRTC] Could not find call to set connecting:', callId);
     }

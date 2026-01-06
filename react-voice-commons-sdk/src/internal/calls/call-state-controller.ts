@@ -79,6 +79,18 @@ export class CallStateController {
   }
 
   /**
+   * Access any active call tracked by the client.
+   * A call will be accessible until it has ended (transitioned to the ENDED state).
+   * This matches the TelnyxRTC `getCall(callId)` method for multi-call support.
+   *
+   * @param callId The unique identifier of a call.
+   * @returns The Call object that matches the requested callId, or null if not found.
+   */
+  getCall(callId: string): Call | null {
+    return this._callMap.get(callId) || null;
+  }
+
+  /**
    * Set a call to connecting state (used for push notification calls when answered via CallKit)
    * @param callId The ID of the call to set to connecting state
    */
@@ -246,8 +258,28 @@ export class CallStateController {
       reattachedListeners
     );
 
-    // Listen for other call events if needed
-    // this._sessionManager.telnyxClient.on('telnyx.call.stateChange', this._handleCallStateChange.bind(this));
+    // Listen for call state changes from the TelnyxRTC client (multi-call support)
+    this._sessionManager.telnyxClient.on(
+      'telnyx.call.stateChanged',
+      (telnyxCall: TelnyxCall, state: string) => {
+        console.log('📞 CallStateController: Call state changed from TelnyxRTC:', telnyxCall.callId, state);
+        // Find our wrapper call and update if needed
+        const call = this.findCallByTelnyxCall(telnyxCall);
+        if (call) {
+          console.log('📞 CallStateController: Found wrapper call, state sync handled by Call subscription');
+        }
+      }
+    );
+
+    // Listen for call removal events from TelnyxRTC (multi-call support)
+    this._sessionManager.telnyxClient.on(
+      'telnyx.call.removed',
+      (callId: string) => {
+        console.log('📞 CallStateController: Call removed from TelnyxRTC:', callId);
+        // The call cleanup is already handled by our call state subscription
+        // This event is informational for logging/debugging
+      }
+    );
 
     console.log('🔧 CallStateController: Client listeners set up successfully');
   }
