@@ -43,6 +43,9 @@ yarn-error.*
 expo-env.d.ts
 # @end expo-cli
 
+# Documentation markdown linting
+docs-markdown/node_modules/
+docs-markdown/package-lock.json
 
 package-lock.json
 android/app/build/
