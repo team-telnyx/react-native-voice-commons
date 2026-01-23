@@ -5,3 +5,11 @@
 error-handling/
 push-notification/
 quickstart/
+
+# MDX Linting Configuration - DO NOT DELETE
+# These files are for MDX validation and CI/CD
+package.json
+package-lock.json
+node_modules/
+eslint.config.mjs
+lint-as-mdx.sh

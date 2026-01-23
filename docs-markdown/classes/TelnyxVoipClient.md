@@ -262,7 +262,7 @@ comes back to the foreground and needs to restore the connection.
 
 `Promise`\<`boolean`\>
 
-Promise<boolean> - true if reconnection was successful, false otherwise
+`Promise<boolean>` - true if reconnection was successful, false otherwise
 
 ***
 
