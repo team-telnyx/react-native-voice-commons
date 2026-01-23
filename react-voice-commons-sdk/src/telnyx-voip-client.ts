@@ -290,7 +290,6 @@ export class TelnyxVoipClient {
    * @param callerNumber Optional caller ID number
    * @param customHeaders Optional custom headers to include with the call
    * @param clientState Optional parameter to set client state 
-    @param clientState Optional parameter to set client state 
    * @returns A Promise that completes with the Call object once the invitation has been sent
    *
    * The call's state can be monitored through the returned Call object's streams.
