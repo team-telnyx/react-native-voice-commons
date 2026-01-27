@@ -44,7 +44,11 @@ export function ActiveCall({ call }: Props) {
 
   const handleHangup = () => {
     console.log('ActiveCall: Hanging up call');
-    call.hangup();
+    try {
+      call.hangup();
+    } catch (error) {
+      console.log('ActiveCall: Error hanging up call:', error);
+    }
     // Close modal immediately on hangup to prevent invisible overlay
     setIsOpen(false);
   };
@@ -90,7 +94,7 @@ export function ActiveCall({ call }: Props) {
           variant: 'secondary',
         },
       ]}
-      onRequestClose={() => {}}
+      onRequestClose={() => { }}
     />
   );
 }

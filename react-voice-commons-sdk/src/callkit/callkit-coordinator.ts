@@ -326,6 +326,14 @@ class CallKitCoordinator {
       return;
     }
 
+    if (this.endedCalls.has(callKitUUID)) {
+      console.log('CallKitCoordinator: Call already ended, skipping duplicate end action');
+      return;
+    }
+
+    // Mark as ended immediately to prevent any duplicate processing
+    this.endedCalls.add(callKitUUID);
+
     const call = this.callMap.get(callKitUUID);
 
     if (!call) {
