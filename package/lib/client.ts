@@ -213,6 +213,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       telnyxLegId: null,
       callId: null,
       options,
+      debug: this.options.debug,
     });
 
     await this.call.invite();
@@ -765,6 +766,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       telnyxSessionId: msg.params.telnyx_session_id,
       options: { destinationNumber: msg.params.caller_id_number },
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
+      debug: this.options.debug,
     });
 
     // Set call state to connecting after creation
@@ -862,6 +864,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       },
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
       initialState: 'connecting', // Set initial state to connecting
+      debug: this.options.debug,
     });
 
     await this.call

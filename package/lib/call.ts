@@ -21,6 +21,7 @@ import {
 } from './messages/call';
 import { createAttachMessage } from './messages/attach';
 import { Peer } from './peer';
+import { WebRTCReporter } from './webrtc-reporter';
 
 type CallEvents = {
   'telnyx.call.state': (call: Call, state: CallState) => void;
@@ -38,6 +39,7 @@ type CallConstructorParams = {
   telnyxCallControlId?: string | null;
   callId: string | null;
   callState?: CallState;
+  debug?: boolean;
 };
 
 export type CallDirection = 'inbound' | 'outbound';
@@ -53,6 +55,7 @@ export type CreateInboundCall = {
   callId: string;
   inviteCustomHeaders?: { name: string; value: string }[] | null;
   initialState?: CallState;
+  debug?: boolean;
 };
 
 // TODO persist customHeaders and clientState
@@ -88,6 +91,7 @@ export class Call extends EventEmitter<CallEvents> {
     callId,
     inviteCustomHeaders = null,
     initialState = 'ringing',
+    debug = false,
   }: CreateInboundCall) {
     const call = new Call({
       connection,
@@ -98,6 +102,7 @@ export class Call extends EventEmitter<CallEvents> {
       telnyxSessionId,
       callId,
       callState: initialState,
+      debug,
     });
 
     // Store the custom headers from the INVITE message
@@ -154,6 +159,11 @@ export class Call extends EventEmitter<CallEvents> {
     call.peer.createPeerConnection();
     call.peer.setRemoteDescription({ type: 'offer', sdp: remoteSDP });
 
+    // Initialize WebRTC reporter if debug mode is enabled
+    if (debug) {
+      call.initializeReporter();
+    }
+
     call.setState(initialState);
 
     return call;
@@ -163,6 +173,8 @@ export class Call extends EventEmitter<CallEvents> {
   private options: CallOptions;
   private peer: Peer | null;
   private sessionId: string;
+  private reporter: WebRTCReporter | null = null;
+  private debugEnabled: boolean = false;
 
   constructor({
     connection,
@@ -174,6 +186,7 @@ export class Call extends EventEmitter<CallEvents> {
     telnyxSessionId,
     telnyxCallControlId = null,
     callState = 'new',
+    debug = false,
   }: CallConstructorParams) {
     super();
 
@@ -187,8 +200,88 @@ export class Call extends EventEmitter<CallEvents> {
     this.telnyxSessionId = telnyxSessionId;
     this.telnyxCallControlId = telnyxCallControlId;
     this.peer = null;
+    this.debugEnabled = debug;
 
     this.connection.addListener('telnyx.socket.message', this.onSocketMessage);
+  }
+
+  /**
+   * Initialize the WebRTC reporter for debug stats collection
+   */
+  private initializeReporter(): void {
+    if (!this.peer || !this.debugEnabled) {
+      return;
+    }
+
+    const peerConnection = this.peer.getPeerConnection();
+    if (!peerConnection) {
+      log.warn('[Call] Cannot initialize reporter: no peer connection');
+      return;
+    }
+
+    log.debug('[Call] Initializing WebRTC reporter for debug stats');
+
+    this.reporter = new WebRTCReporter({
+      connection: this.connection,
+      peerId: this.callId,
+      connectionId: this.telnyxLegId || this.callId,
+      peerConnection: peerConnection as any,
+      iceServers: this.peer.getIceServers() as any,
+    });
+
+    // Set the reporter on the peer for event forwarding
+    this.peer.setReporter(this.reporter);
+
+    // Start stats collection
+    this.reporter.startStats();
+  }
+
+  /**
+   * Start debug stats collection manually
+   * This can be called after the call is established if debug mode was not enabled initially
+   */
+  public startDebugStats(): void {
+    if (this.reporter) {
+      log.debug('[Call] Debug stats already started');
+      return;
+    }
+
+    if (!this.peer) {
+      log.warn('[Call] Cannot start debug stats: no peer connection');
+      return;
+    }
+
+    this.debugEnabled = true;
+    this.initializeReporter();
+  }
+
+  /**
+   * Stop debug stats collection
+   */
+  public stopDebugStats(): void {
+    if (this.reporter) {
+      log.debug('[Call] Stopping debug stats collection');
+      this.reporter.stopStats();
+      this.reporter = null;
+    }
+
+    if (this.peer && typeof this.peer.setReporter === 'function') {
+      this.peer.setReporter(null);
+    }
+  }
+
+  /**
+   * Check if debug stats collection is active
+   */
+  public isDebugStatsActive(): boolean {
+    return this.reporter?.isActive() ?? false;
+  }
+
+  /**
+   * Get the debug stats ID
+   */
+  public getDebugStatsId(): string | null {
+    return this.reporter?.getDebugStatsId() ?? null;
   }
 
   public get remoteStream() {
@@ -310,6 +403,9 @@ export class Call extends EventEmitter<CallEvents> {
    * @param customHeaders Optional custom headers to include with the hangup request
    */
   public hangup = (customHeaders?: { name: string; value: string }[]) => {
+    // Stop debug stats collection before ending the call
+    this.stopDebugStats();
+
     this.connection.send(
       createHangupRequest({
         callId: this.callId,
@@ -585,6 +681,11 @@ export class Call extends EventEmitter<CallEvents> {
   public invite = async () => {
     this.peer = await Peer.createOffer(this.options);
 
+    // Initialize WebRTC reporter if debug mode is enabled
+    if (this.debugEnabled) {
+      this.initializeReporter();
+    }
+
     // Store the custom headers we're sending with the invite
     this.inviteCustomHeaders = this.options.customHeaders || null;
 
@@ -692,6 +793,9 @@ export class Call extends EventEmitter<CallEvents> {
 
   private handleHangupEvent = (msg: ByeEvent) => {
     log.debug('[Call] Hangup event received', msg);
+
+    // Stop debug stats collection before ending the call
+    this.stopDebugStats();
 
     this.setState('ended');
 
