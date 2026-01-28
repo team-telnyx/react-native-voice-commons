@@ -33,4 +33,11 @@ export interface ClientOptions {
    * It can be one of the following values: 'trace', 'debug', 'info', 'warn', 'error', 'silent'.
    */
   logLevel?: LogLevelNames;
+  /**
+   * Enable or disable debug mode for WebRTC stats collection.
+   * When enabled, the SDK will collect and send WebRTC statistics to the Telnyx debug service.
+   * This is useful for debugging call quality issues.
+   * @default false
+   */
+  debug?: boolean;
 }
