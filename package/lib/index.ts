@@ -8,3 +8,16 @@ export * from './call-options';
 
 // Messages
 export * from './messages/media';
+
+// Debug Stats
+export { WebRTCReporter } from './webrtc-reporter';
+export type { WebRTCReporterOptions } from './webrtc-reporter';
+export {
+  StatsEvent,
+  WebRTCStatsEvent,
+  WebRTCStatsTag,
+  createDebugReportStartMessage,
+  createDebugReportStopMessage,
+  createDebugReportDataMessage,
+  createStatsEvent,
+} from './messages/debug-stats';

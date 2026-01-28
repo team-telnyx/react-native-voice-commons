@@ -12,6 +12,7 @@ import type RTCTrackEvent from 'react-native-webrtc/lib/typescript/RTCTrackEvent
 import type { CallOptions } from './call-options';
 import type { DeferredPromise } from './promise';
 import { createDeferredPromise } from './promise';
+import type { WebRTCReporter } from './webrtc-reporter';
 
 type MediaConstraints = {
   audio?: boolean | MediaTrackConstraints;
@@ -33,12 +34,34 @@ export class Peer {
   private instance: RTCPeerConnection | null;
   private options: CallOptions;
   private iceGatheringComplete: DeferredPromise<boolean> | null;
+  private reporter: WebRTCReporter | null = null;
 
   constructor(options: CallOptions) {
     this.instance = null;
     this.iceGatheringComplete = null;
     this.mediaConstraints = { audio: true, video: false };
     this.options = options;
+  }
+
+  /**
+   * Set the WebRTC reporter for debug stats collection
+   */
+  public setReporter(reporter: WebRTCReporter | null): void {
+    this.reporter = reporter;
+  }
+
+  /**
+   * Get the underlying RTCPeerConnection instance
+   */
+  public getPeerConnection(): RTCPeerConnection | null {
+    return this.instance;
+  }
+
+  /**
+   * Get the ICE servers configuration
+   */
+  public getIceServers(): RTCIceServer[] {
+    return this.getIceServersInternal();
   }
 
   public close = () => {
@@ -177,7 +200,15 @@ export class Peer {
   };
 
   private onIceGatheringStateChange = () => {
-    if (this.instance?.iceGatheringState === 'complete') {
+    const iceGatheringState = this.instance?.iceGatheringState;
+    log.debug('[Peer] ICE gathering state change', iceGatheringState);
+
+    // Report to WebRTCReporter if available
+    if (this.reporter && iceGatheringState) {
+      this.reporter.onIceGatheringStateChange(iceGatheringState);
+    }
+
+    if (iceGatheringState === 'complete') {
       log.debug('[Peer] ICE gathering complete');
       this.iceGatheringComplete?.resolve(true);
       this.iceGatheringComplete = null;
@@ -185,7 +216,13 @@ export class Peer {
   };
 
   private onIceCandidate = (ev: RTCIceCandidateEvent<'icecandidate'>) => {
-    log.debug('[Peer] ICE candidate end', ev);
+    log.debug('[Peer] ICE candidate', ev);
+
+    // Report to WebRTCReporter if available
+    if (this.reporter && ev.candidate) {
+      this.reporter.onIceCandidate(ev.candidate as unknown as RTCIceCandidate);
+    }
+
     this.iceGatheringComplete?.resolve(true);
     return;
   };
@@ -194,7 +231,7 @@ export class Peer {
     log.error('[Peer] ICE candidate error', event);
   };
 
-  private getIceServers() {
+  private getIceServersInternal() {
     if (
       this.options.peerConnectionOptions?.iceServers &&
       this.options.peerConnectionOptions?.iceServers.length > 0
@@ -213,14 +250,33 @@ export class Peer {
     if (event.streams && event.streams.length > 0) {
       this.options.remoteStream = event.streams[0];
     }
+
+    // Report to WebRTCReporter if available
+    if (this.reporter && event.track) {
+      this.reporter.onTrack(event.track as unknown as MediaStreamTrack);
+    }
   };
 
   private onSignalingStateChange = () => {
-    log.debug('[Peer] Signaling state change', this.instance?.signalingState);
+    const signalingState = this.instance?.signalingState;
+    log.debug('[Peer] Signaling state change', signalingState);
+
+    // Report to WebRTCReporter if available
+    if (this.reporter && signalingState) {
+      this.reporter.onSignalingStateChange(signalingState);
+    }
   };
+
   private onIceConnectionStateChange = () => {
-    log.debug('[Peer] ICE connection state change', this.instance?.iceConnectionState);
+    const iceConnectionState = this.instance?.iceConnectionState;
+    log.debug('[Peer] ICE connection state change', iceConnectionState);
+
+    // Report to WebRTCReporter if available
+    if (this.reporter && iceConnectionState) {
+      this.reporter.onIceConnectionStateChange(iceConnectionState);
+    }
   };
+
   private onConnectionStateChange = () => {
     log.debug('[Peer] Connection state change', this.instance?.connectionState);
   };

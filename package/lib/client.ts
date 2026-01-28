@@ -341,6 +341,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       telnyxLegId: null,
       callId: null,
       options,
+      debug: this.options.debug,
     });
 
     // Add to calls tracking (matches iOS SDK behavior)
@@ -896,6 +897,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       telnyxSessionId: msg.params.telnyx_session_id,
       options: { destinationNumber: msg.params.caller_id_number },
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
+      debug: this.options.debug,
     });
 
     // Add to calls tracking (matches iOS SDK behavior)
@@ -991,6 +993,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       },
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
       initialState: 'connecting', // Set initial state to connecting
+      debug: this.options.debug,
     });
 
     // Add to calls tracking (matches iOS SDK behavior)
