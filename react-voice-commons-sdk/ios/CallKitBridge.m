@@ -28,7 +28,7 @@ RCT_EXTERN_METHOD(reportCallConnected:(NSString *)callUUID
                   rejecter:(RCTPromiseRejectBlock)reject)
 
 RCT_EXTERN_METHOD(reportCallEnded:(NSString *)callUUID 
-                  reason:(NSNumber *)reason
+                  reason:(nonnull NSNumber *)reason
                   resolver:(RCTPromiseResolveBlock)resolve 
                   rejecter:(RCTPromiseRejectBlock)reject)
 
