@@ -128,8 +128,7 @@ export class TelnyxVoipClient {
   get hasActiveCalls(): boolean {
     return this.currentCalls.some(
       (call) =>
-        call.currentState !== TelnyxCallState.ENDED &&
-        call.currentState !== TelnyxCallState.FAILED
+        call.currentState !== TelnyxCallState.ENDED && call.currentState !== TelnyxCallState.FAILED
     );
   }
 

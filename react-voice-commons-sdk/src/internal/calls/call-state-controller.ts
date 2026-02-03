@@ -262,24 +262,27 @@ export class CallStateController {
     this._sessionManager.telnyxClient.on(
       'telnyx.call.stateChanged',
       (telnyxCall: TelnyxCall, state: string) => {
-        console.log('📞 CallStateController: Call state changed from TelnyxRTC:', telnyxCall.callId, state);
+        console.log(
+          '📞 CallStateController: Call state changed from TelnyxRTC:',
+          telnyxCall.callId,
+          state
+        );
         // Find our wrapper call and update if needed
         const call = this.findCallByTelnyxCall(telnyxCall);
         if (call) {
-          console.log('📞 CallStateController: Found wrapper call, state sync handled by Call subscription');
+          console.log(
+            '📞 CallStateController: Found wrapper call, state sync handled by Call subscription'
+          );
         }
       }
     );
 
     // Listen for call removal events from TelnyxRTC (multi-call support)
-    this._sessionManager.telnyxClient.on(
-      'telnyx.call.removed',
-      (callId: string) => {
-        console.log('📞 CallStateController: Call removed from TelnyxRTC:', callId);
-        // The call cleanup is already handled by our call state subscription
-        // This event is informational for logging/debugging
-      }
-    );
+    this._sessionManager.telnyxClient.on('telnyx.call.removed', (callId: string) => {
+      console.log('📞 CallStateController: Call removed from TelnyxRTC:', callId);
+      // The call cleanup is already handled by our call state subscription
+      // This event is informational for logging/debugging
+    });
 
     console.log('🔧 CallStateController: Client listeners set up successfully');
   }
