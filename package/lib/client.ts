@@ -47,6 +47,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   public calls: Map<string, Call> = new Map();
 
   /**
+   * Store listener references for proper cleanup to prevent memory leaks.
+   * Maps call IDs to their state change listener functions.
+   */
+  private callStateListeners: Map<string, (call: Call, state: string) => void> = new Map();
+
+  /**
    * Returns the current/first active call for backward compatibility.
    * New code should use `calls` Map or `getCall(callId)` instead.
    * @deprecated Use `calls` or `getCall(callId)` for multi-call support
@@ -254,31 +260,41 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private addCall(call: Call): void {
     const callId = call.callId;
     log.debug(`[TelnyxRTC] Adding call to tracking: ${callId}`);
-    
+
     this.calls.set(callId, call);
     this.currentCallId = callId;
 
-    // Listen for call state changes to emit events and handle cleanup
-    call.on('telnyx.call.state', (updatedCall, state) => {
+    const stateListener = (updatedCall: Call, state: string) => {
       log.debug(`[TelnyxRTC] Call ${callId} state changed to: ${state}`);
       this.emit('telnyx.call.stateChanged', updatedCall, state);
 
-      // Remove call from tracking when it ends (matches iOS SDK behavior)
       if (state === 'ended') {
         log.debug(`[TelnyxRTC] Call ${callId} ended, removing from tracking`);
         this.removeCall(callId);
       }
-    });
+    };
+
+    this.callStateListeners.set(callId, stateListener);
+    call.on('telnyx.call.state', stateListener);
 
     log.debug(`[TelnyxRTC] Total calls tracked: ${this.calls.size}`);
   }
 
   /**
-   * Remove a call from the calls dictionary.
+   * Remove a call from the calls dictionary and clean up event listeners.
    * @internal
    */
   private removeCall(callId: string): void {
     if (this.calls.has(callId)) {
+      const call = this.calls.get(callId);
+      const listener = this.callStateListeners.get(callId);
+
+      if (call && listener) {
+        call.off('telnyx.call.state', listener);
+        this.callStateListeners.delete(callId);
+        log.debug(`[TelnyxRTC] Removed state listener for call: ${callId}`);
+      }
+
       log.debug(`[TelnyxRTC] Removing call from tracking: ${callId}`);
       this.calls.delete(callId);
       this.emit('telnyx.call.removed', callId);
