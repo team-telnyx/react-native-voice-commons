@@ -656,9 +656,7 @@ class CallKitCoordinator {
    * Clean up call mappings and listeners
    */
   private cleanupCall(callKitUUID: string) {
-    // Remove from all tracking sets
     this.processingCalls.delete(callKitUUID);
-    this.endedCalls.delete(callKitUUID);
     this.connectedCalls.delete(callKitUUID);
 
     // Get the call before removing it

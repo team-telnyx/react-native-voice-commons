@@ -25,6 +25,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "postbuild": "prettier --write --ignore-path /dev/null \"lib/**/*.{js,ts}\"",
     "dev": "tsc --watch",
     "test": "jest",
     "test:watch": "jest --watch",

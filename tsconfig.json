@@ -6,19 +6,9 @@
     "baseUrl": ".",
     "resolvePackageJsonExports": false,
     "paths": {
-      "~/*": [
-        "*"
-      ],
-      "@telnyx/react-native-voice-sdk": [
-        "./src"
-      ]
+      "~/*": ["*"],
+      "@telnyx/react-native-voice-sdk": ["./src"]
     }
   },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    "nativewind-env.d.ts",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts"
-  ]
+  "include": ["**/*.ts", "**/*.tsx", "nativewind-env.d.ts", ".expo/types/**/*.ts", "expo-env.d.ts"]
 }

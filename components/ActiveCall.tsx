@@ -94,7 +94,7 @@ export function ActiveCall({ call }: Props) {
           variant: 'secondary',
         },
       ]}
-      onRequestClose={() => { }}
+      onRequestClose={() => {}}
     />
   );
 }
