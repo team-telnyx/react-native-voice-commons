@@ -123,10 +123,7 @@ export class CallStateController {
    */
   initializeClientListeners(): void {
     console.log('CallStateController: initializeClientListeners called');
-    console.log(
-      'CallStateController: Current client exists:',
-      !!this._sessionManager.telnyxClient
-    );
+    console.log('CallStateController: Current client exists:', !!this._sessionManager.telnyxClient);
     this._setupClientListeners();
 
     // CallKit integration now handled by CallKitCoordinator
