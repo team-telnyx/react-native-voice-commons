@@ -58,9 +58,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * @deprecated Use `calls` or `getCall(callId)` for multi-call support
    */
   public get call(): Call | null {
-    // Return the first active call (non-ended) or null
+    // Return the first active call (non-ended, non-dropped) or null
     for (const call of this.calls.values()) {
-      if (call.state !== 'ended') {
+      if (call.state !== 'ended' && call.state !== 'dropped') {
         return call;
       }
     }
@@ -237,7 +237,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * @returns Array of all tracked Call objects
    */
   public getActiveCalls(): Call[] {
-    return Array.from(this.calls.values()).filter(call => call.state !== 'ended');
+    return Array.from(this.calls.values()).filter(call => call.state !== 'ended' && call.state !== 'dropped');
   }
 
   /**
@@ -904,9 +904,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     // Add to calls tracking (matches iOS SDK behavior)
     this.addCall(incomingCall);
 
-    // Set call state to connecting after creation
-    //(incomingCall as any).state = 'connecting';
-    //incomingCall.emit('telnyx.call.state', incomingCall, 'connecting');
     log.debug('[TelnyxRTC] Call state set to connecting after creation');
 
     // Clean up the pending media event since we've processed it
@@ -1202,7 +1199,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     // Disconnect active calls (similar to Android SDK)
     // Update all active calls to dropped state due to network loss
-    for (const call of this.calls.values()) {
+    // Use Array.from to avoid mutation during iteration
+    for (const call of Array.from(this.calls.values())) {
       if (call.state !== 'ended' && call.state !== 'dropped') {
         log.debug(`[TelnyxRTC] Updating call ${call.callId} state to dropped due to network loss`);
         call.setDropped();
@@ -1214,9 +1212,10 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     // Disconnect existing connection (this clears the connection and handlers)
     this.disconnect(true);
-    
+
     // Dispose peer connections for all tracked calls
-    for (const call of this.calls.values()) {
+    // Use Array.from to avoid mutation during iteration
+    for (const call of Array.from(this.calls.values())) {
       call.disposePeer();
     }
   }
@@ -1271,10 +1270,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         this.reconnecting = false;
 
         // Update all non-ended calls state to indicate timeout
-        for (const call of this.calls.values()) {
-          if (call.state !== 'ended') {
-            log.debug(`[TelnyxRTC] Call ${call.callId} affected by reconnection timeout`);
-            // Call will handle the timeout state
+        // Use Array.from to avoid mutation during iteration
+        for (const call of Array.from(this.calls.values())) {
+          if (call.state !== 'ended' && call.state !== 'dropped') {
+            log.debug(`[TelnyxRTC] Call ${call.callId} failed due to reconnection timeout`);
+            call.setDropped();
           }
         }
       }
