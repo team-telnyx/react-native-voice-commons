@@ -26,6 +26,18 @@ type CallEvents = {
   'telnyx.call.state': (call: Call, state: CallState) => void;
 };
 
+/**
+ * Possible states a call can be in.
+ * - 'new': Initial state when a call object is first created, before any signaling.
+ * - 'ringing': The call is ringing on the remote side, waiting for the callee to answer.
+ * - 'connecting': The call is being set up (SDP negotiation / ICE gathering in progress).
+ * - 'active': The call is fully established with media flowing between peers.
+ * - 'held': The call has been placed on hold by either party.
+ * - 'dropped': The call lost network connectivity but is NOT terminated.
+ *   A dropped call remains tracked because it may be reattached when
+ *   the network recovers via the reconnection flow.
+ * - 'ended': The call is fully terminated and will be removed from tracking.
+ */
 export type CallState = 'new' | 'ringing' | 'connecting' | 'active' | 'ended' | 'held' | 'dropped';
 
 type CallConstructorParams = {
@@ -618,7 +630,9 @@ export class Call extends EventEmitter<CallEvents> {
   };
 
   /**
-   * Set the call to dropped state (used when network connection is lost)
+   * Set the call to dropped state (used when network connection is lost).
+   * A dropped call is NOT terminated — it remains tracked and may be
+   * reattached when the network recovers via the reconnection flow.
    */
   public setDropped = () => {
     log.debug('[Call] Setting state to dropped due to network loss');

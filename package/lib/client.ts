@@ -58,19 +58,14 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * @deprecated Use `calls` or `getCall(callId)` for multi-call support
    */
   public get call(): Call | null {
-    // Return the first active call (non-ended, non-dropped) or null
+    // Return the first active call (non-ended) or null
     for (const call of this.calls.values()) {
-      if (call.state !== 'ended' && call.state !== 'dropped') {
+      if (call.state !== 'ended') {
         return call;
       }
     }
     return null;
   }
-
-  /**
-   * Current call ID for tracking the most recent call (used for push notifications)
-   */
-  private currentCallId: string | null = null;
 
   private connection: Connection | null;
   private loginHandler: LoginHandler | null;
@@ -237,7 +232,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * @returns Array of all tracked Call objects
    */
   public getActiveCalls(): Call[] {
-    return Array.from(this.calls.values()).filter(call => call.state !== 'ended' && call.state !== 'dropped');
+    return Array.from(this.calls.values()).filter(call => call.state !== 'ended');
   }
 
   /**
@@ -246,7 +241,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    */
   public get hasActiveCalls(): boolean {
     for (const call of this.calls.values()) {
-      if (call.state !== 'ended' && call.state !== 'dropped') {
+      if (call.state !== 'ended') {
         return true;
       }
     }
@@ -262,7 +257,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     log.debug(`[TelnyxRTC] Adding call to tracking: ${callId}`);
 
     this.calls.set(callId, call);
-    this.currentCallId = callId;
 
     const stateListener = (updatedCall: Call, state: string) => {
       log.debug(`[TelnyxRTC] Call ${callId} state changed to: ${state}`);
