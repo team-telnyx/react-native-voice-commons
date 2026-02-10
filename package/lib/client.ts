@@ -2,6 +2,8 @@ import NetInfo, { NetInfoState, NetInfoSubscription } from '@react-native-commun
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { EventEmitter } from 'eventemitter3';
 import log from 'loglevel';
+import uuid from 'uuid-random';
+import { Platform } from 'react-native';
 import { Call } from './call';
 import type { CallOptions } from './call-options';
 import type { ClientOptions } from './client-options';
@@ -1297,5 +1299,53 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     } else {
       log.warn('[TelnyxRTC] Could not find call to set connecting:', callId);
     }
+  }
+
+  /**
+   * Disables push notifications for the current logged-in user.
+   * Push notifications are enabled by default after login.
+   * Sends a 'telnyx_rtc.disable_push_notification' message via the socket,
+   * matching the Android SDK's disablePushNotification() behavior.
+   */
+  public disablePushNotification(): void {
+    const storedConfig = this.credentialSessionConfig || this.tokenSessionConfig;
+    if (!storedConfig) {
+      log.warn('[TelnyxRTC] No stored session config, cannot disable push notifications');
+      return;
+    }
+
+    if (!this.connection) {
+      log.warn('[TelnyxRTC] No active connection, cannot disable push notifications');
+      return;
+    }
+
+    const pushToken = this.options.pushNotificationDeviceToken || '';
+    const userVariables = {
+      push_device_token: pushToken,
+      push_notification_provider: Platform.OS,
+    };
+
+    let params: any;
+    if ('login_token' in storedConfig && storedConfig.login_token) {
+      params = {
+        loginToken: storedConfig.login_token,
+        userVariables,
+      };
+    } else {
+      params = {
+        user: storedConfig.login,
+        userVariables,
+      };
+    }
+
+    const disablePushMessage = {
+      id: uuid(),
+      jsonrpc: '2.0',
+      method: 'telnyx_rtc.disable_push_notification',
+      params,
+    };
+
+    log.debug('[TelnyxRTC] Sending disable push notification message');
+    this.connection.send(disablePushMessage);
   }
 }

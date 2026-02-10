@@ -111,13 +111,16 @@ export class SessionManager {
   }
 
   /**
-   * Disable push notifications for the current session
+   * Disable push notifications for the current session.
+   * Delegates to the TelnyxRTC client's disablePushNotification() method
+   * which sends a 'telnyx_rtc.disable_push_notification' message via the socket.
    */
   disablePushNotifications(): void {
     if (this._telnyxClient && this.currentState === TelnyxConnectionState.CONNECTED) {
-      // Implementation depends on the actual Telnyx SDK API
-      // This is a placeholder for the actual implementation
-      console.log('Disabling push notifications for session:', this._sessionId);
+      console.log('SessionManager: Disabling push notifications for session:', this._sessionId);
+      this._telnyxClient.disablePushNotification();
+    } else {
+      console.warn('SessionManager: Cannot disable push - client not connected');
     }
   }
 
