@@ -54,8 +54,9 @@ describe('TelnyxRTC Client Custom Headers', () => {
     });
 
     it('should execute immediately if call already exists', async () => {
-      // Setup
-      (client as any).call = mockCall;
+      // Setup - add call to calls Map and ensure it's in 'ringing' state for the queue logic
+      mockCall.state = 'ringing';
+      (client as any).calls.set(mockCall.callId, mockCall);
       const customHeaders = {
         'X-Immediate': 'true',
       };
@@ -91,7 +92,7 @@ describe('TelnyxRTC Client Custom Headers', () => {
     beforeEach(() => {
       // Set up pending answer
       (client as any).pendingAnswerAction = true;
-      (client as any).call = mockCall;
+      (client as any).calls.set(mockCall.callId, mockCall);
     });
 
     it('should convert Record<string, string> to header array format', async () => {
@@ -159,8 +160,8 @@ describe('TelnyxRTC Client Custom Headers', () => {
     });
 
     it('should not execute when no call exists', async () => {
-      // Setup
-      (client as any).call = null;
+      // Setup - clear the calls Map
+      (client as any).calls.clear();
 
       // Execute
       await (client as any).executePendingAnswer();
