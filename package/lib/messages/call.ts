@@ -1,6 +1,7 @@
 import uuid from 'uuid-random';
 import type { CallOptions } from '../call-options';
 import { SDK_VERSION } from '../env';
+import { TelnyxRTCMethod } from './methods';
 
 type InviteACKMessage = {
   id: string;
@@ -31,7 +32,7 @@ export function createInviteMessage({
   return {
     id: uuid(),
     jsonrpc: '2.0',
-    method: 'telnyx_rtc.invite',
+    method: TelnyxRTCMethod.INVITE,
     params: {
       sessid: sessionId,
       sdp,
@@ -91,7 +92,7 @@ export function isRingingEvent(msg: unknown): msg is RingingEvent {
   }
   const temp: Partial<RingingEvent> = msg;
   return (
-    temp.method === 'telnyx_rtc.ringing' &&
+    temp.method === TelnyxRTCMethod.RINGING &&
     Boolean(temp.params?.callID) &&
     Boolean(temp.params?.telnyx_leg_id) &&
     Boolean(temp.params?.telnyx_session_id)
@@ -102,7 +103,7 @@ export function createRingingAckMessage(id: number) {
   return {
     id,
     jsonrpc: '2.0',
-    result: { method: 'telnyx_rtc.ringing' },
+    result: { method: TelnyxRTCMethod.RINGING },
   };
 }
 
@@ -126,14 +127,14 @@ export function isAnswerEvent(msg: unknown): msg is AnswerEvent {
     return false;
   }
   const temp: Partial<AnswerEvent> = msg;
-  return temp.method === 'telnyx_rtc.answer' && Boolean(temp.params?.callID);
+  return temp.method === TelnyxRTCMethod.ANSWER && Boolean(temp.params?.callID);
 }
 
 export function createAnswerAck(id: number) {
   return {
     id,
     jsonrpc: '2.0',
-    result: { method: 'telnyx_rtc.answer' },
+    result: { method: TelnyxRTCMethod.ANSWER },
   };
 }
 
@@ -143,7 +144,7 @@ export function isByeEvent(msg: unknown): msg is ByeEvent {
   }
   const temp: Partial<ByeEvent> = msg;
   return (
-    temp.method === 'telnyx_rtc.bye' && Boolean(temp.params?.callID) && Boolean(temp.params?.cause)
+    temp.method === TelnyxRTCMethod.BYE && Boolean(temp.params?.callID) && Boolean(temp.params?.cause)
   );
 }
 
@@ -201,7 +202,7 @@ export function createHangupRequest({
   return {
     id: uuid(),
     jsonrpc: '2.0',
-    method: 'telnyx_rtc.bye',
+    method: TelnyxRTCMethod.BYE,
     params: {
       sessid: sessionId,
       cause: cause,
@@ -247,7 +248,7 @@ export function createInviteAckMessage(id: number): InviteAckMessage {
   return {
     id,
     jsonrpc: '2.0',
-    result: { method: 'telnyx_rtc.invite' },
+    result: { method: TelnyxRTCMethod.INVITE },
   };
 }
 
@@ -256,7 +257,7 @@ export function isInviteEvent(msg: unknown): msg is InviteEvent {
     return false;
   }
   const temp: Partial<InviteEvent> = msg;
-  return temp.method === 'telnyx_rtc.invite' && Boolean(temp.params?.callID);
+  return temp.method === TelnyxRTCMethod.INVITE && Boolean(temp.params?.callID);
 }
 
 type AnswerMessage = {
@@ -297,7 +298,7 @@ export function createAnswerMessage({
   return {
     id: uuid(),
     jsonrpc: '2.0',
-    method: 'telnyx_rtc.answer',
+    method: TelnyxRTCMethod.ANSWER,
     params: {
       sessid: sessionId,
       sdp,
@@ -336,7 +337,7 @@ export function createModifyCallRequest({
   return {
     jsonrpc: '2.0',
     id: uuid(),
-    method: 'telnyx_rtc.modify',
+    method: TelnyxRTCMethod.MODIFY,
     params: {
       sessid: sessionId,
       action,
@@ -398,7 +399,7 @@ export function createDTMFRequest({ digits, sessionId }: CreateDTMFRequestParams
   return {
     id: uuid(),
     jsonrpc: '2.0',
-    method: 'telnyx_rtc.info',
+    method: TelnyxRTCMethod.INFO,
     params: {
       sessid: sessionId,
       dtmf: digits,

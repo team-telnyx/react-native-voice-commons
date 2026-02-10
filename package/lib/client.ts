@@ -18,6 +18,7 @@ import {
   createAnswerAck,
   isAnswerEvent,
 } from './messages/call';
+import { TelnyxRTCMethod } from './messages/methods';
 import { createAttachCallMessage } from './messages/attach';
 import type { AttachEvent } from './messages/attach';
 import { isAttachEvent } from './messages/attach';
@@ -820,7 +821,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
 
     // Check if this is an invite message that's not being detected
-    if (msg && typeof msg === 'object' && (msg as any).method === 'telnyx_rtc.invite') {
+    if (msg && typeof msg === 'object' && (msg as any).method === TelnyxRTCMethod.INVITE) {
       log.warn('[TelnyxRTC] Received invite message but isInviteEvent returned false:', msg);
     }
 
@@ -1341,7 +1342,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     const disablePushMessage = {
       id: uuid(),
       jsonrpc: '2.0',
-      method: 'telnyx_rtc.disable_push_notification',
+      method: TelnyxRTCMethod.DISABLE_PUSH_NOTIFICATION,
       params,
     };
 
