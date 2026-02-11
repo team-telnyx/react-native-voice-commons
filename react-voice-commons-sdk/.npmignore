@@ -1,0 +1,15 @@
+# Build artifacts
+android/build/
+ios/build/
+
+# Local properties
+android/local.properties
+
+# Node modules (if not already excluded)
+node_modules/
+
+# Test coverage
+coverage/
+
+# TypeScript build cache
+*.tsbuildinfo

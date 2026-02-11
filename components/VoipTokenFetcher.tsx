@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import VoipPushNotification from 'react-native-voip-push-notification';
@@ -10,8 +10,21 @@ interface VoipTokenFetcherProps {
 
 export function VoipTokenFetcher({ onTokenReceived, debug = false }: VoipTokenFetcherProps) {
   const log = debug ? console.log : () => {};
+  const hasSetupRef = useRef(false);
+  const onTokenReceivedRef = useRef(onTokenReceived);
+
+  // Keep ref in sync with latest callback
+  useEffect(() => {
+    onTokenReceivedRef.current = onTokenReceived;
+  }, [onTokenReceived]);
 
   useEffect(() => {
+    // Only setup once
+    if (hasSetupRef.current) {
+      return;
+    }
+    hasSetupRef.current = true;
+
     const setupTokenHandling = async () => {
       try {
         if (Platform.OS === 'android') {
@@ -29,8 +42,8 @@ export function VoipTokenFetcher({ onTokenReceived, debug = false }: VoipTokenFe
             try {
               const fcmToken = await Notifications.getDevicePushTokenAsync();
 
-              if (onTokenReceived) {
-                onTokenReceived(fcmToken.data);
+              if (onTokenReceivedRef.current) {
+                onTokenReceivedRef.current(fcmToken.data);
               }
             } catch (error) {
               console.warn('[VoipTokenFetcher] Failed to get Android FCM token:', error);
@@ -39,16 +52,14 @@ export function VoipTokenFetcher({ onTokenReceived, debug = false }: VoipTokenFe
             console.warn('[VoipTokenFetcher] Android notification permission denied');
           }
         } else if (Platform.OS === 'ios') {
-          // Configure VoIP push notifications for iOS using the proper library
-          VoipPushNotification.addEventListener('register', (token: string) => {
+          const handleRegister = (token: string) => {
             log('[VoipTokenFetcher] iOS VoIP token received:', token);
-            if (onTokenReceived) {
-              onTokenReceived(token);
+            if (onTokenReceivedRef.current) {
+              onTokenReceivedRef.current(token);
             }
-          });
+          };
 
-          // Handle events that may have occurred before JS bridge was initialized
-          VoipPushNotification.addEventListener('didLoadWithEvents', (events: any) => {
+          const handleDidLoadWithEvents = (events: any) => {
             if (!events || !Array.isArray(events) || events.length < 1) {
               return;
             }
@@ -56,12 +67,15 @@ export function VoipTokenFetcher({ onTokenReceived, debug = false }: VoipTokenFe
             for (let voipPushEvent of events) {
               let { name, data } = voipPushEvent;
               if (name === VoipPushNotification.RNVoipPushRemoteNotificationsRegisteredEvent) {
-                if (onTokenReceived && data) {
-                  onTokenReceived(data);
+                if (onTokenReceivedRef.current && data) {
+                  onTokenReceivedRef.current(data);
                 }
               }
             }
-          });
+          };
+
+          VoipPushNotification.addEventListener('register', handleRegister);
+          VoipPushNotification.addEventListener('didLoadWithEvents', handleDidLoadWithEvents);
 
           // Request VoIP push token - this should trigger the 'register' event
           VoipPushNotification.registerVoipToken();
@@ -80,7 +94,7 @@ export function VoipTokenFetcher({ onTokenReceived, debug = false }: VoipTokenFe
         VoipPushNotification.removeEventListener('didLoadWithEvents');
       }
     };
-  }, [onTokenReceived, log]);
+  }, [log]);
 
   // This component doesn't render anything - it's just for token handling
   return null;

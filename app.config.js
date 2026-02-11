@@ -1,4 +1,4 @@
-export default {
+module.exports = {
   expo: {
     name: 'telnyx-react-native-voice-sdk-demo',
     slug: 'telnyx-react-native-voice-sdk-demo',
@@ -14,6 +14,9 @@ export default {
       backgroundColor: '#ffffff',
     },
     assetBundlePatterns: ['**/*'],
+    linking: {
+      scheme: 'myapp',
+    },
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.telnyx.rn-voice-sdk-demo',

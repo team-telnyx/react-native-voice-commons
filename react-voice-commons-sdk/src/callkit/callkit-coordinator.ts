@@ -326,6 +326,14 @@ class CallKitCoordinator {
       return;
     }
 
+    if (this.endedCalls.has(callKitUUID)) {
+      console.log('CallKitCoordinator: Call already ended, skipping duplicate end action');
+      return;
+    }
+
+    // Mark as ended immediately to prevent any duplicate processing
+    this.endedCalls.add(callKitUUID);
+
     const call = this.callMap.get(callKitUUID);
 
     if (!call) {
@@ -648,9 +656,7 @@ class CallKitCoordinator {
    * Clean up call mappings and listeners
    */
   private cleanupCall(callKitUUID: string) {
-    // Remove from all tracking sets
     this.processingCalls.delete(callKitUUID);
-    this.endedCalls.delete(callKitUUID);
     this.connectedCalls.delete(callKitUUID);
 
     // Get the call before removing it

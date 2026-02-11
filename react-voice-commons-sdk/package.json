@@ -17,7 +17,8 @@
   "files": [
     "lib",
     "src",
-    "android",
+    "android/src",
+    "android/build.gradle",
     "ios",
     "TelnyxVoiceCommons.podspec",
     "README.md",
@@ -25,6 +26,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "postbuild": "prettier --write --ignore-path /dev/null \"lib/**/*.{js,ts}\"",
     "dev": "tsc --watch",
     "test": "jest",
     "test:watch": "jest --watch",

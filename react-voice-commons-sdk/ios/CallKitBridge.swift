@@ -358,15 +358,7 @@ import React
             )
         }
 
-        func configureAudioSession() {
-            let audioSession = AVAudioSession.sharedInstance()
-            do {
-                try audioSession.setCategory(.playAndRecord, mode: .voiceChat)
-                NSLog("Succeeded to activate audio session")
-            } catch {
-                NSLog("Failed to activate audio session: \(error)")
-            }
-        }
+     
 
         private func observeAppDelegate() {
             // Automatically hook into app lifecycle if needed
@@ -760,8 +752,6 @@ import React
 
             NSLog("[TelnyxVoipPushHandler] ✅ CallKit provider ready, reporting incoming call")
 
-            // Configure audio session before reporting the call
-            //callKitManager.configureAudioSession()
 
             // Store call data manually and report to CallKit
             let isAppRunning = CallKitBridge.shared != nil
