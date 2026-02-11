@@ -1,3 +1,5 @@
+import { TelnyxRTCMethod } from './methods';
+
 export type MediaEvent = {
   id?: number | string;
   jsonrpc: '2.0';
@@ -22,7 +24,7 @@ export function isMediaEvent(msg: unknown): msg is MediaEvent {
     return false;
   }
   const tmp = msg as Partial<MediaEvent>;
-  return tmp.method === 'telnyx_rtc.media' && !!(tmp.params && (tmp.params as any).callID);
+  return tmp.method === TelnyxRTCMethod.MEDIA && !!(tmp.params && (tmp.params as any).callID);
 }
 
 export function createMediaMessage({
@@ -39,7 +41,7 @@ export function createMediaMessage({
   return {
     id: Math.floor(Math.random() * 1000000),
     jsonrpc: '2.0' as const,
-    method: 'telnyx_rtc.media' as const,
+    method: TelnyxRTCMethod.MEDIA,
     params: {
       callID,
       audio,

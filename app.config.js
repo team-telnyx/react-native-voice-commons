@@ -18,7 +18,7 @@ export default {
       supportsTablet: true,
       bundleIdentifier: 'com.telnyx.rn-voice-sdk-demo',
       bitcode: false,
-      buildNumber: '46',
+      buildNumber: '47',
     },
     android: {
       adaptiveIcon: {

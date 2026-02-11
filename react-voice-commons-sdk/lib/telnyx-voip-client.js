@@ -4,6 +4,7 @@ exports.TelnyxVoipClient = void 0;
 exports.createTelnyxVoipClient = createTelnyxVoipClient;
 exports.createBackgroundTelnyxVoipClient = createBackgroundTelnyxVoipClient;
 const connection_state_1 = require('./models/connection-state');
+const call_state_1 = require('./models/call-state');
 const config_1 = require('./models/config');
 const session_manager_1 = require('./internal/session/session-manager');
 const call_state_controller_1 = require('./internal/calls/call-state-controller');
@@ -96,6 +97,35 @@ class TelnyxVoipClient {
    */
   get currentActiveCall() {
     return this._callStateController.currentActiveCall;
+  }
+  /**
+   * Check if there are any active calls (not in ENDED or FAILED state).
+   * Matches TelnyxRTC `hasActiveCalls` property for multi-call support.
+   */
+  get hasActiveCalls() {
+    return this.currentCalls.some(
+      (call) =>
+        call.currentState !== call_state_1.TelnyxCallState.ENDED &&
+        call.currentState !== call_state_1.TelnyxCallState.FAILED
+    );
+  }
+  /**
+   * Access any active call tracked by the client.
+   * A call will be accessible until it has ended (transitioned to the ENDED state).
+   * This matches the TelnyxRTC `getCall(callId)` method for multi-call support.
+   *
+   * @param callId The unique identifier of a call.
+   * @returns The Call object that matches the requested callId, or null if not found.
+   * @example
+   * ```typescript
+   * const call = voipClient.getCall('some-call-uuid');
+   * if (call) {
+   *   console.log('Call state:', call.currentState);
+   * }
+   * ```
+   */
+  getCall(callId) {
+    return this._callStateController.getCall(callId);
   }
   /**
    * Current session ID (UUID) for this connection.

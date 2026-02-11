@@ -32,6 +32,15 @@ export declare class CallStateController {
    */
   get currentActiveCall(): Call | null;
   /**
+   * Access any active call tracked by the client.
+   * A call will be accessible until it has ended (transitioned to the ENDED state).
+   * This matches the TelnyxRTC `getCall(callId)` method for multi-call support.
+   *
+   * @param callId The unique identifier of a call.
+   * @returns The Call object that matches the requested callId, or null if not found.
+   */
+  getCall(callId: string): Call | null;
+  /**
    * Set a call to connecting state (used for push notification calls when answered via CallKit)
    * @param callId The ID of the call to set to connecting state
    */

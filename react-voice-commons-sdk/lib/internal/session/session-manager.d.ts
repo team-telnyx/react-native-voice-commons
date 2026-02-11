@@ -49,7 +49,9 @@ export declare class SessionManager {
    */
   disconnect(): Promise<void>;
   /**
-   * Disable push notifications for the current session
+   * Disable push notifications for the current session.
+   * Delegates to the TelnyxRTC client's disablePushNotification() method
+   * which sends a 'telnyx_rtc.disable_push_notification' message via the socket.
    */
   disablePushNotifications(): void;
   /**

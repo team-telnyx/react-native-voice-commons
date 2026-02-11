@@ -1,4 +1,5 @@
 import uuid from 'uuid-random';
+import { TelnyxRTCMethod } from './methods';
 type ClientReadyEvent = {
   id: number;
   jsonrpc: '2.0';
@@ -24,14 +25,14 @@ export function isClientReadyEvent(msg: unknown): msg is ClientReadyEvent {
     return false;
   }
   const temp: Partial<ClientReadyEvent> = msg;
-  return temp?.method === 'telnyx_rtc.clientReady';
+  return temp?.method === TelnyxRTCMethod.CLIENT_READY;
 }
 
 export function createGetGatewayStateMessage() {
   return {
     jsonrpc: '2.0',
     id: uuid(),
-    method: 'telnyx_rtc.gatewayState',
+    method: TelnyxRTCMethod.GATEWAY_STATE,
     params: {},
   };
 }

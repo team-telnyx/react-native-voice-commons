@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import uuid from 'uuid-random';
 import { SDK_VERSION } from '../env';
+import { TelnyxRTCMethod } from './methods';
 
 // const attachMessage = {
 //   id: 3546946,
@@ -67,7 +68,7 @@ export function createAttachMessage({
   return {
     id: uuid(),
     jsonrpc: '2.0' as const,
-    method: 'telnyx_rtc.attach' as const,
+    method: TelnyxRTCMethod.ATTACH,
     params: {
       dialogParams: {
         attach: true,
@@ -117,14 +118,14 @@ export function isAttachEvent(msg: unknown): msg is AttachEvent {
     return false;
   }
   const tmp = msg as Partial<AttachEvent>;
-  return tmp.method === 'telnyx_rtc.attach' && !!tmp.params?.callID;
+  return tmp.method === TelnyxRTCMethod.ATTACH && !!tmp.params?.callID;
 }
 
 export function createAttachCallMessage(pushNotificationPayload?: any) {
   const message = {
     jsonrpc: '2.0' as const,
     id: Math.floor(Math.random() * 1000000),
-    method: 'telnyx_rtc.attachCalls' as const,
+    method: TelnyxRTCMethod.ATTACH_CALLS,
     params: {} as Record<string, any>,
   };
 
