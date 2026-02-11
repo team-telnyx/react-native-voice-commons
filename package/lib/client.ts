@@ -1321,7 +1321,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
 
     const pushToken = this.options.pushNotificationDeviceToken || '';
-    const userVariables = {
+    const userAgent = {
       push_device_token: pushToken,
       push_notification_provider: Platform.OS,
     };
@@ -1329,13 +1329,13 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     let params: any;
     if ('login_token' in storedConfig && storedConfig.login_token) {
       params = {
-        loginToken: storedConfig.login_token,
-        userVariables,
+        login_token: storedConfig.login_token,
+        'User-Agent': userAgent,
       };
     } else {
       params = {
         user: storedConfig.login,
-        userVariables,
+        'User-Agent': userAgent,
       };
     }
 
