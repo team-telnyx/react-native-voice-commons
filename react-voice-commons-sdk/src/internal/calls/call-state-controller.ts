@@ -22,7 +22,7 @@ export class CallStateController {
   private _onInviteAutoAccepted?: () => void;
 
   constructor(private readonly _sessionManager: SessionManager) {
-    console.log('🔧 CallStateController: Constructor called - instance created');
+    console.log('CallStateController: Constructor called - instance created');
     // Don't set up client listeners here - client doesn't exist yet
     // Will be called when client is available
   }
@@ -79,6 +79,18 @@ export class CallStateController {
   }
 
   /**
+   * Access any active call tracked by the client.
+   * A call will be accessible until it has ended (transitioned to the ENDED state).
+   * This matches the TelnyxRTC `getCall(callId)` method for multi-call support.
+   *
+   * @param callId The unique identifier of a call.
+   * @returns The Call object that matches the requested callId, or null if not found.
+   */
+  getCall(callId: string): Call | null {
+    return this._callMap.get(callId) || null;
+  }
+
+  /**
    * Set a call to connecting state (used for push notification calls when answered via CallKit)
    * @param callId The ID of the call to set to connecting state
    */
@@ -110,15 +122,12 @@ export class CallStateController {
    * This should be called by the session manager after client creation
    */
   initializeClientListeners(): void {
-    console.log('🔧 CallStateController: initializeClientListeners called');
-    console.log(
-      '🔧 CallStateController: Current client exists:',
-      !!this._sessionManager.telnyxClient
-    );
+    console.log('CallStateController: initializeClientListeners called');
+    console.log('CallStateController: Current client exists:', !!this._sessionManager.telnyxClient);
     this._setupClientListeners();
 
     // CallKit integration now handled by CallKitCoordinator
-    console.log('🔧 CallStateController: Using CallKitCoordinator for CallKit integration');
+    console.log('CallStateController: Using CallKitCoordinator for CallKit integration');
   }
 
   /**
@@ -203,16 +212,16 @@ export class CallStateController {
    * Set up event listeners for the Telnyx client
    */
   private _setupClientListeners(): void {
-    console.log('🔧 CallStateController: Setting up client listeners...');
+    console.log('CallStateController: Setting up client listeners...');
 
     if (!this._sessionManager.telnyxClient) {
-      console.log('🔧 CallStateController: No telnyxClient available yet, skipping listener setup');
+      console.log('CallStateController: No telnyxClient available yet, skipping listener setup');
       return;
     }
 
-    console.log('🔧 CallStateController: TelnyxClient found, setting up incoming call listener');
+    console.log('CallStateController: TelnyxClient found, setting up incoming call listener');
     console.log(
-      '🔧 CallStateController: Client instance:',
+      'CallStateController: Client instance:',
       this._sessionManager.telnyxClient.constructor.name
     );
 
@@ -220,7 +229,7 @@ export class CallStateController {
     this._sessionManager.telnyxClient.on(
       'telnyx.call.incoming',
       (telnyxCall: TelnyxCall, msg: any) => {
-        console.log('📞 CallStateController: Incoming call received:', telnyxCall.callId);
+        console.log('CallStateController: Incoming call received:', telnyxCall.callId);
         this._handleIncomingCall(telnyxCall, msg, false);
       }
     );
@@ -229,7 +238,7 @@ export class CallStateController {
     this._sessionManager.telnyxClient.on(
       'telnyx.call.reattached',
       (telnyxCall: TelnyxCall, msg: any) => {
-        console.log('📞 CallStateController: Reattached call received:', telnyxCall.callId);
+        console.log('CallStateController: Reattached call received:', telnyxCall.callId);
         this._handleIncomingCall(telnyxCall, msg, true);
       }
     );
@@ -240,16 +249,39 @@ export class CallStateController {
     const reattachedListeners =
       this._sessionManager.telnyxClient.listenerCount('telnyx.call.reattached');
     console.log(
-      '🔧 CallStateController: Listeners registered - incoming:',
+      'CallStateController: Listeners registered - incoming:',
       incomingListeners,
       'reattached:',
       reattachedListeners
     );
 
-    // Listen for other call events if needed
-    // this._sessionManager.telnyxClient.on('telnyx.call.stateChange', this._handleCallStateChange.bind(this));
+    // Listen for call state changes from the TelnyxRTC client (multi-call support)
+    this._sessionManager.telnyxClient.on(
+      'telnyx.call.stateChanged',
+      (telnyxCall: TelnyxCall, state: string) => {
+        console.log(
+          'CallStateController: Call state changed from TelnyxRTC:',
+          telnyxCall.callId,
+          state
+        );
+        // Find our wrapper call and update if needed
+        const call = this.findCallByTelnyxCall(telnyxCall);
+        if (call) {
+          console.log(
+            'CallStateController: Found wrapper call, state sync handled by Call subscription'
+          );
+        }
+      }
+    );
 
-    console.log('🔧 CallStateController: Client listeners set up successfully');
+    // Listen for call removal events from TelnyxRTC (multi-call support)
+    this._sessionManager.telnyxClient.on('telnyx.call.removed', (callId: string) => {
+      console.log('CallStateController: Call removed from TelnyxRTC:', callId);
+      // The call cleanup is already handled by our call state subscription
+      // This event is informational for logging/debugging
+    });
+
+    console.log('CallStateController: Client listeners set up successfully');
   }
 
   /**
@@ -263,21 +295,21 @@ export class CallStateController {
     const callId = telnyxCall.callId || this._generateCallId();
 
     console.log(
-      '📞 CallStateController: Handling incoming call:',
+      'CallStateController: Handling incoming call:',
       callId,
       'isReattached:',
       isReattached
     );
-    console.log('📞 CallStateController: TelnyxCall object:', telnyxCall);
-    console.log('📞 CallStateController: Invite message:', inviteMsg);
+    console.log('CallStateController: TelnyxCall object:', telnyxCall);
+    console.log('CallStateController: Invite message:', inviteMsg);
 
     // For reattached calls, remove existing call and create new one
     if (isReattached && this._callMap.has(callId)) {
-      console.log('📞 CallStateController: Removing existing call for reattachment');
+      console.log('CallStateController: Removing existing call for reattachment');
       const existingCall = this._callMap.get(callId);
       if (existingCall) {
         console.log(
-          '📞 CallStateController: Existing call state before removal:',
+          'CallStateController: Existing call state before removal:',
           existingCall.currentState
         );
         this._removeCall(callId);
@@ -298,7 +330,7 @@ export class CallStateController {
       callerNumber = inviteMsg.params.caller_id_number || '';
       callerName = inviteMsg.params.caller_id_name || '';
       console.log(
-        '📞 CallStateController: Extracted caller info from invite - Number:',
+        'CallStateController: Extracted caller info from invite - Number:',
         callerNumber,
         'Name:',
         callerName
@@ -308,7 +340,7 @@ export class CallStateController {
       callerNumber = telnyxCall.remoteCallerIdNumber || '';
       callerName = telnyxCall.remoteCallerIdName || '';
       console.log(
-        '📞 CallStateController: Extracted caller info from TelnyxCall - Number:',
+        'CallStateController: Extracted caller info from TelnyxCall - Number:',
         callerNumber,
         'Name:',
         callerName

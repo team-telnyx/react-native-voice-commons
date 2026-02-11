@@ -21,6 +21,7 @@ module.exports = {
       supportsTablet: true,
       bundleIdentifier: 'com.telnyx.rn-voice-sdk-demo',
       bitcode: false,
+      buildNumber: '46',
     },
     android: {
       adaptiveIcon: {

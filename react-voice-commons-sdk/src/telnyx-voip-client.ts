@@ -1,6 +1,7 @@
 import { Observable } from 'rxjs';
 import { TelnyxConnectionState } from './models/connection-state';
 import { Call } from './models/call';
+import { TelnyxCallState } from './models/call-state';
 import { Config, CredentialConfig, TokenConfig, validateConfig } from './models/config';
 import { SessionManager } from './internal/session/session-manager';
 import { CallStateController } from './internal/calls/call-state-controller';
@@ -118,6 +119,36 @@ export class TelnyxVoipClient {
    */
   get currentActiveCall(): Call | null {
     return this._callStateController.currentActiveCall;
+  }
+
+  /**
+   * Check if there are any active calls (not in ENDED or FAILED state).
+   * Matches TelnyxRTC `hasActiveCalls` property for multi-call support.
+   */
+  get hasActiveCalls(): boolean {
+    return this.currentCalls.some(
+      (call) =>
+        call.currentState !== TelnyxCallState.ENDED && call.currentState !== TelnyxCallState.FAILED
+    );
+  }
+
+  /**
+   * Access any active call tracked by the client.
+   * A call will be accessible until it has ended (transitioned to the ENDED state).
+   * This matches the TelnyxRTC `getCall(callId)` method for multi-call support.
+   *
+   * @param callId The unique identifier of a call.
+   * @returns The Call object that matches the requested callId, or null if not found.
+   * @example
+   * ```typescript
+   * const call = voipClient.getCall('some-call-uuid');
+   * if (call) {
+   *   console.log('Call state:', call.currentState);
+   * }
+   * ```
+   */
+  getCall(callId: string): Call | null {
+    return this._callStateController.getCall(callId);
   }
 
   /**
