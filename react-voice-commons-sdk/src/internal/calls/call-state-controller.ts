@@ -392,7 +392,7 @@ export class CallStateController {
       } else if (call.isIncoming) {
         // Handle incoming call with CallKit (only if not already integrated)
         console.log('CallStateController: Reporting incoming call to CallKitCoordinator');
-        callKitCoordinator.reportIncomingCall(telnyxCall, call.destination, call.destination);
+        callKitCoordinator.reportIncomingCall(telnyxCall, call.callerName, call.callerNumber);
       } else {
         // Handle outgoing call with CallKit
         console.log('CallStateController: Starting outgoing call with CallKitCoordinator');
