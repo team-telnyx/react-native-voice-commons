@@ -70,6 +70,27 @@ export declare class TelnyxVoipClient {
    */
   get currentActiveCall(): Call | null;
   /**
+   * Check if there are any active calls (not in ENDED or FAILED state).
+   * Matches TelnyxRTC `hasActiveCalls` property for multi-call support.
+   */
+  get hasActiveCalls(): boolean;
+  /**
+   * Access any active call tracked by the client.
+   * A call will be accessible until it has ended (transitioned to the ENDED state).
+   * This matches the TelnyxRTC `getCall(callId)` method for multi-call support.
+   *
+   * @param callId The unique identifier of a call.
+   * @returns The Call object that matches the requested callId, or null if not found.
+   * @example
+   * ```typescript
+   * const call = voipClient.getCall('some-call-uuid');
+   * if (call) {
+   *   console.log('Call state:', call.currentState);
+   * }
+   * ```
+   */
+  getCall(callId: string): Call | null;
+  /**
    * Current session ID (UUID) for this connection.
    */
   get sessionId(): string;
