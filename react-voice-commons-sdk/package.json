@@ -17,7 +17,8 @@
   "files": [
     "lib",
     "src",
-    "android",
+    "android/src",
+    "android/build.gradle",
     "ios",
     "TelnyxVoiceCommons.podspec",
     "README.md",
