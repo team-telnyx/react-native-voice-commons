@@ -28,6 +28,16 @@ export declare class TelnyxVoipClient {
   private readonly _options;
   private _disposed;
   /**
+   * Check if the app was launched from a push notification.
+   *
+   * Use this to avoid double-login on cold start. When true, the SDK will
+   * handle login internally via the push notification flow, so you should
+   * skip your normal auto-login.
+   *
+   * @returns true if there is pending push notification data indicating a push-launched app
+   */
+  static isLaunchedFromPushNotification(): Promise<boolean>;
+  /**
    * Creates a new TelnyxVoipClient instance.
    *
    * @param options Configuration options for the client
@@ -213,11 +223,25 @@ export declare class TelnyxVoipClient {
   private _throwIfDisposed;
 }
 /**
- * Create a new TelnyxVoipClient instance for normal app usage
+ * Create or retrieve the shared TelnyxVoipClient instance.
+ *
+ * This uses a singleton pattern — calling it multiple times (e.g., inside a
+ * React component body) always returns the same instance.  If you need to
+ * reset the instance, call `destroyTelnyxVoipClient()` first.
  */
 export declare function createTelnyxVoipClient(options?: TelnyxVoipClientOptions): TelnyxVoipClient;
 /**
- * Create a new TelnyxVoipClient instance for background push notification handling
+ * Destroy the shared TelnyxVoipClient instance.
+ *
+ * Disposes the current singleton so that a subsequent call to
+ * `createTelnyxVoipClient()` will create a fresh instance.
+ */
+export declare function destroyTelnyxVoipClient(): void;
+/**
+ * Create a new TelnyxVoipClient instance for background push notification handling.
+ *
+ * Unlike `createTelnyxVoipClient`, this always creates a new instance because
+ * background isolates need their own independent client.
  */
 export declare function createBackgroundTelnyxVoipClient(
   options?: TelnyxVoipClientOptions

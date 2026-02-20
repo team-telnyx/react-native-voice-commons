@@ -740,7 +740,10 @@ class CallKitCoordinator {
   }
 
   /**
-   * Set the VoIP client reference for triggering reconnection
+   * Set the VoIP client reference for triggering reconnection.
+   *
+   * @deprecated No longer needed — TelnyxVoiceApp now auto-wires the voipClient
+   * on mount. Kept for backwards compatibility.
    */
   setVoipClient(voipClient: TelnyxVoipClient): void {
     this.voipClient = voipClient;

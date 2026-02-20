@@ -36,6 +36,11 @@ function useCallKitCoordinator() {
   const isAvailable = (0, react_1.useCallback)(() => {
     return callkit_coordinator_1.default.isAvailable();
   }, []);
+  /**
+   * @deprecated No longer needed — TelnyxVoiceApp now auto-wires the voipClient
+   * on the CallKit coordinator when it receives the voipClient prop.
+   * This method is kept for backwards compatibility and will be removed in a future release.
+   */
   const setVoipClient = (0, react_1.useCallback)((voipClient) => {
     callkit_coordinator_1.default.setVoipClient(voipClient);
   }, []);

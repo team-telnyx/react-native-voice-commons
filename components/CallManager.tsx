@@ -1,10 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  useTelnyxVoice,
-  Call,
-  TelnyxCallState,
-  useCallKitCoordinator,
-} from '../react-voice-commons-sdk/src';
+import { useTelnyxVoice, Call, TelnyxCallState } from '../react-voice-commons-sdk/src';
 import CurrentCall from './CurrentCall';
 
 interface CallManagerProps {
@@ -13,7 +8,6 @@ interface CallManagerProps {
 
 export const CallManager: React.FC<CallManagerProps> = ({ debug = false }) => {
   const { voipClient } = useTelnyxVoice();
-  const { setVoipClient } = useCallKitCoordinator();
   const [activeCall, setActiveCall] = useState<Call | null>(null);
   const [activeCallState, setActiveCallState] = useState<TelnyxCallState | null>(null);
 
@@ -21,12 +15,6 @@ export const CallManager: React.FC<CallManagerProps> = ({ debug = false }) => {
 
   useEffect(() => {
     log('CallManager: Setting up subscriptions');
-
-    // Set the VoIP client reference in the CallKit coordinator
-    if (voipClient) {
-      setVoipClient(voipClient);
-      log('CallManager: Set VoIP client reference in CallKit coordinator');
-    }
 
     // Subscribe to active call changes
     const activeCallSubscription = voipClient.activeCall$.subscribe((call) => {
@@ -84,7 +72,7 @@ export const CallManager: React.FC<CallManagerProps> = ({ debug = false }) => {
       activeCallSubscription.unsubscribe();
       callsSubscription.unsubscribe();
     };
-  }, [voipClient, setVoipClient, log]);
+  }, [voipClient, log]);
 
   // Subscribe to active call state changes when activeCall changes
   useEffect(() => {

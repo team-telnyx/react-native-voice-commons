@@ -13,6 +13,7 @@
 export {
   TelnyxVoipClient,
   createTelnyxVoipClient,
+  destroyTelnyxVoipClient,
   createBackgroundTelnyxVoipClient,
 } from './telnyx-voip-client';
 export type { TelnyxVoipClientOptions } from './telnyx-voip-client';

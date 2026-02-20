@@ -326,8 +326,8 @@ class CallStateController {
         console.log('CallStateController: Reporting incoming call to CallKitCoordinator');
         callkit_coordinator_1.callKitCoordinator.reportIncomingCall(
           telnyxCall,
-          call.destination,
-          call.destination
+          call.callerName,
+          call.callerNumber
         );
       } else {
         // Handle outgoing call with CallKit

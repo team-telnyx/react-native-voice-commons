@@ -58,6 +58,7 @@ exports.useAppReadyNotifier =
   exports.useAppStateHandler =
   exports.TelnyxVoiceApp =
   exports.createBackgroundTelnyxVoipClient =
+  exports.destroyTelnyxVoipClient =
   exports.createTelnyxVoipClient =
   exports.TelnyxVoipClient =
     void 0;
@@ -73,6 +74,12 @@ Object.defineProperty(exports, 'createTelnyxVoipClient', {
   enumerable: true,
   get: function () {
     return telnyx_voip_client_1.createTelnyxVoipClient;
+  },
+});
+Object.defineProperty(exports, 'destroyTelnyxVoipClient', {
+  enumerable: true,
+  get: function () {
+    return telnyx_voip_client_1.destroyTelnyxVoipClient;
   },
 });
 Object.defineProperty(exports, 'createBackgroundTelnyxVoipClient', {
