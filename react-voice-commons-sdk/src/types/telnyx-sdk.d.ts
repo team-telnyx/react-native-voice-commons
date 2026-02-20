@@ -83,6 +83,7 @@ declare module '@telnyx/react-native-voice-sdk' {
     connect(): Promise<void>;
     disconnect(): void;
     newCall(options: CallOptions): Promise<Call>;
+    disablePushNotification(): void;
 
     on(event: string, listener: (...args: any[]) => void): this;
     off(event: string, listener: (...args: any[]) => void): this;

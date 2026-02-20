@@ -2,6 +2,8 @@ import NetInfo, { NetInfoState, NetInfoSubscription } from '@react-native-commun
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { EventEmitter } from 'eventemitter3';
 import log from 'loglevel';
+import uuid from 'uuid-random';
+import { Platform } from 'react-native';
 import { Call } from './call';
 import type { CallOptions } from './call-options';
 import type { ClientOptions } from './client-options';
@@ -16,6 +18,7 @@ import {
   createAnswerAck,
   isAnswerEvent,
 } from './messages/call';
+import { TelnyxRTCMethod } from './messages/methods';
 import { createAttachCallMessage } from './messages/attach';
 import type { AttachEvent } from './messages/attach';
 import { isAttachEvent } from './messages/attach';
@@ -818,7 +821,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
 
     // Check if this is an invite message that's not being detected
-    if (msg && typeof msg === 'object' && (msg as any).method === 'telnyx_rtc.invite') {
+    if (msg && typeof msg === 'object' && (msg as any).method === TelnyxRTCMethod.INVITE) {
       log.warn('[TelnyxRTC] Received invite message but isInviteEvent returned false:', msg);
     }
 
@@ -1297,5 +1300,53 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     } else {
       log.warn('[TelnyxRTC] Could not find call to set connecting:', callId);
     }
+  }
+
+  /**
+   * Disables push notifications for the current logged-in user.
+   * Push notifications are enabled by default after login.
+   * Sends a 'telnyx_rtc.disable_push_notification' message via the socket,
+   * matching the Android SDK's disablePushNotification() behavior.
+   */
+  public disablePushNotification(): void {
+    const storedConfig = this.credentialSessionConfig || this.tokenSessionConfig;
+    if (!storedConfig) {
+      log.warn('[TelnyxRTC] No stored session config, cannot disable push notifications');
+      return;
+    }
+
+    if (!this.connection) {
+      log.warn('[TelnyxRTC] No active connection, cannot disable push notifications');
+      return;
+    }
+
+    const pushToken = this.options.pushNotificationDeviceToken || '';
+    const userAgent = {
+      push_device_token: pushToken,
+      push_notification_provider: Platform.OS,
+    };
+
+    let params: any;
+    if ('login_token' in storedConfig && storedConfig.login_token) {
+      params = {
+        login_token: storedConfig.login_token,
+        'User-Agent': userAgent,
+      };
+    } else {
+      params = {
+        user: storedConfig.login,
+        'User-Agent': userAgent,
+      };
+    }
+
+    const disablePushMessage = {
+      id: uuid(),
+      jsonrpc: '2.0',
+      method: TelnyxRTCMethod.DISABLE_PUSH_NOTIFICATION,
+      params,
+    };
+
+    log.debug('[TelnyxRTC] Sending disable push notification message');
+    this.connection.send(disablePushMessage);
   }
 }

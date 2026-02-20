@@ -1,4 +1,4 @@
-module.exports = {
+export default {
   expo: {
     name: 'telnyx-react-native-voice-sdk-demo',
     slug: 'telnyx-react-native-voice-sdk-demo',
@@ -14,14 +14,11 @@ module.exports = {
       backgroundColor: '#ffffff',
     },
     assetBundlePatterns: ['**/*'],
-    linking: {
-      scheme: 'myapp',
-    },
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.telnyx.rn-voice-sdk-demo',
       bitcode: false,
-      buildNumber: '46',
+      buildNumber: '47',
     },
     android: {
       adaptiveIcon: {
