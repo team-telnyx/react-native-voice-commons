@@ -32,15 +32,30 @@ The `@telnyx/react-voice-commons-sdk` library provides:
 Integrate the library using the `TelnyxVoiceApp` component for automatic lifecycle management:
 
 ```tsx
-import { TelnyxVoiceApp, createTelnyxVoipClient } from '@telnyx/react-voice-commons-sdk';
+import {
+  TelnyxVoiceApp,
+  TelnyxVoipClient,
+  createTelnyxVoipClient,
+} from '@telnyx/react-voice-commons-sdk';
 
-// Create the VoIP client instance
+// Create the VoIP client instance (singleton — safe to call inside a component body)
 const voipClient = createTelnyxVoipClient({
   enableAppStateManagement: true, // Optional: Enable automatic app state management (default: true)
   debug: true, // Optional: Enable debug logging
 });
 
 export default function App() {
+  // Skip auto-login if the app was launched from a push notification —
+  // the SDK handles login internally via the push notification flow.
+  React.useEffect(() => {
+    TelnyxVoipClient.isLaunchedFromPushNotification().then((isFromPush) => {
+      if (!isFromPush) {
+        // Safe to auto-login
+        voipClient.loginFromStoredConfig();
+      }
+    });
+  }, []);
+
   return (
     <TelnyxVoiceApp voipClient={voipClient} enableAutoReconnect={false} debug={true}>
       <YourAppContent />
@@ -54,10 +69,16 @@ export default function App() {
 ### 1. VoIP Client Configuration
 
 ```tsx
+// createTelnyxVoipClient is a singleton — repeated calls return the same instance.
+// This makes it safe to call inside a React component body without re-creating on every render.
 const voipClient = createTelnyxVoipClient({
   enableAppStateManagement: true, // Optional: Enable automatic app state management (default: true)
   debug: true, // Optional: Enable debug logging
 });
+
+// If you need to tear down and recreate the client (e.g., on logout):
+import { destroyTelnyxVoipClient } from '@telnyx/react-voice-commons-sdk';
+destroyTelnyxVoipClient(); // Disposes the singleton; next createTelnyxVoipClient() call creates a fresh instance
 ```
 
 **Configuration Options Explained:**
@@ -73,6 +94,7 @@ The `TelnyxVoiceApp` component handles:
 - Push notification processing from terminated state
 - Login state management with automatic reconnection
 - Background client management for push notifications
+- **Automatic CallKit coordinator wiring** — the `voipClient` is set on the CallKit coordinator on mount, so you don't need to call `setVoipClient()` manually
 
 ### 3. Reactive State Management
 
@@ -416,9 +438,18 @@ npx expo run:ios
 
 ### Common Integration Issues
 
-### Double Login
+### Double Login on Cold-Start
 
-Ensure you're not calling login methods manually when using `TelnyxVoiceApp` with auto-reconnection enabled.
+When the app is launched from a push notification, the SDK handles login internally. If your app also auto-logs in on mount, both will race and the push flow breaks. Use `isLaunchedFromPushNotification()` to guard your auto-login:
+
+```tsx
+const isFromPush = await TelnyxVoipClient.isLaunchedFromPushNotification();
+if (!isFromPush) {
+  voipClient.loginFromStoredConfig();
+}
+```
+
+Also ensure you're not calling login methods manually when using `TelnyxVoiceApp` with auto-reconnection enabled.
 
 ### Background Disconnection
 
@@ -456,7 +487,6 @@ Ensure you're unsubscribing from RxJS observables in your React components:
 useEffect(() => {
   const subscription = voipClient.connectionState$.subscribe(handleStateChange);
   return () => subscription.unsubscribe();
-}, []);
 }, []);
 ```
 
