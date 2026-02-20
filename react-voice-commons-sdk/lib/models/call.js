@@ -116,6 +116,20 @@ class Call {
     return !this._isIncoming;
   }
   /**
+   * The original caller name (from_display_name) received in the INVITE message.
+   * Falls back to destination if not available.
+   */
+  get callerName() {
+    return this._originalCallerName || this._destination;
+  }
+  /**
+   * The original caller number received in the INVITE message.
+   * Falls back to destination if not available.
+   */
+  get callerNumber() {
+    return this._originalCallerNumber || this._destination;
+  }
+  /**
    * Current call state (synchronous access)
    */
   get currentState() {
