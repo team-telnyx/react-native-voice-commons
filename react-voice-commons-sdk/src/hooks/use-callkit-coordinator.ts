@@ -42,6 +42,11 @@ export function useCallKitCoordinator() {
     return callKitCoordinator.isAvailable();
   }, []);
 
+  /**
+   * @deprecated No longer needed — TelnyxVoiceApp now auto-wires the voipClient
+   * on the CallKit coordinator when it receives the voipClient prop.
+   * This method is kept for backwards compatibility and will be removed in a future release.
+   */
   const setVoipClient = useCallback((voipClient: TelnyxVoipClient): void => {
     callKitCoordinator.setVoipClient(voipClient);
   }, []);

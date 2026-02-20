@@ -5,6 +5,7 @@ import { TelnyxCallState } from './models/call-state';
 import { Config, CredentialConfig, TokenConfig, validateConfig } from './models/config';
 import { SessionManager } from './internal/session/session-manager';
 import { CallStateController } from './internal/calls/call-state-controller';
+import { VoicePnBridge } from './internal/voice-pn-bridge';
 
 /**
  * Configuration options for TelnyxVoipClient
@@ -33,6 +34,29 @@ export class TelnyxVoipClient {
   private readonly _callStateController: CallStateController;
   private readonly _options: Required<TelnyxVoipClientOptions>;
   private _disposed = false;
+
+  /**
+   * Check if the app was launched from a push notification.
+   *
+   * Use this to avoid double-login on cold start. When true, the SDK will
+   * handle login internally via the push notification flow, so you should
+   * skip your normal auto-login.
+   *
+   * @returns true if there is pending push notification data indicating a push-launched app
+   */
+  static async isLaunchedFromPushNotification(): Promise<boolean> {
+    try {
+      const pendingAction = await VoicePnBridge.getPendingPushAction();
+      if (pendingAction?.action) return true;
+
+      const pendingVoipPush = await VoicePnBridge.getPendingVoipPush();
+      if (pendingVoipPush) return true;
+
+      return false;
+    } catch {
+      return false;
+    }
+  }
 
   /**
    * Creates a new TelnyxVoipClient instance.
@@ -565,15 +589,41 @@ export class TelnyxVoipClient {
 
 // ========== Factory Functions ==========
 
+let _sharedInstance: TelnyxVoipClient | null = null;
+
 /**
- * Create a new TelnyxVoipClient instance for normal app usage
+ * Create or retrieve the shared TelnyxVoipClient instance.
+ *
+ * This uses a singleton pattern — calling it multiple times (e.g., inside a
+ * React component body) always returns the same instance.  If you need to
+ * reset the instance, call `destroyTelnyxVoipClient()` first.
  */
 export function createTelnyxVoipClient(options?: TelnyxVoipClientOptions): TelnyxVoipClient {
-  return new TelnyxVoipClient(options);
+  if (_sharedInstance) {
+    return _sharedInstance;
+  }
+  _sharedInstance = new TelnyxVoipClient(options);
+  return _sharedInstance;
 }
 
 /**
- * Create a new TelnyxVoipClient instance for background push notification handling
+ * Destroy the shared TelnyxVoipClient instance.
+ *
+ * Disposes the current singleton so that a subsequent call to
+ * `createTelnyxVoipClient()` will create a fresh instance.
+ */
+export function destroyTelnyxVoipClient(): void {
+  if (_sharedInstance) {
+    _sharedInstance.dispose();
+    _sharedInstance = null;
+  }
+}
+
+/**
+ * Create a new TelnyxVoipClient instance for background push notification handling.
+ *
+ * Unlike `createTelnyxVoipClient`, this always creates a new instance because
+ * background isolates need their own independent client.
  */
 export function createBackgroundTelnyxVoipClient(
   options?: TelnyxVoipClientOptions

@@ -9,7 +9,11 @@ import { Appearance, Platform } from 'react-native';
 import { setAndroidNavigationBar } from '~/lib/ui/android-navigation-bar';
 import { NAV_THEME } from '~/lib/theme/constants';
 import { useColorScheme } from '~/lib/theme/useColorScheme';
-import { TelnyxVoiceApp, createTelnyxVoipClient } from '../react-voice-commons-sdk/src';
+import {
+  TelnyxVoiceApp,
+  TelnyxVoipClient,
+  createTelnyxVoipClient,
+} from '../react-voice-commons-sdk/src';
 import { CallManager } from '~/components/CallManager';
 import log from 'loglevel';
 
@@ -50,6 +54,20 @@ const voipClient = createTelnyxVoipClient({
 export default function RootLayout() {
   usePlatformSpecificSetup();
   const { isDarkColorScheme } = useColorScheme();
+
+  // If the app was cold-started from a push notification, skip auto-login —
+  // the SDK handles login internally via the push notification flow.
+  React.useEffect(() => {
+    TelnyxVoipClient.isLaunchedFromPushNotification().then((isFromPush) => {
+      if (isFromPush) {
+        console.log('[RootLayout] Launched from push notification — skipping auto-login');
+        return;
+      }
+      // Safe to auto-login here if you have stored credentials, e.g.:
+      // voipClient.loginFromStoredConfig();
+      console.log('[RootLayout] Normal launch — auto-login could be triggered here');
+    });
+  }, []);
 
   return (
     <TelnyxVoiceApp voipClient={voipClient} enableAutoReconnect={false} debug={true}>

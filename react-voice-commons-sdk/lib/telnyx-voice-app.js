@@ -378,6 +378,19 @@ const TelnyxVoiceAppComponent = ({
     });
     return backgroundClient;
   }, [debug, log]);
+  // Auto-wire the voipClient on the CallKit coordinator so consumers don't
+  // have to call setVoipClient() manually at the right level.
+  (0, react_1.useEffect)(() => {
+    if (react_native_1.Platform.OS === 'ios') {
+      try {
+        const { callKitCoordinator } = require('./callkit/callkit-coordinator');
+        callKitCoordinator.setVoipClient(voipClient);
+        log('Auto-wired voipClient on CallKit coordinator');
+      } catch (e) {
+        log('Error auto-wiring voipClient on CallKit coordinator:', e);
+      }
+    }
+  }, [voipClient, log]);
   // Setup effect
   (0, react_1.useEffect)(() => {
     // Listen to connection state changes

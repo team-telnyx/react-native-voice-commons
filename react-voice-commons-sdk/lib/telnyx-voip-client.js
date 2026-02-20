@@ -2,12 +2,14 @@
 Object.defineProperty(exports, '__esModule', { value: true });
 exports.TelnyxVoipClient = void 0;
 exports.createTelnyxVoipClient = createTelnyxVoipClient;
+exports.destroyTelnyxVoipClient = destroyTelnyxVoipClient;
 exports.createBackgroundTelnyxVoipClient = createBackgroundTelnyxVoipClient;
 const connection_state_1 = require('./models/connection-state');
 const call_state_1 = require('./models/call-state');
 const config_1 = require('./models/config');
 const session_manager_1 = require('./internal/session/session-manager');
 const call_state_controller_1 = require('./internal/calls/call-state-controller');
+const voice_pn_bridge_1 = require('./internal/voice-pn-bridge');
 /**
  * The main public interface for the react-voice-commons module.
  *
@@ -20,6 +22,26 @@ const call_state_controller_1 = require('./internal/calls/call-state-controller'
  * into their chosen state management solution naturally.
  */
 class TelnyxVoipClient {
+  /**
+   * Check if the app was launched from a push notification.
+   *
+   * Use this to avoid double-login on cold start. When true, the SDK will
+   * handle login internally via the push notification flow, so you should
+   * skip your normal auto-login.
+   *
+   * @returns true if there is pending push notification data indicating a push-launched app
+   */
+  static async isLaunchedFromPushNotification() {
+    try {
+      const pendingAction = await voice_pn_bridge_1.VoicePnBridge.getPendingPushAction();
+      if (pendingAction?.action) return true;
+      const pendingVoipPush = await voice_pn_bridge_1.VoicePnBridge.getPendingVoipPush();
+      if (pendingVoipPush) return true;
+      return false;
+    } catch {
+      return false;
+    }
+  }
   /**
    * Creates a new TelnyxVoipClient instance.
    *
@@ -470,14 +492,38 @@ class TelnyxVoipClient {
 }
 exports.TelnyxVoipClient = TelnyxVoipClient;
 // ========== Factory Functions ==========
+let _sharedInstance = null;
 /**
- * Create a new TelnyxVoipClient instance for normal app usage
+ * Create or retrieve the shared TelnyxVoipClient instance.
+ *
+ * This uses a singleton pattern — calling it multiple times (e.g., inside a
+ * React component body) always returns the same instance.  If you need to
+ * reset the instance, call `destroyTelnyxVoipClient()` first.
  */
 function createTelnyxVoipClient(options) {
-  return new TelnyxVoipClient(options);
+  if (_sharedInstance) {
+    return _sharedInstance;
+  }
+  _sharedInstance = new TelnyxVoipClient(options);
+  return _sharedInstance;
 }
 /**
- * Create a new TelnyxVoipClient instance for background push notification handling
+ * Destroy the shared TelnyxVoipClient instance.
+ *
+ * Disposes the current singleton so that a subsequent call to
+ * `createTelnyxVoipClient()` will create a fresh instance.
+ */
+function destroyTelnyxVoipClient() {
+  if (_sharedInstance) {
+    _sharedInstance.dispose();
+    _sharedInstance = null;
+  }
+}
+/**
+ * Create a new TelnyxVoipClient instance for background push notification handling.
+ *
+ * Unlike `createTelnyxVoipClient`, this always creates a new instance because
+ * background isolates need their own independent client.
  */
 function createBackgroundTelnyxVoipClient(options) {
   return new TelnyxVoipClient(options);
