@@ -137,7 +137,10 @@ export class CallStateController {
     destination: string,
     callerName?: string,
     callerNumber?: string,
-    customHeaders?: Record<string, string>
+    customHeaders?: Record<string, string>,
+    clientState?: string,
+    audio?: boolean,
+    video?: boolean,
   ): Promise<Call> {
     if (this._disposed) {
       throw new Error('CallStateController has been disposed');
@@ -154,6 +157,9 @@ export class CallStateController {
         callerIdName: callerName,
         callerIdNumber: callerNumber,
         customHeaders,
+        clientState,
+        audio,
+        video
       };
       const telnyxCall = await this._sessionManager.telnyxClient.newCall(callOptions);
 
