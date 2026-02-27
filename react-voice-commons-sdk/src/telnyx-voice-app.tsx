@@ -374,8 +374,14 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
 
         log('Found pending VoIP push data:', voipPayload);
 
-        await VoicePnBridge.clearPendingVoipPush();
-        log('Cleared pending VoIP push data after retrieval');
+        // Do NOT clear push data here. Let it persist until the answer/end action
+        // is fulfilled in the CallKit coordinator. This prevents a race condition in
+        // Expo apps where the RN bridge mounts immediately on push notification —
+        // the push data would be consumed and cleared before the user answers,
+        // leaving the coordinator with nothing to work with.
+        // For non-Expo apps (RN mounts after answer), the coordinator's
+        // handlePushNotificationAnswer/Reject clears the data before
+        // checkForInitialPushNotification ever runs, so no loop occurs.
 
         return { action: 'incoming_call', metadata: voipPayload.metadata, from_notification: true };
       } catch (parseError) {
@@ -424,9 +430,14 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
 
         log('Processing initial push notification...');
 
-        // Prevent duplicate processing if already connected
-        if (voipClient.currentConnectionState === TelnyxConnectionState.CONNECTED) {
-          log('SKIPPING - Already connected, preventing duplicate processing');
+        // Prevent duplicate processing if already connected or connecting.
+        // Since push data is no longer cleared on read, this guard prevents
+        // re-processing when checkForInitialPushNotification fires again on app resume.
+        if (
+          voipClient.currentConnectionState === TelnyxConnectionState.CONNECTED ||
+          voipClient.currentConnectionState === TelnyxConnectionState.CONNECTING
+        ) {
+          log(`SKIPPING - Already ${voipClient.currentConnectionState}, preventing duplicate processing`);
           return;
         }
 

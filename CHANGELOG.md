@@ -1,5 +1,13 @@
 # CHANGELOG.md
 
+## [0.1.8-beta.0](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.8-beta.0) (2026-02-27)
+
+### Bug Fixing
+
+• Fixed push data race condition in Expo apps — `clearPendingVoipPush()` is now deferred until the CallKit coordinator fulfills the answer, end, or reject action, preventing push data from being consumed and cleared before the user answers
+• Fixed duplicate push notification processing by also checking for `CONNECTING` state (not just `CONNECTED`) in `checkForInitialPushNotification`
+• Fixed premature protection-flag resets — `hasProcessingCalls()` now returns `true` while `isCallFromPush` is set, preventing the `calls$` subscription from clearing `isHandlingForegroundCall` and `backgroundDetectorIgnore` before the WebRTC call arrives
+
 ## [0.1.7](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.7) (2026-02-20)
 
 ### Enhancement

@@ -306,10 +306,21 @@ class CallKitCoordinator {
       } else {
         console.log('CallKitCoordinator: Outgoing call, skipping answer and CONNECTING state');
       }
+      // Clear push data now that answer action is fulfilled
+      try {
+        await VoicePnBridge.clearPendingVoipPush();
+        console.log('CallKitCoordinator: Cleared pending VoIP push after answer fulfilled');
+      } catch (clearErr) {
+        console.error('CallKitCoordinator: Error clearing push data after answer:', clearErr);
+      }
     } catch (error) {
       console.error('CallKitCoordinator: Error processing CallKit answer', error);
       await CallKit.reportCallEnded(callKitUUID, CallEndReason.Failed);
       this.cleanupCall(callKitUUID);
+      // Clear push data even on error to prevent stale state
+      try {
+        await VoicePnBridge.clearPendingVoipPush();
+      } catch (_) {}
     } finally {
       this.processingCalls.delete(callKitUUID);
     }
@@ -365,6 +376,12 @@ class CallKitCoordinator {
     } finally {
       this.processingCalls.delete(callKitUUID);
       this.cleanupCall(callKitUUID);
+
+      // Clear push data now that end action is fulfilled
+      try {
+        await VoicePnBridge.clearPendingVoipPush();
+        console.log('CallKitCoordinator: Cleared pending VoIP push after end fulfilled');
+      } catch (_) {}
 
       // Check if app is in background and no more calls - disconnect client
       await this.checkBackgroundDisconnection();
@@ -544,6 +561,12 @@ class CallKitCoordinator {
         await VoicePnBridge.setPendingPushAction(pushAction, pushMetadata);
         console.log('CallKitCoordinator: ✅ Set pending push action');
 
+        // Clear push data now that push notification answer is handled
+        try {
+          await VoicePnBridge.clearPendingVoipPush();
+          console.log('CallKitCoordinator: Cleared pending VoIP push after push answer handled');
+        } catch (_) {}
+
         return;
       }
 
@@ -576,6 +599,12 @@ class CallKitCoordinator {
 
         // Clean up push notification state
         await this.cleanupPushNotificationState();
+
+        // Clear push data now that rejection is handled
+        try {
+          await VoicePnBridge.clearPendingVoipPush();
+          console.log('CallKitCoordinator: Cleared pending VoIP push after rejection handled');
+        } catch (_) {}
 
         console.log('CallKitCoordinator: 🎯 Push notification rejection handling complete');
         return;
@@ -815,7 +844,11 @@ class CallKitCoordinator {
    * This helps prevent premature flag resets during CallKit operations
    */
   hasProcessingCalls(): boolean {
-    return this.processingCalls.size > 0;
+    // Also return true when isCallFromPush is set — this prevents the
+    // calls$ subscription in TelnyxVoiceApp from resetting protection flags
+    // (isHandlingForegroundCall, backgroundDetectorIgnore) before the WebRTC
+    // call arrives during push notification handling.
+    return this.processingCalls.size > 0 || this.isCallFromPush;
   }
 
   /**
