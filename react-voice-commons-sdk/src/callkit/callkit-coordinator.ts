@@ -218,24 +218,30 @@ class CallKitCoordinator {
       callKitUUID
     );
 
-    // Mark as processing to prevent duplicate actions
-    this.processingCalls.add(callKitUUID);
+    // Track this call as ended to prevent duplicate end actions
+    this.endedCalls.add(callKitUUID);
 
     try {
-      // End the call in CallKit and hang up the WebRTC call
-      await CallKit.endCall(callKitUUID);
-      call.hangup();
+      // End the call in CallKit - endCall returns false on failure (doesn't throw)
+      const endCallSuccess = await CallKit.endCall(callKitUUID);
 
-      // Clean up the mappings
+      if (!endCallSuccess) {
+        // Fallback: use reportCallEnded to dismiss CallKit UI when endCall fails
+        // (e.g., unknownCallUUID error from duplicate CXProvider)
+        await CallKit.reportCallEnded(callKitUUID, CallEndReason.RemoteEnded);
+      }
+
+      this.isCallFromPush = false;
+      call.hangup();
       this.cleanupCall(callKitUUID);
 
       return true;
     } catch (error) {
       console.error('CallKitCoordinator: Error ending call from UI', error);
-      call.hangup(); // Ensure WebRTC call is ended
+      this.isCallFromPush = false;
+      call.hangup();
+      this.cleanupCall(callKitUUID);
       return false;
-    } finally {
-      this.processingCalls.delete(callKitUUID);
     }
   }
 
@@ -506,19 +512,24 @@ class CallKitCoordinator {
         this.shouldAutoAnswerNextCall = true;
         console.log('CallKitCoordinator: ✅ Set auto-answer flag for next incoming call');
 
-        // Get VoIP client and trigger reconnection
+        // Try to get VoIP client - it may not be wired yet if user answered
+        // from CallKit before React Native finished initializing
         const voipClient = this.getSDKClient();
         if (!voipClient) {
-          console.error(
-            'CallKitCoordinator: ❌ No VoIP client available - cannot reconnect for push notification'
-          );
-          await CallKit.reportCallEnded(callKitUUID, CallEndReason.Failed);
-          this.cleanupCall(callKitUUID);
+          // voipClient not ready yet - DON'T fail the call.
+          // shouldAutoAnswerNextCall is already set to true above.
+          // checkForInitialPushNotification() will run after setVoipClient()
+          // and will find the push data still intact, call handleCallKitPushReceived()
+          // which checks shouldAutoAnswerNextCall and queues the auto-answer.
           return;
         }
 
+        // voipClient is available - queue the answer action on the TelnyxRTC client
+        // so when the INVITE arrives after WebSocket login, processInvite() sees
+        // pendingAnswerAction=true and auto-answers the call.
+        voipClient.queueAnswerFromCallKit();
+
         // Get the real push data that was stored by the VoIP push handler
-        console.log('CallKitCoordinator: 🔍 Getting real push data from VoicePnBridge...');
         let realPushData = null;
         try {
           const pendingPushJson = await VoicePnBridge.getPendingVoipPush();
@@ -638,17 +649,11 @@ class CallKitCoordinator {
             console.log('CallKitCoordinator: WebRTC call active - reporting connected to CallKit');
 
             try {
-              // Report as connected (CallKit call already answered in UI flow)
               await CallKit.reportCallConnected(callKitUUID);
-              console.log(
-                'CallKitCoordinator: Call reported as connected to CallKit ',
-                callKitUUID
-              );
-
-              this.connectedCalls.add(callKitUUID);
             } catch (error) {
               console.error('CallKitCoordinator: Error reporting call connected:', error);
             }
+            this.connectedCalls.add(callKitUUID);
           }
           break;
 

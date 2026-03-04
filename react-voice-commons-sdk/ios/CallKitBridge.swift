@@ -205,6 +205,33 @@ import React
             }
 
             provider.reportOutgoingCall(with: uuid, connectedAt: Date())
+
+            // Fulfill deferred CXAnswerCallAction now that peer connection is ready
+            if let pendingAction = manager.pendingAnswerAction {
+                NSLog("TelnyxVoice: reportCallConnected - fulfilling deferred CXAnswerCallAction")
+                pendingAction.fulfill()
+                manager.pendingAnswerAction = nil
+            } else {
+                // Fallback: ensure audio is enabled for non-push or already-fulfilled cases
+                let rtcAudioSession = RTCAudioSession.sharedInstance()
+                rtcAudioSession.lockForConfiguration()
+                let webRTCConfig = RTCAudioSessionConfiguration.webRTC()
+                webRTCConfig.categoryOptions = [.duckOthers, .allowBluetooth]
+                do {
+                    try rtcAudioSession.setConfiguration(webRTCConfig)
+                } catch {
+                    NSLog("TelnyxVoice: reportCallConnected - setConfiguration error: \(error)")
+                }
+                do {
+                    try rtcAudioSession.setActive(true)
+                } catch {
+                    NSLog("TelnyxVoice: reportCallConnected - setActive error: \(error)")
+                }
+                rtcAudioSession.isAudioEnabled = true
+                rtcAudioSession.unlockForConfiguration()
+                rtcAudioSession.audioSessionDidActivate(AVAudioSession.sharedInstance())
+            }
+
             resolve(["success": true])
         }
 
@@ -276,6 +303,7 @@ import React
         public var callKitProvider: CXProvider?
         public var callKitController: CXCallController?
         public var activeCalls: [UUID: [String: Any]] = [:]
+        public var pendingAnswerAction: CXAnswerCallAction?
 
         private override init() {
             super.init()
@@ -327,12 +355,16 @@ import React
         }
 
         private func setupCallKit() {
-            // CRITICAL: Configure WebRTC for manual audio control BEFORE CallKit setup
+            // ALWAYS configure WebRTC audio, even if provider already exists
             RTCAudioSession.sharedInstance().useManualAudio = true
-            RTCAudioSession.sharedInstance().isAudioEnabled = false  // MUST be false initially!
-            NSLog(
-                "🎧 TelnyxVoice: WebRTC configured for manual audio control (audio DISABLED until CallKit activates)"
-            )
+            RTCAudioSession.sharedInstance().isAudioEnabled = false
+
+            // Guard against duplicate provider creation (async setupAutomatically can overwrite
+            // the provider created by setupSynchronously for VoIP push)
+            guard callKitProvider == nil else {
+                NSLog("TelnyxVoice: setupCallKit() - provider already exists, skipping to prevent overwrite")
+                return
+            }
 
             // Use the localizedName from the app's bundle display name or fallback
             let appName =
@@ -351,11 +383,7 @@ import React
             callKitProvider?.setDelegate(self, queue: nil)
             callKitController = CXCallController()
 
-            NSLog(
-                "📞 TelnyxVoice: CallKit provider instance: \(String(describing: callKitProvider))")
-            NSLog(
-                "📞 TelnyxVoice: CallKit controller instance: \(String(describing: callKitController))"
-            )
+            NSLog("TelnyxVoice: CallKit provider and controller created")
         }
 
      
@@ -519,9 +547,9 @@ import React
                     callData: activeCalls[action.callUUID])
             }
 
-            NSLog("📞 TelnyxVoice: Fulfilling CXAnswerCallAction for call UUID: \(action.callUUID)")
-            action.fulfill()
-            NSLog("📞 TelnyxVoice: ✅ CXAnswerCallAction fulfilled successfully")
+            // Defer action.fulfill() until reportCallConnected when peer connection is ready
+            NSLog("TelnyxVoice: Deferring CXAnswerCallAction.fulfill() until peer connection is ready")
+            self.pendingAnswerAction = action
         }
 
         public func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
@@ -552,58 +580,67 @@ import React
         }
 
         public func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
-            NSLog(
-                "🎧🎧🎧 TelnyxVoice: AUDIO SESSION ACTIVATED BY CALLKIT - USER ANSWERED THE CALL! 🎧🎧🎧")
-            NSLog("🎧 Provider: \(provider)")
+            NSLog("TelnyxVoice: Audio session activated by CallKit")
 
+            let rtcAudioSession = RTCAudioSession.sharedInstance()
 
-            // CRITICAL: Activate WebRTC audio session 
-            RTCAudioSession.sharedInstance().audioSessionDidActivate(audioSession)
-            RTCAudioSession.sharedInstance().isAudioEnabled = true
-            NSLog("🎧 TelnyxVoice: WebRTC RTCAudioSession activated and audio enabled")
-
+            // Step 1: Configure (matches native iOS SDK setupCorrectAudioConfiguration)
+            rtcAudioSession.lockForConfiguration()
+            let webRTCConfig = RTCAudioSessionConfiguration.webRTC()
+            webRTCConfig.categoryOptions = [.duckOthers, .allowBluetooth]
             do {
-                // Configure audio session for VoIP with proper routing
-                try audioSession.setCategory(
-                    .playAndRecord, mode: .voiceChat,
-                    options: [.allowBluetooth, .allowBluetoothA2DP])
-                try audioSession.setActive(true)
-
-                // Emit audio session activated event to React Native
-                CallKitBridge.shared?.emitAudioSessionEvent(
-                    "AudioSessionActivated",
-                    data: [
-                        "category": audioSession.category.rawValue,
-                        "mode": audioSession.mode.rawValue,
-                        "isActive": true,
-                    ])
-
-                NSLog(
-                    "🎧 SUCCESS: Audio session ACTIVE for VoIP - Category: \(audioSession.category.rawValue), Mode: \(audioSession.mode.rawValue)"
-                )
+                try rtcAudioSession.setConfiguration(webRTCConfig)
             } catch {
-                NSLog("❌ FAILED: Audio session configuration error: \(error)")
-
-                // Emit audio session failed event to React Native
-                CallKitBridge.shared?.emitAudioSessionEvent(
-                    "AudioSessionFailed",
-                    data: [
-                        "error": error.localizedDescription
-                    ])
+                NSLog("TelnyxVoice: didActivateAudioSession - setConfiguration error: \(error)")
             }
+            rtcAudioSession.unlockForConfiguration()
+
+            // Step 2: Activate (matches native iOS SDK setAudioSessionActive)
+            rtcAudioSession.lockForConfiguration()
+            do {
+                try rtcAudioSession.setActive(true)
+            } catch {
+                NSLog("TelnyxVoice: didActivateAudioSession - setActive error: \(error)")
+            }
+            rtcAudioSession.isAudioEnabled = true
+            rtcAudioSession.unlockForConfiguration()
+
+            rtcAudioSession.audioSessionDidActivate(audioSession)
+
+            // Emit audio session activated event to React Native
+            CallKitBridge.shared?.emitAudioSessionEvent(
+                "AudioSessionActivated",
+                data: [
+                    "category": audioSession.category.rawValue,
+                    "mode": audioSession.mode.rawValue,
+                    "isActive": true,
+                ])
         }
 
         public func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
-            NSLog("🔇🔇🔇 TelnyxVoice: AUDIO SESSION DEACTIVATED BY CALLKIT 🔇🔇🔇")
-            NSLog("🔇 Provider: \(provider)")
-            NSLog(
-                "🔇 Audio session details: active=\(audioSession.isOtherAudioPlaying), category=\(audioSession.category.rawValue), mode=\(audioSession.mode.rawValue)"
-            )
+            NSLog("TelnyxVoice: Audio session deactivated by CallKit")
 
-            // CRITICAL: Deactivate WebRTC audio session (matches Flutter implementation)
-            RTCAudioSession.sharedInstance().audioSessionDidDeactivate(audioSession)
-            RTCAudioSession.sharedInstance().isAudioEnabled = false
-            NSLog("🔇 TelnyxVoice: WebRTC RTCAudioSession deactivated and audio disabled")
+            let rtcAudioSession = RTCAudioSession.sharedInstance()
+
+            // Reset audio config (matches native iOS SDK resetAudioConfiguration)
+            let avAudioSession = AVAudioSession.sharedInstance()
+            do {
+                try avAudioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            } catch {
+                NSLog("TelnyxVoice: didDeactivateAudioSession - setCategory error: \(error)")
+            }
+
+            // Deactivate (matches native iOS SDK setAudioSessionActive(false))
+            rtcAudioSession.lockForConfiguration()
+            do {
+                try rtcAudioSession.setActive(false)
+            } catch {
+                NSLog("TelnyxVoice: didDeactivateAudioSession - setActive(false) error: \(error)")
+            }
+            rtcAudioSession.isAudioEnabled = false
+            rtcAudioSession.unlockForConfiguration()
+
+            rtcAudioSession.audioSessionDidDeactivate(audioSession)
 
             // Emit audio session deactivated event to React Native
             CallKitBridge.shared?.emitAudioSessionEvent(
