@@ -36,6 +36,9 @@ export class Peer {
   private iceGatheringComplete: DeferredPromise<boolean> | null;
   private reporter: WebRTCReporter | null = null;
 
+  /** Callback for logging peer events to call report collector */
+  public onPeerEventLog: ((event: string, context: Record<string, unknown>) => void) | null = null;
+
   constructor(options: CallOptions) {
     this.instance = null;
     this.iceGatheringComplete = null;
@@ -208,6 +211,11 @@ export class Peer {
       this.reporter.onIceGatheringStateChange(iceGatheringState);
     }
 
+    // Log to call report collector
+    if (iceGatheringState) {
+      this.onPeerEventLog?.('ICE gathering state changed', { state: iceGatheringState });
+    }
+
     if (iceGatheringState === 'complete') {
       log.debug('[Peer] ICE gathering complete');
       this.iceGatheringComplete?.resolve(true);
@@ -265,6 +273,11 @@ export class Peer {
     if (this.reporter && signalingState) {
       this.reporter.onSignalingStateChange(signalingState);
     }
+
+    // Log to call report collector
+    if (signalingState) {
+      this.onPeerEventLog?.('Signaling state changed', { state: signalingState });
+    }
   };
 
   private onIceConnectionStateChange = () => {
@@ -274,6 +287,11 @@ export class Peer {
     // Report to WebRTCReporter if available
     if (this.reporter && iceConnectionState) {
       this.reporter.onIceConnectionStateChange(iceConnectionState);
+    }
+
+    // Log to call report collector
+    if (iceConnectionState) {
+      this.onPeerEventLog?.('ICE connection state changed', { state: iceConnectionState });
     }
   };
 

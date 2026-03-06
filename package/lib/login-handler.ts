@@ -8,6 +8,7 @@ import {
   isClientReadyEvent,
   isValidGatewayStateResponse,
 } from './messages/gateway';
+import { updateCallReportId } from './global';
 import {
   createPasswordLoginMessage,
   createTokenLoginMessage,
@@ -96,6 +97,15 @@ export class LoginHandler {
     if (!isValidGatewayStateResponse(gatewayResponse)) {
       log.error('Invalid gateway state response');
       return null;
+    }
+
+    // Capture call_report_id from REGED params for call report authentication
+    const callReportId = gatewayResponse.result?.params?.call_report_id;
+    if (callReportId) {
+      updateCallReportId(callReportId);
+      log.debug('[LoginHandler] Captured call_report_id from REGED:', callReportId);
+    } else {
+      log.warn('[LoginHandler] No call_report_id found in REGED params');
     }
 
     return gatewayResponse.result.sessid;

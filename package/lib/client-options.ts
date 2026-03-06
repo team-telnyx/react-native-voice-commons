@@ -40,4 +40,26 @@ export interface ClientOptions {
    * @default false
    */
   debug?: boolean;
+  /**
+   * Enable automatic call quality reporting to voice-sdk-proxy.
+   * When enabled, the SDK collects WebRTC stats and structured logs during calls
+   * and POSTs them to the /call_report endpoint when calls end.
+   * @default true
+   */
+  enableCallReports?: boolean;
+  /**
+   * Interval in seconds for collecting call report statistics.
+   * @default 5
+   */
+  callReportInterval?: number;
+  /**
+   * Minimum log level to capture for call reports: 'debug' | 'info' | 'warn' | 'error'.
+   * @default 'debug'
+   */
+  callReportLogLevel?: string;
+  /**
+   * Maximum number of log entries to buffer per call.
+   * @default 1000
+   */
+  callReportMaxLogEntries?: number;
 }
