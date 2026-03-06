@@ -343,12 +343,13 @@ class CallStateController {
     call.callState$.subscribe((state) => {
       // CallKitCoordinator automatically updates CallKit via setupWebRTCCallListeners
       console.log('CallStateController: Call state changed to:', state);
-      // Clean up when call ends
+      // Clean up when call ends - delay to next tick so external subscribers
+      // receive the ENDED/FAILED state before the call is disposed
       if (
         state === call_state_1.TelnyxCallState.ENDED ||
         state === call_state_1.TelnyxCallState.FAILED
       ) {
-        this._removeCall(call.callId);
+        setTimeout(() => this._removeCall(call.callId), 0);
       }
     });
   }

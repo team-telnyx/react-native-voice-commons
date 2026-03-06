@@ -437,7 +437,9 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
           voipClient.currentConnectionState === TelnyxConnectionState.CONNECTED ||
           voipClient.currentConnectionState === TelnyxConnectionState.CONNECTING
         ) {
-          log(`SKIPPING - Already ${voipClient.currentConnectionState}, preventing duplicate processing`);
+          log(
+            `SKIPPING - Already ${voipClient.currentConnectionState}, preventing duplicate processing`
+          );
           return;
         }
 
