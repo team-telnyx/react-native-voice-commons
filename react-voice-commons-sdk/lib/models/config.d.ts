@@ -7,6 +7,14 @@ export interface CredentialConfig {
   sipPassword: string;
   debug?: boolean;
   pushNotificationDeviceToken?: string;
+  /** Enable automatic call quality reporting. Default: true */
+  enableCallReports?: boolean;
+  /** Stats collection interval in seconds. Default: 5 */
+  callReportInterval?: number;
+  /** Minimum log level for call reports: 'debug' | 'info' | 'warn' | 'error'. Default: 'debug' */
+  callReportLogLevel?: string;
+  /** Max log entries per call. Default: 1000 */
+  callReportMaxLogEntries?: number;
 }
 /**
  * Configuration for token-based authentication
@@ -16,6 +24,14 @@ export interface TokenConfig {
   token: string;
   debug?: boolean;
   pushNotificationDeviceToken?: string;
+  /** Enable automatic call quality reporting. Default: true */
+  enableCallReports?: boolean;
+  /** Stats collection interval in seconds. Default: 5 */
+  callReportInterval?: number;
+  /** Minimum log level for call reports: 'debug' | 'info' | 'warn' | 'error'. Default: 'debug' */
+  callReportLogLevel?: string;
+  /** Max log entries per call. Default: 1000 */
+  callReportMaxLogEntries?: number;
 }
 /**
  * Union type for all supported authentication configurations
