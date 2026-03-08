@@ -128,6 +128,7 @@ class VoicePnBridge {
    * Get VoIP token from native storage
    */
   static async getVoipToken() {
+    if (react_native_1.Platform.OS !== 'ios') return null;
     try {
       return await NativeBridge.getVoipToken();
     } catch (error) {
@@ -136,9 +137,10 @@ class VoicePnBridge {
     }
   }
   /**
-   * Get pending VoIP push from native storage
+   * Get pending VoIP push from native storage (iOS only)
    */
   static async getPendingVoipPush() {
+    if (react_native_1.Platform.OS !== 'ios') return null;
     try {
       return await NativeBridge.getPendingVoipPush();
     } catch (error) {
@@ -147,9 +149,10 @@ class VoicePnBridge {
     }
   }
   /**
-   * Clear pending VoIP push from native storage
+   * Clear pending VoIP push from native storage (iOS only)
    */
   static async clearPendingVoipPush() {
+    if (react_native_1.Platform.OS !== 'ios') return true;
     try {
       return await NativeBridge.clearPendingVoipPush();
     } catch (error) {
@@ -158,9 +161,10 @@ class VoicePnBridge {
     }
   }
   /**
-   * Get pending VoIP action from native storage
+   * Get pending VoIP action from native storage (iOS only)
    */
   static async getPendingVoipAction() {
+    if (react_native_1.Platform.OS !== 'ios') return null;
     try {
       return await NativeBridge.getPendingVoipAction();
     } catch (error) {
@@ -169,9 +173,10 @@ class VoicePnBridge {
     }
   }
   /**
-   * Clear pending VoIP action from native storage
+   * Clear pending VoIP action from native storage (iOS only)
    */
   static async clearPendingVoipAction() {
+    if (react_native_1.Platform.OS !== 'ios') return true;
     try {
       return await NativeBridge.clearPendingVoipAction();
     } catch (error) {
