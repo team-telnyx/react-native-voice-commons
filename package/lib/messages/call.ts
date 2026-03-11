@@ -118,6 +118,12 @@ export type AnswerEvent = {
     variables: {
       'Core-UUID': string;
     };
+    /** The Telnyx call control ID for outbound flows (parked & bridged) */
+    telnyx_call_control_id?: string;
+    /** The Telnyx leg ID */
+    telnyx_leg_id?: string;
+    /** The Telnyx session ID */
+    telnyx_session_id?: string;
   };
   voice_sdk_id: string;
 };

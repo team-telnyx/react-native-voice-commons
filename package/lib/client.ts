@@ -1099,6 +1099,17 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       // Store custom headers from the ANSWER message
       targetCall.answerCustomHeaders = msg.params.dialogParams?.custom_headers || null;
 
+      // Extract Telnyx IDs from answer event params (for outbound flows)
+      if (msg.params.telnyx_call_control_id) {
+        targetCall.telnyxCallControlId = msg.params.telnyx_call_control_id;
+      }
+      if (msg.params.telnyx_leg_id) {
+        targetCall.telnyxLegId = msg.params.telnyx_leg_id;
+      }
+      if (msg.params.telnyx_session_id) {
+        targetCall.telnyxSessionId = msg.params.telnyx_session_id;
+      }
+
       // If answer event has SDP, set it as remote description
       if (sdp) {
         log.debug('[TelnyxRTC] Answer event contains SDP - setting as remote description');
