@@ -108,6 +108,7 @@ export class Call extends EventEmitter<CallEvents> {
       direction: 'inbound',
       telnyxLegId,
       telnyxSessionId,
+      telnyxCallControlId,
       callId,
       callState: initialState,
     });
