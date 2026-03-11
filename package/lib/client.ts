@@ -7,6 +7,8 @@ import { Platform } from 'react-native';
 import { Call } from './call';
 import type { CallOptions } from './call-options';
 import type { ClientOptions } from './client-options';
+import type { CallReportConfig } from './call-report-models';
+import { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
 import { Connection } from './connection';
 import { KeepAliveHandler } from './keep-alive-handler';
 import { eventBus } from './legacy-event-bus';
@@ -341,6 +343,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       telnyxLegId: null,
       callId: null,
       options,
+      debug: this.options.debug,
+      callReportConfig: this.getCallReportConfig(),
     });
 
     // Add to calls tracking (matches iOS SDK behavior)
@@ -825,7 +829,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       log.warn('[TelnyxRTC] Received invite message but isInviteEvent returned false:', msg);
     }
 
-    log.debug('[TelnyxRTC] Message not processed as invite, attach, media, or answer');
     return;
   };
 
@@ -896,6 +899,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       telnyxSessionId: msg.params.telnyx_session_id,
       options: { destinationNumber: msg.params.caller_id_number },
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
+      debug: this.options.debug,
+      callReportConfig: this.getCallReportConfig(),
     });
 
     // Add to calls tracking (matches iOS SDK behavior)
@@ -991,6 +996,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       },
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
       initialState: 'connecting', // Set initial state to connecting
+      debug: this.options.debug,
+      callReportConfig: this.getCallReportConfig(),
     });
 
     // Add to calls tracking (matches iOS SDK behavior)
@@ -1359,5 +1366,15 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     log.debug('[TelnyxRTC] Sending disable push notification message');
     this.connection.send(disablePushMessage);
+  }
+
+  private getCallReportConfig(): CallReportConfig {
+    return {
+      enableCallReports: this.options.enableCallReports ?? DEFAULT_CALL_REPORT_CONFIG.enableCallReports,
+      callReportInterval: this.options.callReportInterval ?? DEFAULT_CALL_REPORT_CONFIG.callReportInterval,
+      callReportLogLevel: this.options.callReportLogLevel ?? DEFAULT_CALL_REPORT_CONFIG.callReportLogLevel,
+      callReportMaxLogEntries:
+        this.options.callReportMaxLogEntries ?? DEFAULT_CALL_REPORT_CONFIG.callReportMaxLogEntries,
+    };
   }
 }

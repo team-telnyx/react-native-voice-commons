@@ -14,7 +14,7 @@ type GatewayStateResponse = {
   id: string;
   jsonrpc: '2.0';
   result: {
-    params: { state: 'REGED' };
+    params: { state: 'REGED'; call_report_id?: string };
     sessid: string;
   };
   voice_sdk_id: string;
