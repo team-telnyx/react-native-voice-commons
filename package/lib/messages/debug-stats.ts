@@ -43,15 +43,15 @@ export enum WebRTCStatsTag {
 
 /**
  * Create a debug report start message
+ * Matches Android SDK format: fields at root level with `type` instead of `method`
  */
 export function createDebugReportStartMessage(debugReportId: string) {
   return {
     id: uuid(),
     jsonrpc: '2.0',
-    method: 'debug_report_start',
-    params: {
-      debugReportId,
-    },
+    type: 'debug_report_start',
+    debug_report_id: debugReportId,
+    debug_report_version: 1,
   };
 }
 
@@ -62,10 +62,9 @@ export function createDebugReportStopMessage(debugReportId: string) {
   return {
     id: uuid(),
     jsonrpc: '2.0',
-    method: 'debug_report_stop',
-    params: {
-      debugReportId,
-    },
+    type: 'debug_report_stop',
+    debug_report_id: debugReportId,
+    debug_report_version: 1,
   };
 }
 
@@ -79,11 +78,10 @@ export function createDebugReportDataMessage(
   return {
     id: uuid(),
     jsonrpc: '2.0',
-    method: 'debug_report_data',
-    params: {
-      debugReportId,
-      reportData,
-    },
+    type: 'debug_report_data',
+    debug_report_id: debugReportId,
+    debug_report_version: 1,
+    debug_report_data: reportData,
   };
 }
 

@@ -22,4 +22,4 @@ Enable automatic app state management (background/foreground behavior) - default
 
 Defined in: [telnyx-voip-client.ts:16](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L16)
 
-Enable debug logging
+Enable debug logging. Default: `false`

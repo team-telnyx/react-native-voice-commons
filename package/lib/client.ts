@@ -829,7 +829,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       log.warn('[TelnyxRTC] Received invite message but isInviteEvent returned false:', msg);
     }
 
-    log.debug('[TelnyxRTC] Message not processed as invite, attach, media, or answer');
     return;
   };
 
