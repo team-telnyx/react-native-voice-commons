@@ -6,6 +6,7 @@ const operators_1 = require('rxjs/operators');
 const call_1 = require('../../models/call');
 const call_state_1 = require('../../models/call-state');
 const callkit_coordinator_1 = require('../../callkit/callkit-coordinator');
+const voice_pn_bridge_1 = require('../voice-pn-bridge');
 /**
  * Central state machine for call management.
  *
@@ -349,6 +350,10 @@ class CallStateController {
         state === call_state_1.TelnyxCallState.ENDED ||
         state === call_state_1.TelnyxCallState.FAILED
       ) {
+        // Clear pending push data so the next app launch isn't mistaken for a push launch
+        voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush().catch((e) =>
+          console.warn('CallStateController: Failed to clear pending voip push:', e)
+        );
         setTimeout(() => this._removeCall(call.callId), 0);
       }
     });

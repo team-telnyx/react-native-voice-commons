@@ -1,6 +1,5 @@
 import uuid from 'uuid-random';
 import { SDK_VERSION } from '../env';
-import { Platform } from 'react-native';
 
 export type LoginWithPasswordParams = {
   login: string;
@@ -50,7 +49,7 @@ export function createPasswordLoginMessage({
     login,
     passwd: password,
     reconnection,
-    'User-Agent': `${Platform.OS === 'android' ? 'Android' : 'iOS'}-${SDK_VERSION}`,
+    'User-Agent': `ReactNative-${SDK_VERSION}`,
   };
 
   // Add from_push flag if this is a push-initiated connection (matching iOS SDK behavior)

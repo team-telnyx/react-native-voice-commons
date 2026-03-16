@@ -5,6 +5,7 @@ import { Call } from '../../models/call';
 import { TelnyxCallState } from '../../models/call-state';
 import { SessionManager } from '../session/session-manager';
 import { callKitCoordinator } from '../../callkit/callkit-coordinator';
+import { VoicePnBridge } from '../voice-pn-bridge';
 
 /**
  * Central state machine for call management.
@@ -408,6 +409,10 @@ export class CallStateController {
       // Clean up when call ends - delay to next tick so external subscribers
       // receive the ENDED/FAILED state before the call is disposed
       if (state === TelnyxCallState.ENDED || state === TelnyxCallState.FAILED) {
+        // Clear pending push data so the next app launch isn't mistaken for a push launch
+        VoicePnBridge.clearPendingVoipPush().catch((e) =>
+          console.warn('CallStateController: Failed to clear pending voip push:', e)
+        );
         setTimeout(() => this._removeCall(call.callId), 0);
       }
     });

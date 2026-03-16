@@ -26,6 +26,7 @@ declare module '@telnyx/react-native-voice-sdk' {
     debug?: boolean;
     logLevel?: string;
     pushNotificationDeviceToken?: string;
+    sdkVersion?: string;
   }
 
   export enum CallState {

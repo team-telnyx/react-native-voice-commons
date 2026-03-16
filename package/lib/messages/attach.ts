@@ -87,7 +87,7 @@ export function createAttachMessage({
       },
       sdp,
       sessid: sessionId,
-      'User-Agent': `${Platform.OS}-${SDK_VERSION}`,
+      'User-Agent': `ReactNative-${SDK_VERSION}`,
     },
   };
 }

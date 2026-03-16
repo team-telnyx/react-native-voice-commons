@@ -56,6 +56,7 @@ exports.SessionManager = void 0;
 const rxjs_1 = require('rxjs');
 const operators_1 = require('rxjs/operators');
 const TelnyxSDK = __importStar(require('@telnyx/react-native-voice-sdk'));
+const pkg = __importStar(require('../../../package.json'));
 const connection_state_1 = require('../../models/connection-state');
 const config_1 = require('../../models/config');
 /**
@@ -314,6 +315,7 @@ class SessionManager {
           password: this._currentConfig.sipPassword,
           logLevel: this._currentConfig.debug ? 'debug' : 'warn',
           pushNotificationDeviceToken: this._currentConfig.pushNotificationDeviceToken,
+          sdkVersion: pkg.version,
         };
         console.log(
           '🔧 SessionManager: Creating TelnyxRTC with credential config, logLevel:',
@@ -326,6 +328,7 @@ class SessionManager {
           login_token: this._currentConfig.token,
           logLevel: this._currentConfig.debug ? 'debug' : 'warn',
           pushNotificationDeviceToken: this._currentConfig.pushNotificationDeviceToken,
+          sdkVersion: pkg.version,
         };
         console.log(
           '🔧 SessionManager: Creating TelnyxRTC with token config, logLevel:',
