@@ -1,8 +1,5 @@
 import { CallReportCollector } from '../lib/call-report-collector';
-import type {
-  CallReportConfig,
-  CallReportSummary,
-} from '../lib/call-report-models';
+import type { CallReportConfig, CallReportSummary } from '../lib/call-report-models';
 
 // Mock loglevel
 jest.mock('loglevel', () => ({
