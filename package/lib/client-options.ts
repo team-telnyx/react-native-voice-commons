@@ -33,4 +33,11 @@ export interface ClientOptions {
    * It can be one of the following values: 'trace', 'debug', 'info', 'warn', 'error', 'silent'.
    */
   logLevel?: LogLevelNames;
+  /**
+   * Override the SDK version used in User-Agent strings.
+   * When used as a dependency of a higher-level SDK, the parent SDK
+   * can pass its own version here so the User-Agent reflects the
+   * consumer-facing version rather than the internal package version.
+   */
+  sdkVersion?: string;
 }

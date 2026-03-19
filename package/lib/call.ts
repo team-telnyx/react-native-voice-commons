@@ -5,13 +5,11 @@ import type { CallOptions } from './call-options';
 import { Connection } from './connection';
 import type { AnswerEvent, ByeEvent, RingingEvent } from './messages/call';
 import {
-  createAnswerAck,
   createAnswerMessage,
   createDTMFRequest,
   createHangupRequest,
   createInviteMessage,
   createModifyCallRequest,
-  createRingingAckMessage,
   isAnswerEvent,
   isByeEvent,
   isDTMFResponse,
@@ -97,6 +95,7 @@ export class Call extends EventEmitter<CallEvents> {
     sessionId,
     telnyxLegId,
     telnyxSessionId,
+    telnyxCallControlId,
     callId,
     inviteCustomHeaders = null,
     initialState = 'ringing',
@@ -701,7 +700,6 @@ export class Call extends EventEmitter<CallEvents> {
     this.setState('ringing');
     this.telnyxLegId = msg.params.telnyx_leg_id;
     this.telnyxSessionId = msg.params.telnyx_session_id;
-    this.connection.send(createRingingAckMessage(msg.id));
   };
 
 
