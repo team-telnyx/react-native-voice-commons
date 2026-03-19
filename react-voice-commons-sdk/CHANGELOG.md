@@ -1,5 +1,21 @@
 # CHANGELOG.md
 
+## [0.1.9](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.9) (2026-03-19)
+
+### Enhancement
+
+- Upgraded low-level SDK dependency from `@telnyx/react-native-voice-sdk@0.3.0` to `@telnyx/react-native-voice-sdk@0.4.0`
+- Commons SDK version now propagates to the low-level SDK User-Agent via `sdkVersion` option
+- Added hidden long-press button on status text to disable push notifications for debugging
+- Disabled debug logging and call reports by default for production readiness
+
+### Bug Fixing
+
+- Fixed stale push notification state by clearing pending VoIP push data on call end
+- Fixed User-Agent inconsistency — all WebSocket messages now use `ReactNative-{version}` format
+- Fixed unnecessary JSON-RPC ACK messages (invite, answer, ringing) that were causing issues
+- Fixed `telnyxCallControlId` ReferenceError on inbound calls in the low-level SDK
+
 ## [0.1.8](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.8) (2026-03-09)
 
 ### Bug Fixing

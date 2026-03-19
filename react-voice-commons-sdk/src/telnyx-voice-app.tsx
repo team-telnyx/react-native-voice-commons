@@ -775,7 +775,7 @@ const handleBackgroundPush = async (message: any): Promise<void> => {
 
     // Use singleton pattern for background client to prevent multiple instances
     let backgroundClient = createBackgroundTelnyxVoipClient({
-      debug: true,
+      debug: false,
     });
 
     await backgroundClient.handlePushNotification(message);

@@ -84,7 +84,7 @@ destroyTelnyxVoipClient(); // Disposes the singleton; next createTelnyxVoipClien
 **Configuration Options Explained:**
 
 - **`enableAppStateManagement: true`** - **Optional (default: true)**: Enables automatic background/foreground app state management. When enabled, the library automatically disconnects when the app goes to background (unless there's an active call) and handles reconnection logic. Set to `false` if you want to handle app lifecycle manually.
-- **`debug: true`** - **Optional**: Enables detailed logging for connection states, call transitions, and push notification processing. Useful for development and troubleshooting.
+- **`debug: true`** - **Optional (default: false)**: Enables detailed logging for connection states, call transitions, and push notification processing. Useful for development and troubleshooting.
 
 ### 2. TelnyxVoiceApp Wrapper
 
