@@ -34,6 +34,35 @@ export interface ClientOptions {
    */
   logLevel?: LogLevelNames;
   /**
+   * Enable or disable debug mode for WebRTC stats collection.
+   * When enabled, the SDK will collect and send WebRTC statistics to the Telnyx debug service.
+   * This is useful for debugging call quality issues.
+   * @default false
+   */
+  debug?: boolean;
+  /**
+   * Enable automatic call quality reporting to voice-sdk-proxy.
+   * When enabled, the SDK collects WebRTC stats and structured logs during calls
+   * and POSTs them to the /call_report endpoint when calls end.
+   * @default true
+   */
+  enableCallReports?: boolean;
+  /**
+   * Interval in seconds for collecting call report statistics.
+   * @default 5
+   */
+  callReportInterval?: number;
+  /**
+   * Minimum log level to capture for call reports: 'debug' | 'info' | 'warn' | 'error'.
+   * @default 'debug'
+   */
+  callReportLogLevel?: string;
+  /**
+   * Maximum number of log entries to buffer per call.
+   * @default 1000
+   */
+  callReportMaxLogEntries?: number;
+  /**
    * Override the SDK version used in User-Agent strings.
    * When used as a dependency of a higher-level SDK, the parent SDK
    * can pass its own version here so the User-Agent reflects the

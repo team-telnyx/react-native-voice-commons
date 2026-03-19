@@ -303,7 +303,12 @@ export class SessionManager {
           login: this._currentConfig.sipUser,
           password: this._currentConfig.sipPassword,
           logLevel: this._currentConfig.debug ? 'debug' : 'warn',
+          debug: this._currentConfig.debug ?? false,
           pushNotificationDeviceToken: this._currentConfig.pushNotificationDeviceToken,
+          enableCallReports: this._currentConfig.enableCallReports,
+          callReportInterval: this._currentConfig.callReportInterval,
+          callReportLogLevel: this._currentConfig.callReportLogLevel,
+          callReportMaxLogEntries: this._currentConfig.callReportMaxLogEntries,
           sdkVersion: pkg.version,
         };
         console.log(
@@ -316,7 +321,12 @@ export class SessionManager {
         clientOptions = {
           login_token: this._currentConfig.token,
           logLevel: this._currentConfig.debug ? 'debug' : 'warn',
+          debug: this._currentConfig.debug ?? false,
           pushNotificationDeviceToken: this._currentConfig.pushNotificationDeviceToken,
+          enableCallReports: this._currentConfig.enableCallReports,
+          callReportInterval: this._currentConfig.callReportInterval,
+          callReportLogLevel: this._currentConfig.callReportLogLevel,
+          callReportMaxLogEntries: this._currentConfig.callReportMaxLogEntries,
           sdkVersion: pkg.version,
         };
         console.log(
