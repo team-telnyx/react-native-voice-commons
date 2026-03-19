@@ -1,6 +1,37 @@
 # CHANGELOG.md
 
-## [0.1.7-beta.1](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.7-beta.1) (2026-02-20)
+## [0.1.8](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.8) (2026-03-09)
+
+### Bug Fixing
+
+• Fixed duplicate CXProvider overwrite causing `CXEndCallAction` error 4 (unknownCallUUID) — guard `setupCallKit()` to prevent async `setupAutomatically()` from overwriting the provider created by `setupSynchronously()` during VoIP push handling
+• Fixed intermittent audio loss on push notification calls — defer `CXAnswerCallAction.fulfill()` until `reportCallConnected()` when the WebRTC peer connection is ready
+• Aligned iOS audio session handling with native Telnyx iOS SDK pattern (`RTCAudioSessionConfiguration.webRTC()` with `lockForConfiguration`/`unlockForConfiguration`)
+• Fixed endCall not dismissing CallKit UI — check `endCall()` return value and fallback to `reportCallEnded()` when CXEndCallAction fails
+• Fixed push notification answer crash when voipClient is not yet initialized — defer to `checkForInitialPushNotification()` instead of failing the call
+• Added `voipClient.queueAnswerFromCallKit()` call when handling push notification answer for auto-answer on INVITE arrival
+• Fixed call ENDED state not received by subscribers
+• Added platform guards for iOS-only VoIP bridge methods on Android
+• Fixed push data race condition in Expo apps
+
+## [0.1.8-beta.1](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.8-beta.1) (2026-03-04)
+
+### Bug Fixing
+
+• Fixed duplicate CXProvider overwrite causing `CXEndCallAction` error 4 (unknownCallUUID) — guard `setupCallKit()` to prevent async `setupAutomatically()` from overwriting the provider created by `setupSynchronously()` during VoIP push handling
+• Fixed intermittent audio loss on push notification calls — defer `CXAnswerCallAction.fulfill()` until `reportCallConnected()` when the WebRTC peer connection is ready
+• Aligned iOS audio session handling with native Telnyx iOS SDK pattern (`RTCAudioSessionConfiguration.webRTC()` with `lockForConfiguration`/`unlockForConfiguration`)
+• Fixed endCall not dismissing CallKit UI — check `endCall()` return value and fallback to `reportCallEnded()` when CXEndCallAction fails
+• Fixed push notification answer crash when voipClient is not yet initialized — defer to `checkForInitialPushNotification()` instead of failing the call
+• Added `voipClient.queueAnswerFromCallKit()` call when handling push notification answer for auto-answer on INVITE arrival
+
+## [0.1.8-beta.0](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.8-beta.0) (2026-02-28)
+
+### Bug Fixing
+
+• Fixed push data race condition in Expo apps
+
+## [0.1.7](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.7) (2026-02-20)
 
 ### Enhancement
 
@@ -13,7 +44,8 @@
 
 • Fixed cold-start push notification failures caused by double-login race between user auto-login and SDK internal push login
 • Fixed CallKit coordinator having no `voipClient` reference when user answered a call via CallKit before navigating to the correct screen
-• Fixed `call_id` extraction in `checkForInitialPushNotification` for iOS push payloads
+• Fixed `call_id` extraction in `checkForInitialPushNotification` — the double-nested path `pushData.metadata?.metadata?.call_id` never resolved, so the CallKit coordinator was bypassed on iOS
+• Refactored `checkForInitialPushNotification` into `getAndroidPushData` and `getIOSPushData` helpers to reduce nesting and improve readability
 
 ### Deprecation
 

@@ -10,14 +10,13 @@ import type { ClientOptions } from './client-options';
 import type { CallReportConfig } from './call-report-models';
 import { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
 import { Connection } from './connection';
+import { setSDKVersion } from './env';
 import { KeepAliveHandler } from './keep-alive-handler';
 import { eventBus } from './legacy-event-bus';
 import { LoginHandler } from './login-handler';
 import type { InviteEvent, AnswerEvent } from './messages/call';
 import {
-  createInviteAckMessage,
   isInviteEvent,
-  createAnswerAck,
   isAnswerEvent,
 } from './messages/call';
 import { TelnyxRTCMethod } from './messages/methods';
@@ -172,6 +171,10 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   constructor(opts: ClientOptions) {
     super();
     this.options = opts;
+
+    if (opts.sdkVersion) {
+      setSDKVersion(opts.sdkVersion);
+    }
 
     this.connection = null;
     this.sessionId = null;
@@ -548,10 +551,10 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     log.debug('[TelnyxRTC] Starting connection process...');
 
     // Store login configuration for potential reconnection
-    if ('loginToken' in this.options) {
+    if ('login_token' in this.options) {
       this.tokenSessionConfig = this.options;
       log.debug('[TelnyxRTC] Stored token configuration for reconnection');
-    } else if ('sipUser' in this.options && 'sipPassword' in this.options) {
+    } else if ('login' in this.options && 'password' in this.options) {
       this.credentialSessionConfig = this.options;
       log.debug('[TelnyxRTC] Stored credential configuration for reconnection');
     }
@@ -846,9 +849,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     if (!this.sessionId) {
       log.debug('[TelnyxRTC] Session ID not available yet, storing invite for later processing');
       this.pendingInvite = msg;
-      // Send acknowledgment even for pending invites
-      log.debug('[TelnyxRTC] Sending invite acknowledgment for pending invite');
-      this.connection?.send(createInviteAckMessage(msg.id));
       return;
     }
 
@@ -858,9 +858,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
   private processInvite = async (msg: InviteEvent) => {
     log.debug('[TelnyxRTC] Processing invite with session ID:', this.sessionId);
-
-    log.debug('[TelnyxRTC] Sending invite acknowledgment');
-    this.connection?.send(createInviteAckMessage(msg.id));
 
     // If this is a push notification call and we have a stored CallKit UUID,
     // ensure it's available for the createInboundCall method
@@ -890,18 +887,25 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       remoteSDP = '';
     }
 
-    const incomingCall = await Call.createInboundCall({
-      connection: this.connection!,
-      remoteSDP,
-      sessionId: this.sessionId!,
-      callId: msg.params.callID,
-      telnyxLegId: msg.params.telnyx_leg_id,
-      telnyxSessionId: msg.params.telnyx_session_id,
-      options: { destinationNumber: msg.params.caller_id_number },
-      inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
-      debug: this.options.debug,
-      callReportConfig: this.getCallReportConfig(),
-    });
+    let incomingCall: Call;
+    try {
+      incomingCall = await Call.createInboundCall({
+        connection: this.connection!,
+        remoteSDP,
+        sessionId: this.sessionId!,
+        callId: msg.params.callID,
+        telnyxLegId: msg.params.telnyx_leg_id,
+        telnyxSessionId: msg.params.telnyx_session_id,
+        options: { destinationNumber: msg.params.caller_id_number },
+        inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
+        debug: this.options.debug,
+        callReportConfig: this.getCallReportConfig(),
+      });
+    } catch (error) {
+      log.error('[TelnyxRTC] Failed to create inbound call:', error);
+      console.error('[TelnyxRTC] RELEASE DEBUG - createInboundCall error:', error);
+      return;
+    }
 
     // Add to calls tracking (matches iOS SDK behavior)
     this.addCall(incomingCall);
@@ -1092,12 +1096,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       sdp: sdp ? 'present' : 'not present',
     });
 
-    // Send ACK for the answer event
-    if (this.connection) {
-      log.debug('[TelnyxRTC] Sending answer acknowledgment');
-      this.connection.send(createAnswerAck(msg.id));
-    }
-
     // Look up the call by ID from our calls dictionary
     const targetCall = this.getCall(callID);
     if (targetCall) {
@@ -1105,6 +1103,17 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
       // Store custom headers from the ANSWER message
       targetCall.answerCustomHeaders = msg.params.dialogParams?.custom_headers || null;
+
+      // Extract Telnyx IDs from answer event params (for outbound flows)
+      if (msg.params.telnyx_call_control_id) {
+        targetCall.telnyxCallControlId = msg.params.telnyx_call_control_id;
+      }
+      if (msg.params.telnyx_leg_id) {
+        targetCall.telnyxLegId = msg.params.telnyx_leg_id;
+      }
+      if (msg.params.telnyx_session_id) {
+        targetCall.telnyxSessionId = msg.params.telnyx_session_id;
+      }
 
       // If answer event has SDP, set it as remote description
       if (sdp) {

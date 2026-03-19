@@ -36,7 +36,7 @@ export function createInviteMessage({
     params: {
       sessid: sessionId,
       sdp,
-      'User-Agent': `react-native-${SDK_VERSION}`,
+      'User-Agent': `ReactNative-${SDK_VERSION}`,
       dialogParams: {
         attach,
         callID: callId,
@@ -99,14 +99,6 @@ export function isRingingEvent(msg: unknown): msg is RingingEvent {
   );
 }
 
-export function createRingingAckMessage(id: number) {
-  return {
-    id,
-    jsonrpc: '2.0',
-    result: { method: TelnyxRTCMethod.RINGING },
-  };
-}
-
 export type AnswerEvent = {
   id: number;
   jsonrpc: '2.0';
@@ -118,6 +110,12 @@ export type AnswerEvent = {
     variables: {
       'Core-UUID': string;
     };
+    /** The Telnyx call control ID for outbound flows (parked & bridged) */
+    telnyx_call_control_id?: string;
+    /** The Telnyx leg ID */
+    telnyx_leg_id?: string;
+    /** The Telnyx session ID */
+    telnyx_session_id?: string;
   };
   voice_sdk_id: string;
 };
@@ -128,14 +126,6 @@ export function isAnswerEvent(msg: unknown): msg is AnswerEvent {
   }
   const temp: Partial<AnswerEvent> = msg;
   return temp.method === TelnyxRTCMethod.ANSWER && Boolean(temp.params?.callID);
-}
-
-export function createAnswerAck(id: number) {
-  return {
-    id,
-    jsonrpc: '2.0',
-    result: { method: TelnyxRTCMethod.ANSWER },
-  };
 }
 
 export function isByeEvent(msg: unknown): msg is ByeEvent {
@@ -238,20 +228,6 @@ export type InviteEvent = {
   voice_sdk_id: string;
 };
 
-type InviteAckMessage = {
-  jsonrpc: '2.0';
-  id: number;
-  result: { method: 'telnyx_rtc.invite' };
-};
-
-export function createInviteAckMessage(id: number): InviteAckMessage {
-  return {
-    id,
-    jsonrpc: '2.0',
-    result: { method: TelnyxRTCMethod.INVITE },
-  };
-}
-
 export function isInviteEvent(msg: unknown): msg is InviteEvent {
   if (!msg) {
     return false;
@@ -309,7 +285,7 @@ export function createAnswerMessage({
         custom_headers: customHeaders || [],
         ...dialogParams,
       },
-      'User-Agent': `react-native-${SDK_VERSION}`,
+      'User-Agent': `ReactNative-${SDK_VERSION}`,
     },
   };
 }

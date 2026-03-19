@@ -92,19 +92,19 @@ export declare class VoicePnBridge {
    */
   static getVoipToken(): Promise<string | null>;
   /**
-   * Get pending VoIP push from native storage
+   * Get pending VoIP push from native storage (iOS only)
    */
   static getPendingVoipPush(): Promise<string | null>;
   /**
-   * Clear pending VoIP push from native storage
+   * Clear pending VoIP push from native storage (iOS only)
    */
   static clearPendingVoipPush(): Promise<boolean>;
   /**
-   * Get pending VoIP action from native storage
+   * Get pending VoIP action from native storage (iOS only)
    */
   static getPendingVoipAction(): Promise<string | null>;
   /**
-   * Clear pending VoIP action from native storage
+   * Clear pending VoIP action from native storage (iOS only)
    */
   static clearPendingVoipAction(): Promise<boolean>;
   /**

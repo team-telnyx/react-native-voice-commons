@@ -228,21 +228,26 @@ class CallKitCoordinator {
       'CallKitCoordinator: Ending call from UI - dismissing CallKit and hanging up WebRTC call',
       callKitUUID
     );
-    // Mark as processing to prevent duplicate actions
-    this.processingCalls.add(callKitUUID);
+    // Track this call as ended to prevent duplicate end actions
+    this.endedCalls.add(callKitUUID);
     try {
-      // End the call in CallKit and hang up the WebRTC call
-      await callkit_1.default.endCall(callKitUUID);
+      // End the call in CallKit - endCall returns false on failure (doesn't throw)
+      const endCallSuccess = await callkit_1.default.endCall(callKitUUID);
+      if (!endCallSuccess) {
+        // Fallback: use reportCallEnded to dismiss CallKit UI when endCall fails
+        // (e.g., unknownCallUUID error from duplicate CXProvider)
+        await callkit_1.default.reportCallEnded(callKitUUID, callkit_1.CallEndReason.RemoteEnded);
+      }
+      this.isCallFromPush = false;
       call.hangup();
-      // Clean up the mappings
       this.cleanupCall(callKitUUID);
       return true;
     } catch (error) {
       console.error('CallKitCoordinator: Error ending call from UI', error);
-      call.hangup(); // Ensure WebRTC call is ended
+      this.isCallFromPush = false;
+      call.hangup();
+      this.cleanupCall(callKitUUID);
       return false;
-    } finally {
-      this.processingCalls.delete(callKitUUID);
     }
   }
   /**
@@ -303,10 +308,21 @@ class CallKitCoordinator {
       } else {
         console.log('CallKitCoordinator: Outgoing call, skipping answer and CONNECTING state');
       }
+      // Clear push data now that answer action is fulfilled
+      try {
+        await voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush();
+        console.log('CallKitCoordinator: Cleared pending VoIP push after answer fulfilled');
+      } catch (clearErr) {
+        console.error('CallKitCoordinator: Error clearing push data after answer:', clearErr);
+      }
     } catch (error) {
       console.error('CallKitCoordinator: Error processing CallKit answer', error);
       await callkit_1.default.reportCallEnded(callKitUUID, callkit_1.CallEndReason.Failed);
       this.cleanupCall(callKitUUID);
+      // Clear push data even on error to prevent stale state
+      try {
+        await voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush();
+      } catch (_) {}
     } finally {
       this.processingCalls.delete(callKitUUID);
     }
@@ -352,6 +368,11 @@ class CallKitCoordinator {
     } finally {
       this.processingCalls.delete(callKitUUID);
       this.cleanupCall(callKitUUID);
+      // Clear push data now that end action is fulfilled
+      try {
+        await voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush();
+        console.log('CallKitCoordinator: Cleared pending VoIP push after end fulfilled');
+      } catch (_) {}
       // Check if app is in background and no more calls - disconnect client
       await this.checkBackgroundDisconnection();
     }
@@ -456,18 +477,22 @@ class CallKitCoordinator {
         // Set auto-answer flag so when the WebRTC call comes in, it will be answered automatically
         this.shouldAutoAnswerNextCall = true;
         console.log('CallKitCoordinator: ✅ Set auto-answer flag for next incoming call');
-        // Get VoIP client and trigger reconnection
+        // Try to get VoIP client - it may not be wired yet if user answered
+        // from CallKit before React Native finished initializing
         const voipClient = this.getSDKClient();
         if (!voipClient) {
-          console.error(
-            'CallKitCoordinator: ❌ No VoIP client available - cannot reconnect for push notification'
-          );
-          await callkit_1.default.reportCallEnded(callKitUUID, callkit_1.CallEndReason.Failed);
-          this.cleanupCall(callKitUUID);
+          // voipClient not ready yet - DON'T fail the call.
+          // shouldAutoAnswerNextCall is already set to true above.
+          // checkForInitialPushNotification() will run after setVoipClient()
+          // and will find the push data still intact, call handleCallKitPushReceived()
+          // which checks shouldAutoAnswerNextCall and queues the auto-answer.
           return;
         }
+        // voipClient is available - queue the answer action on the TelnyxRTC client
+        // so when the INVITE arrives after WebSocket login, processInvite() sees
+        // pendingAnswerAction=true and auto-answers the call.
+        voipClient.queueAnswerFromCallKit();
         // Get the real push data that was stored by the VoIP push handler
-        console.log('CallKitCoordinator: 🔍 Getting real push data from VoicePnBridge...');
         let realPushData = null;
         try {
           const pendingPushJson = await voice_pn_bridge_1.VoicePnBridge.getPendingVoipPush();
@@ -506,6 +531,11 @@ class CallKitCoordinator {
         // Set the pending push action to be handled when app comes to foreground
         await voice_pn_bridge_1.VoicePnBridge.setPendingPushAction(pushAction, pushMetadata);
         console.log('CallKitCoordinator: ✅ Set pending push action');
+        // Clear push data now that push notification answer is handled
+        try {
+          await voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush();
+          console.log('CallKitCoordinator: Cleared pending VoIP push after push answer handled');
+        } catch (_) {}
         return;
       }
       // For other platforms (shouldn't happen on iOS)
@@ -533,6 +563,11 @@ class CallKitCoordinator {
         this.voipClient.queueEndFromCallKit();
         // Clean up push notification state
         await this.cleanupPushNotificationState();
+        // Clear push data now that rejection is handled
+        try {
+          await voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush();
+          console.log('CallKitCoordinator: Cleared pending VoIP push after rejection handled');
+        } catch (_) {}
         console.log('CallKitCoordinator: 🎯 Push notification rejection handling complete');
         return;
       }
@@ -561,16 +596,11 @@ class CallKitCoordinator {
           if (!this.connectedCalls.has(callKitUUID)) {
             console.log('CallKitCoordinator: WebRTC call active - reporting connected to CallKit');
             try {
-              // Report as connected (CallKit call already answered in UI flow)
               await callkit_1.default.reportCallConnected(callKitUUID);
-              console.log(
-                'CallKitCoordinator: Call reported as connected to CallKit ',
-                callKitUUID
-              );
-              this.connectedCalls.add(callKitUUID);
             } catch (error) {
               console.error('CallKitCoordinator: Error reporting call connected:', error);
             }
+            this.connectedCalls.add(callKitUUID);
           }
           break;
         case 'ended':
@@ -738,7 +768,11 @@ class CallKitCoordinator {
    * This helps prevent premature flag resets during CallKit operations
    */
   hasProcessingCalls() {
-    return this.processingCalls.size > 0;
+    // Also return true when isCallFromPush is set — this prevents the
+    // calls$ subscription in TelnyxVoiceApp from resetting protection flags
+    // (isHandlingForegroundCall, backgroundDetectorIgnore) before the WebRTC
+    // call arrives during push notification handling.
+    return this.processingCalls.size > 0 || this.isCallFromPush;
   }
   /**
    * Check if there's currently a call from push notification being processed

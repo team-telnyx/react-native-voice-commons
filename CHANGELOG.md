@@ -1,6 +1,14 @@
 # CHANGELOG.md
 
-## [0.1.7-beta.1](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.7-beta.1) (2026-02-20)
+## [0.1.8-beta.0](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.8-beta.0) (2026-02-27)
+
+### Bug Fixing
+
+• Fixed push data race condition in Expo apps — `clearPendingVoipPush()` is now deferred until the CallKit coordinator fulfills the answer, end, or reject action, preventing push data from being consumed and cleared before the user answers
+• Fixed duplicate push notification processing by also checking for `CONNECTING` state (not just `CONNECTED`) in `checkForInitialPushNotification`
+• Fixed premature protection-flag resets — `hasProcessingCalls()` now returns `true` while `isCallFromPush` is set, preventing the `calls$` subscription from clearing `isHandlingForegroundCall` and `backgroundDetectorIgnore` before the WebRTC call arrives
+
+## [0.1.7](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.7) (2026-02-20)
 
 ### Enhancement
 
@@ -13,7 +21,8 @@
 
 • Fixed cold-start push notification failures caused by double-login race between user auto-login and SDK internal push login
 • Fixed CallKit coordinator having no `voipClient` reference when user answered a call via CallKit before navigating to the correct screen
-• Fixed `call_id` extraction in `checkForInitialPushNotification` for iOS push payloads
+• Fixed `call_id` extraction in `checkForInitialPushNotification` — the double-nested path `pushData.metadata?.metadata?.call_id` never resolved, so the CallKit coordinator was bypassed on iOS
+• Refactored `checkForInitialPushNotification` into `getAndroidPushData` and `getIOSPushData` helpers to reduce nesting and improve readability
 
 ### Deprecation
 

@@ -1,6 +1,7 @@
 import { BehaviorSubject, Observable } from 'rxjs';
 import { distinctUntilChanged } from 'rxjs/operators';
 import * as TelnyxSDK from '@telnyx/react-native-voice-sdk';
+import * as pkg from '../../../package.json';
 import { TelnyxConnectionState } from '../../models/connection-state';
 import {
   Config,
@@ -308,6 +309,7 @@ export class SessionManager {
           callReportInterval: this._currentConfig.callReportInterval,
           callReportLogLevel: this._currentConfig.callReportLogLevel,
           callReportMaxLogEntries: this._currentConfig.callReportMaxLogEntries,
+          sdkVersion: pkg.version,
         };
         console.log(
           '🔧 SessionManager: Creating TelnyxRTC with credential config, logLevel:',
@@ -325,6 +327,7 @@ export class SessionManager {
           callReportInterval: this._currentConfig.callReportInterval,
           callReportLogLevel: this._currentConfig.callReportLogLevel,
           callReportMaxLogEntries: this._currentConfig.callReportMaxLogEntries,
+          sdkVersion: pkg.version,
         };
         console.log(
           '🔧 SessionManager: Creating TelnyxRTC with token config, logLevel:',

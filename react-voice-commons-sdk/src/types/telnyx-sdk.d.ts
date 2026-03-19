@@ -30,6 +30,7 @@ declare module '@telnyx/react-native-voice-sdk' {
     callReportInterval?: number;
     callReportLogLevel?: string;
     callReportMaxLogEntries?: number;
+    sdkVersion?: string;
   }
 
   export enum CallState {

@@ -141,6 +141,18 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
     }
   };
 
+  const handleDisablePushNotifications = () => {
+    try {
+      log('TelnyxDialer: Disabling push notifications');
+      voipClient.disablePushNotifications();
+      Alert.alert('Push Notifications', 'Push notifications disabled for this session');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      log('TelnyxDialer: Error disabling push notifications:', errorMessage);
+      Alert.alert('Error', `Failed to disable push notifications: ${errorMessage}`);
+    }
+  };
+
   const handleDisconnect = async () => {
     try {
       log('TelnyxDialer: Disconnecting');
@@ -159,16 +171,18 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
         <View style={styles.header}>
-          <Text
-            style={[
-              styles.status,
-              connectionState === TelnyxConnectionState.CONNECTED && styles.statusConnected,
-              connectionState === TelnyxConnectionState.DISCONNECTED && styles.statusDisconnected,
-              connectionState === TelnyxConnectionState.CONNECTING && styles.statusConnecting,
-            ]}
-          >
-            Status: {connectionState}
-          </Text>
+          <TouchableOpacity onLongPress={handleDisablePushNotifications} delayLongPress={2000}>
+            <Text
+              style={[
+                styles.status,
+                connectionState === TelnyxConnectionState.CONNECTED && styles.statusConnected,
+                connectionState === TelnyxConnectionState.DISCONNECTED && styles.statusDisconnected,
+                connectionState === TelnyxConnectionState.CONNECTING && styles.statusConnecting,
+              ]}
+            >
+              Status: {connectionState}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {isConnected && (

@@ -1,4 +1,4 @@
-import { NativeModules, DeviceEventEmitter, EmitterSubscription } from 'react-native';
+import { NativeModules, DeviceEventEmitter, EmitterSubscription, Platform } from 'react-native';
 
 export interface CallActionEvent {
   action: string;
@@ -183,6 +183,7 @@ export class VoicePnBridge {
    * Get VoIP token from native storage
    */
   static async getVoipToken(): Promise<string | null> {
+    if (Platform.OS !== 'ios') return null;
     try {
       return await NativeBridge.getVoipToken();
     } catch (error) {
@@ -192,9 +193,10 @@ export class VoicePnBridge {
   }
 
   /**
-   * Get pending VoIP push from native storage
+   * Get pending VoIP push from native storage (iOS only)
    */
   static async getPendingVoipPush(): Promise<string | null> {
+    if (Platform.OS !== 'ios') return null;
     try {
       return await NativeBridge.getPendingVoipPush();
     } catch (error) {
@@ -204,9 +206,10 @@ export class VoicePnBridge {
   }
 
   /**
-   * Clear pending VoIP push from native storage
+   * Clear pending VoIP push from native storage (iOS only)
    */
   static async clearPendingVoipPush(): Promise<boolean> {
+    if (Platform.OS !== 'ios') return true;
     try {
       return await NativeBridge.clearPendingVoipPush();
     } catch (error) {
@@ -216,9 +219,10 @@ export class VoicePnBridge {
   }
 
   /**
-   * Get pending VoIP action from native storage
+   * Get pending VoIP action from native storage (iOS only)
    */
   static async getPendingVoipAction(): Promise<string | null> {
+    if (Platform.OS !== 'ios') return null;
     try {
       return await NativeBridge.getPendingVoipAction();
     } catch (error) {
@@ -228,9 +232,10 @@ export class VoicePnBridge {
   }
 
   /**
-   * Clear pending VoIP action from native storage
+   * Clear pending VoIP action from native storage (iOS only)
    */
   static async clearPendingVoipAction(): Promise<boolean> {
+    if (Platform.OS !== 'ios') return true;
     try {
       return await NativeBridge.clearPendingVoipAction();
     } catch (error) {
