@@ -612,7 +612,7 @@ const handleBackgroundPush = async (message) => {
     // TODO: Initialize push notification service in isolate if needed
     // Use singleton pattern for background client to prevent multiple instances
     let backgroundClient = (0, telnyx_voip_client_1.createBackgroundTelnyxVoipClient)({
-      debug: true,
+      debug: false,
     });
     await backgroundClient.handlePushNotification(message);
     console.log('[TelnyxVoiceApp] Background push processed successfully');

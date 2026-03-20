@@ -388,6 +388,16 @@ This provides detailed logging for:
 - Push notification processing
 - Background lifecycle events
 
+## Debugging & Call Quality
+
+For comprehensive documentation on call quality monitoring and debugging tools, see the [Call Quality Reporting & Debug Stats Guide](./debugging/CallQualityReporting.md).
+
+The SDK provides two systems:
+- **Call Reports**: Post-call quality data (WebRTC stats + structured logs) sent via HTTP
+- **Debug Stats**: Real-time WebRTC event streaming over WebSocket
+
+Both are disabled by default. See the guide for configuration options and usage examples.
+
 ## Troubleshooting
 
 ### iOS Connection Issues (First Run)

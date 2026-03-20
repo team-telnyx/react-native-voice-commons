@@ -15,7 +15,7 @@ export interface CallReportConfig {
 }
 
 export const DEFAULT_CALL_REPORT_CONFIG: CallReportConfig = {
-  enableCallReports: true,
+  enableCallReports: false,
   callReportInterval: 5,
   callReportLogLevel: 'debug',
   callReportMaxLogEntries: 1000,
