@@ -512,15 +512,13 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
   /**
    * Reset pending action flags (matching iOS SDK resetPushVariables)
-   * Note: isCallFromPush is NOT reset here as it should persist until disconnect
+   * Note: isCallFromPush is reset in processInvite() after the call is handled
    */
   private resetPendingActions() {
     log.debug('[TelnyxRTC] Resetting pending actions');
     this.pendingAnswerAction = false;
     this.pendingEndAction = false;
     this.pendingCustomHeaders = {};
-    // Don't reset isCallFromPush here - it should persist until explicit disconnect
-    // this.isCallFromPush = false;
   }
 
   /**
@@ -953,6 +951,17 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       }
     } else {
       log.debug('[TelnyxRTC] Not a push notification call, no pending actions to check');
+    }
+
+    // Reset push flags after processing so subsequent calls are not auto-answered
+    if (this.isCallFromPush) {
+      log.debug('[TelnyxRTC] Resetting push flags after processing incoming call');
+      this.isCallFromPush = false;
+      this.pushNotificationPayload = null;
+      this.pushNotificationCallKitUUID = null;
+      this.clearPushState().catch((error) => {
+        log.warn('[TelnyxRTC] Failed to clear push state after processing:', error);
+      });
     }
 
     log.debug('[TelnyxRTC] Emitting telnyx.call.incoming event');
