@@ -1,0 +1,79 @@
+name: Publish to npm
+
+# Trigger on GitHub Releases only — no manual npm publish allowed.
+# Use release tag prefixes to control which package(s) to publish:
+#   voice-sdk/v0.4.1   → publishes @telnyx/react-native-voice-sdk only
+#   commons-sdk/v0.2.0 → publishes @telnyx/react-voice-commons-sdk only
+#   v0.2.0             → publishes both packages
+on:
+  release:
+    types: [published]
+
+# OIDC: Grant the workflow a short-lived identity token that npm uses to
+# verify this publish came from this repo. No stored secrets on any machine.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish-voice-sdk:
+    name: Publish @telnyx/react-native-voice-sdk
+    if: startsWith(github.event.release.tag_name, 'voice-sdk/') || startsWith(github.event.release.tag_name, 'v')
+    runs-on: ubuntu-latest
+    environment: npm_bub
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        working-directory: package
+        run: npm install --legacy-peer-deps
+
+      - name: Publish with provenance
+        working-directory: package
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.REACT_NATIVE_TOKEN }}
+
+  publish-commons-sdk:
+    name: Publish @telnyx/react-voice-commons-sdk
+    runs-on: ubuntu-latest
+    needs: publish-voice-sdk
+    # Run if: tag targets commons-sdk or both, AND voice-sdk either succeeded or was skipped
+    if: |
+      always() &&
+      (startsWith(github.event.release.tag_name, 'commons-sdk/') || startsWith(github.event.release.tag_name, 'v')) &&
+      (needs.publish-voice-sdk.result == 'success' || needs.publish-voice-sdk.result == 'skipped')
+    environment: npm_bub
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        working-directory: react-voice-commons-sdk
+        run: |
+          # Switch from local file dependency to published version
+          npm run dev:published
+          npm install --legacy-peer-deps
+
+      - name: Build
+        working-directory: react-voice-commons-sdk
+        run: npm run build
+
+      - name: Publish with provenance
+        working-directory: react-voice-commons-sdk
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.REACT_NATIVE_TOKEN }}
