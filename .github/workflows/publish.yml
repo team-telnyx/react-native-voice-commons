@@ -2,8 +2,8 @@ name: Publish to npm
 
 # Trigger on GitHub Releases only — no manual npm publish allowed.
 # Use release tag prefixes to control which package(s) to publish:
-#   voice-sdk/v0.4.1   → publishes @telnyx/react-native-voice-sdk only
-#   commons-sdk/v0.2.0 → publishes @telnyx/react-voice-commons-sdk only
+#   voice-sdk-v0.4.1   → publishes @telnyx/react-native-voice-sdk only
+#   commons-sdk-v0.2.0 → publishes @telnyx/react-voice-commons-sdk only
 #   v0.2.0             → publishes both packages
 on:
   release:
@@ -18,7 +18,7 @@ permissions:
 jobs:
   publish-voice-sdk:
     name: Publish @telnyx/react-native-voice-sdk
-    if: startsWith(github.event.release.tag_name, 'voice-sdk/') || (startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '/'))
+    if: startsWith(github.event.release.tag_name, 'voice-sdk-v') || (startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '-sdk-'))
     runs-on: ubuntu-latest
     environment: npm-pub
     steps:
@@ -35,8 +35,8 @@ jobs:
         working-directory: package
         run: |
           TAG="${{ github.event.release.tag_name }}"
-          # Extract version: voice-sdk/v0.4.1 → 0.4.1, v0.2.0 → 0.2.0
-          TAG_VERSION="${TAG##*/v}"
+          # Extract version: voice-sdk-v0.4.1 → 0.4.1, commons-sdk-v0.2.0 → 0.2.0, v0.2.0 → 0.2.0
+          TAG_VERSION=$(echo "$TAG" | sed 's/.*-v//' | sed 's/^v//')
           PKG_VERSION=$(node -p "require('./package.json').version")
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
             echo "::error::Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
@@ -60,7 +60,7 @@ jobs:
     # Run if: tag targets commons-sdk or both, AND voice-sdk either succeeded or was skipped
     if: |
       always() &&
-      (startsWith(github.event.release.tag_name, 'commons-sdk/') || (startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '/'))) &&
+      (startsWith(github.event.release.tag_name, 'commons-sdk-v') || (startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '-sdk-'))) &&
       (needs.publish-voice-sdk.result == 'success' || needs.publish-voice-sdk.result == 'skipped')
     environment: npm-pub
     steps:
@@ -77,7 +77,7 @@ jobs:
         working-directory: react-voice-commons-sdk
         run: |
           TAG="${{ github.event.release.tag_name }}"
-          TAG_VERSION="${TAG##*/v}"
+          TAG_VERSION=$(echo "$TAG" | sed 's/.*-v//' | sed 's/^v//')
           PKG_VERSION=$(node -p "require('./package.json').version")
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
             echo "::error::Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
