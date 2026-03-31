@@ -512,15 +512,25 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
   /**
    * Reset pending action flags (matching iOS SDK resetPushVariables)
-   * Note: isCallFromPush is NOT reset here as it should persist until disconnect
+   * Also resets push flags so subsequent calls are not auto-answered.
    */
   private resetPendingActions() {
     log.debug('[TelnyxRTC] Resetting pending actions');
     this.pendingAnswerAction = false;
     this.pendingEndAction = false;
     this.pendingCustomHeaders = {};
-    // Don't reset isCallFromPush here - it should persist until explicit disconnect
-    // this.isCallFromPush = false;
+
+    // Reset push flags after the pending action has been executed
+    // so subsequent calls are not auto-answered
+    if (this.isCallFromPush) {
+      log.debug('[TelnyxRTC] Resetting push flags after pending action executed');
+      this.isCallFromPush = false;
+      this.pushNotificationPayload = null;
+      this.pushNotificationCallKitUUID = null;
+      this.clearPushState().catch((error) => {
+        log.warn('[TelnyxRTC] Failed to clear push state after pending action:', error);
+      });
+    }
   }
 
   /**
@@ -940,16 +950,23 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         } else if (action === 'reject') {
           incomingCall.hangup();
         }
+        // Reset push flags immediately since the action was handled inline
+        this.resetPendingActions();
       } else if (this.pendingAnswerAction) {
         log.debug('[TelnyxRTC] Found pending answer action, executing...');
         // Execute pending answer asynchronously to allow call setup to complete first
+        // Push flags are reset inside resetPendingActions() after execution
         setTimeout(() => this.executePendingAnswer(), 100);
       } else if (this.pendingEndAction) {
         log.debug('[TelnyxRTC] Found pending end action, executing...');
         // Execute pending end asynchronously
+        // Push flags are reset inside resetPendingActions() after execution
         setTimeout(() => this.executePendingEnd(), 100);
       } else {
         log.debug('[TelnyxRTC] No pending actions to execute for push notification call');
+        // No pending actions yet - keep isCallFromPush alive so that
+        // queueAnswerFromCallKit() can still trigger auto-answer when
+        // the user answers from CallKit after the invite has arrived.
       }
     } else {
       log.debug('[TelnyxRTC] Not a push notification call, no pending actions to check');

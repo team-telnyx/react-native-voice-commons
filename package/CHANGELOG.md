@@ -1,5 +1,12 @@
 # CHANGELOG.md
 
+## [0.4.1](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk/v0.4.1) (2026-03-31)
+
+### Bug Fixing
+
+- Fixed push notification flags not being reset after call action execution, causing subsequent calls to be auto-answered
+- Added local network permissions for iOS demo app
+
 ## [0.4.0](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/sdk-0.4.0) (2026-03-19)
 
 ### Breaking Changes

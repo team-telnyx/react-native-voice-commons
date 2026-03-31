@@ -50,6 +50,12 @@
       <key>NSAllowsLocalNetworking</key>
       <true/>
     </dict>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>$(PRODUCT_NAME) uses the local network to connect to the React Native packager.</string>
+    <key>NSBonjourServices</key>
+    <array>
+      <string>_http._tcp</string>
+    </array>
     <key>NSCameraUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your camera</string>
     <key>NSMicrophoneUsageDescription</key>
