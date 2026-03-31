@@ -18,7 +18,7 @@ permissions:
 jobs:
   publish-voice-sdk:
     name: Publish @telnyx/react-native-voice-sdk
-    if: startsWith(github.event.release.tag_name, 'voice-sdk/') || startsWith(github.event.release.tag_name, 'v')
+    if: startsWith(github.event.release.tag_name, 'voice-sdk/') || (startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '/'))
     runs-on: ubuntu-latest
     environment: npm_bub
     steps:
@@ -48,7 +48,7 @@ jobs:
     # Run if: tag targets commons-sdk or both, AND voice-sdk either succeeded or was skipped
     if: |
       always() &&
-      (startsWith(github.event.release.tag_name, 'commons-sdk/') || startsWith(github.event.release.tag_name, 'v')) &&
+      (startsWith(github.event.release.tag_name, 'commons-sdk/') || (startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '/'))) &&
       (needs.publish-voice-sdk.result == 'success' || needs.publish-voice-sdk.result == 'skipped')
     environment: npm_bub
     steps:
