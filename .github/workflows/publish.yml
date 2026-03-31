@@ -20,7 +20,7 @@ jobs:
     name: Publish @telnyx/react-native-voice-sdk
     if: startsWith(github.event.release.tag_name, 'voice-sdk/') || (startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '/'))
     runs-on: ubuntu-latest
-    environment: npm_bub
+    environment: npm_pub
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -30,6 +30,18 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify tag version matches package.json
+        working-directory: package
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          # Extract version: voice-sdk/v0.4.1 → 0.4.1, v0.2.0 → 0.2.0
+          TAG_VERSION="${TAG##*/v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
+            exit 1
+          fi
 
       - name: Install dependencies
         working-directory: package
@@ -50,7 +62,7 @@ jobs:
       always() &&
       (startsWith(github.event.release.tag_name, 'commons-sdk/') || (startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '/'))) &&
       (needs.publish-voice-sdk.result == 'success' || needs.publish-voice-sdk.result == 'skipped')
-    environment: npm_bub
+    environment: npm_pub
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -60,6 +72,17 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify tag version matches package.json
+        working-directory: react-voice-commons-sdk
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          TAG_VERSION="${TAG##*/v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
+            exit 1
+          fi
 
       - name: Install dependencies
         working-directory: react-voice-commons-sdk
