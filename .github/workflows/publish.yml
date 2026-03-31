@@ -20,7 +20,7 @@ jobs:
     name: Publish @telnyx/react-native-voice-sdk
     if: startsWith(github.event.release.tag_name, 'voice-sdk/') || (startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '/'))
     runs-on: ubuntu-latest
-    environment: npm_pub
+    environment: npm-pub
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -62,7 +62,7 @@ jobs:
       always() &&
       (startsWith(github.event.release.tag_name, 'commons-sdk/') || (startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '/'))) &&
       (needs.publish-voice-sdk.result == 'success' || needs.publish-voice-sdk.result == 'skipped')
-    environment: npm_pub
+    environment: npm-pub
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
