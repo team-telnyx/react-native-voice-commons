@@ -1,5 +1,11 @@
 # CHANGELOG.md
 
+## [0.4.2](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk-v0.4.2) (2026-04-01)
+
+### Enhancement
+
+- Switch to npm trusted publishing with OIDC (no stored secrets)
+
 ## [0.4.1](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk-v0.4.1) (2026-03-31)
 
 ### Bug Fixing
