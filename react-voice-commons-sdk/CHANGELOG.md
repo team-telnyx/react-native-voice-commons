@@ -1,5 +1,15 @@
 # CHANGELOG.md
 
+## [0.2.0](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/commons-sdk-v0.2.0) (2026-04-01)
+
+### Enhancement
+
+- Upgraded low-level SDK dependency from `@telnyx/react-native-voice-sdk@0.4.0` to `@telnyx/react-native-voice-sdk@0.4.1`
+
+### Bug Fixing
+
+- Fixed push notification flags not being reset after call action execution, causing subsequent calls to be auto-answered
+
 ## [0.1.9](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.9) (2026-03-19)
 
 ### Enhancement
