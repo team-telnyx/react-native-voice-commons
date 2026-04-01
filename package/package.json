@@ -1,6 +1,6 @@
 {
   "name": "@telnyx/react-native-voice-sdk",
-  "version": "0.4.3",
+  "version": "0.4.1",
   "description": "Telnyx React Native Voice SDK - A complete WebRTC voice calling solution",
   "main": "lib/index.ts",
   "module": "lib/index.ts",
@@ -31,10 +31,10 @@
   ],
   "author": "Telnyx",
   "license": "MIT",
-  "homepage": "https://github.com/team-telnyx/react-native-voice-sdk",
+  "homepage": "https://github.com/team-telnyx/react-native-voice-commons",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/team-telnyx/react-native-voice-sdk.git"
+    "url": "git+https://github.com/team-telnyx/react-native-voice-commons.git"
   },
   "bugs": {
     "url": "https://github.com/team-telnyx/react-native-voice-sdk/issues"
