@@ -28,8 +28,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
+          node-version: '22'
 
       - name: Verify tag version matches package.json
         working-directory: package
@@ -50,8 +49,6 @@ jobs:
       - name: Publish with provenance
         working-directory: package
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.REACT_NATIVE_TOKEN }}
 
   publish-commons-sdk:
     name: Publish @telnyx/react-voice-commons-sdk
@@ -70,8 +67,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
+          node-version: '22'
 
       - name: Verify tag version matches package.json
         working-directory: react-voice-commons-sdk
@@ -98,5 +94,3 @@ jobs:
       - name: Publish with provenance
         working-directory: react-voice-commons-sdk
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.REACT_NATIVE_TOKEN }}
