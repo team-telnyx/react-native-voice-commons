@@ -533,6 +533,12 @@ import React
             NSLog("📞 TelnyxVoice: CALLKIT ANSWER ACTION - Provider: \(provider), Action: \(action)")
             NSLog("TelnyxVoice: User answered call with UUID: \(action.callUUID)")
 
+            // Always persist the answer action in UserDefaults so the JS side can detect it
+            // even when the RCTEventEmitter bridge is not yet ready (app cold-launched from push).
+            UserDefaults.standard.set(action.callUUID.uuidString, forKey: "pending_callkit_answer")
+            UserDefaults.standard.synchronize()
+            NSLog("TelnyxVoice: Stored pending CallKit answer for UUID: \(action.callUUID)")
+
             // Check if this is a programmatic answer (call already answered in WebRTC)
             // vs a user answer from CallKit UI
             if let callData = activeCalls[action.callUUID],
@@ -554,6 +560,10 @@ import React
 
         public func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
             NSLog("TelnyxVoice: User ended call with UUID: \(action.callUUID)")
+
+            // Clear any pending CallKit answer (prevents stale auto-answer on next call)
+            UserDefaults.standard.removeObject(forKey: "pending_callkit_answer")
+            UserDefaults.standard.synchronize()
 
             // Notify React Native via CallKit bridge
             CallKitBridge.shared?.emitCallEvent(

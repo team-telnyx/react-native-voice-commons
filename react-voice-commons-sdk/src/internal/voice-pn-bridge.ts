@@ -32,6 +32,10 @@ export interface VoicePnBridgeInterface {
   hideOngoingCallNotification(): Promise<boolean>;
   hideIncomingCallNotification(): Promise<boolean>;
 
+  // CallKit answer persistence (iOS only)
+  getPendingCallKitAnswer(): Promise<string | null>;
+  clearPendingCallKitAnswer(): Promise<boolean>;
+
   // Additional UserDefaults methods
   getVoipToken(): Promise<string | null>;
   getPendingVoipPush(): Promise<string | null>;
@@ -175,6 +179,34 @@ export class VoicePnBridge {
       return await NativeBridge.hideIncomingCallNotification();
     } catch (error) {
       console.error('VoicePnBridge: Error hiding incoming call notification:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get pending CallKit answer UUID from native storage (iOS only).
+   * When the user answers a CallKit call before JS listeners are ready,
+   * the native side persists the answer UUID in UserDefaults so JS can detect it.
+   */
+  static async getPendingCallKitAnswer(): Promise<string | null> {
+    if (Platform.OS !== 'ios') return null;
+    try {
+      return await NativeBridge.getPendingCallKitAnswer();
+    } catch (error) {
+      console.error('VoicePnBridge: Error getting pending CallKit answer:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Clear pending CallKit answer from native storage (iOS only)
+   */
+  static async clearPendingCallKitAnswer(): Promise<boolean> {
+    if (Platform.OS !== 'ios') return true;
+    try {
+      return await NativeBridge.clearPendingCallKitAnswer();
+    } catch (error) {
+      console.error('VoicePnBridge: Error clearing pending CallKit answer:', error);
       return false;
     }
   }
