@@ -125,6 +125,32 @@ class VoicePnBridge {
     }
   }
   /**
+   * Get pending CallKit answer UUID from native storage (iOS only).
+   * When the user answers a CallKit call before JS listeners are ready,
+   * the native side persists the answer UUID in UserDefaults so JS can detect it.
+   */
+  static async getPendingCallKitAnswer() {
+    if (react_native_1.Platform.OS !== 'ios') return null;
+    try {
+      return await NativeBridge.getPendingCallKitAnswer();
+    } catch (error) {
+      console.error('VoicePnBridge: Error getting pending CallKit answer:', error);
+      return null;
+    }
+  }
+  /**
+   * Clear pending CallKit answer from native storage (iOS only)
+   */
+  static async clearPendingCallKitAnswer() {
+    if (react_native_1.Platform.OS !== 'ios') return true;
+    try {
+      return await NativeBridge.clearPendingCallKitAnswer();
+    } catch (error) {
+      console.error('VoicePnBridge: Error clearing pending CallKit answer:', error);
+      return false;
+    }
+  }
+  /**
    * Get VoIP token from native storage
    */
   static async getVoipToken() {
