@@ -5,7 +5,6 @@ import { VoicePnBridge } from '../internal/voice-pn-bridge';
 import { router } from 'expo-router';
 import { TelnyxVoipClient } from '../telnyx-voip-client';
 import { TelnyxConnectionState } from '../models/connection-state';
-import { act } from 'react';
 
 /**
  * CallKit Coordinator - Manages the proper CallKit-first flow for iOS
@@ -254,6 +253,11 @@ class CallKitCoordinator {
       return;
     }
 
+    // Clear native-side pending answer since JS received the event normally
+    try {
+      await VoicePnBridge.clearPendingCallKitAnswer();
+    } catch (_) {}
+
     const call = this.callMap.get(callKitUUID);
 
     if (!call) {
@@ -468,6 +472,22 @@ class CallKitCoordinator {
         ...realPushData.metadata,
         from_callkit: true,
       };
+
+      // Check if the user answered from CallKit before JS listeners were ready.
+      // The native CXAnswerCallAction handler persists the answer UUID in UserDefaults
+      // so we can detect it here even when the JS event was dropped.
+      try {
+        const pendingAnswer = await VoicePnBridge.getPendingCallKitAnswer();
+        if (pendingAnswer) {
+          console.log(
+            'CallKitCoordinator: Found pending CallKit answer from native (JS event was missed), setting auto-answer flag'
+          );
+          this.shouldAutoAnswerNextCall = true;
+          await VoicePnBridge.clearPendingCallKitAnswer();
+        }
+      } catch (e) {
+        // Ignore - method may not exist on older native versions
+      }
 
       // Check if auto-answer is set and add from_notification flag
       const shouldAddFromNotification = this.shouldAutoAnswerNextCall;
@@ -789,6 +809,10 @@ class CallKitCoordinator {
   private async cleanupPushNotificationState(): Promise<void> {
     console.log('CallKitCoordinator: ✅ Cleared auto-answer flag');
     this.shouldAutoAnswerNextCall = false;
+    // Also clear native-side pending answer to prevent stale auto-answer
+    try {
+      await VoicePnBridge.clearPendingCallKitAnswer();
+    } catch (_) {}
   }
 
   /**

@@ -258,6 +258,10 @@ class CallKitCoordinator {
       console.log('CallKitCoordinator: Answer action already being processed, skipping duplicate');
       return;
     }
+    // Clear native-side pending answer since JS received the event normally
+    try {
+      await voice_pn_bridge_1.VoicePnBridge.clearPendingCallKitAnswer();
+    } catch (_) {}
     const call = this.callMap.get(callKitUUID);
     if (!call) {
       console.warn('CallKitCoordinator: No WebRTC call found for CallKit answer action', {
@@ -440,6 +444,21 @@ class CallKitCoordinator {
         ...realPushData.metadata,
         from_callkit: true,
       };
+      // Check if the user answered from CallKit before JS listeners were ready.
+      // The native CXAnswerCallAction handler persists the answer UUID in UserDefaults
+      // so we can detect it here even when the JS event was dropped.
+      try {
+        const pendingAnswer = await voice_pn_bridge_1.VoicePnBridge.getPendingCallKitAnswer();
+        if (pendingAnswer) {
+          console.log(
+            'CallKitCoordinator: Found pending CallKit answer from native (JS event was missed), setting auto-answer flag'
+          );
+          this.shouldAutoAnswerNextCall = true;
+          await voice_pn_bridge_1.VoicePnBridge.clearPendingCallKitAnswer();
+        }
+      } catch (e) {
+        // Ignore - method may not exist on older native versions
+      }
       // Check if auto-answer is set and add from_notification flag
       const shouldAddFromNotification = this.shouldAutoAnswerNextCall;
       let pushData;
@@ -717,6 +736,10 @@ class CallKitCoordinator {
   async cleanupPushNotificationState() {
     console.log('CallKitCoordinator: ✅ Cleared auto-answer flag');
     this.shouldAutoAnswerNextCall = false;
+    // Also clear native-side pending answer to prevent stale auto-answer
+    try {
+      await voice_pn_bridge_1.VoicePnBridge.clearPendingCallKitAnswer();
+    } catch (_) {}
   }
   /**
    * Get reference to the SDK client (for queuing actions when call doesn't exist yet)

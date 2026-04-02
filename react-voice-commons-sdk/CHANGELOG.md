@@ -1,5 +1,11 @@
 # CHANGELOG.md
 
+## [0.2.1](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/commons-sdk-v0.2.1) (2026-04-02)
+
+### Bug Fixing
+
+- Fixed CallKit auto-answer not working on iOS when user answers from CallKit UI during app cold launch from VoIP push. The native `CXAnswerCallAction` event was silently dropped because JS listeners weren't registered yet. Now persists the answer action in UserDefaults so the JS side can detect and honor it.
+
 ## [0.2.0](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/commons-sdk-v0.2.0) (2026-04-01)
 
 ### Enhancement

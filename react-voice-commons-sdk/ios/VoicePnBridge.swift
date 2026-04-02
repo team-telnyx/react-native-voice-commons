@@ -71,6 +71,21 @@ class VoicePnBridge: NSObject {
     }
     
     @objc
+    func getPendingCallKitAnswer(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        let answer = UserDefaults.standard.string(forKey: "pending_callkit_answer")
+        NSLog("[VoicePnBridge] getPendingCallKitAnswer - answer: \(answer ?? "nil")")
+        resolve(answer)
+    }
+
+    @objc
+    func clearPendingCallKitAnswer(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        UserDefaults.standard.removeObject(forKey: "pending_callkit_answer")
+        UserDefaults.standard.synchronize()
+        NSLog("[VoicePnBridge] clearPendingCallKitAnswer - cleared")
+        resolve(true)
+    }
+
+    @objc
     func getPendingVoipAction(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         let pending = UserDefaults.standard.string(forKey: "pending_voip_action")
         NSLog("[VoicePnBridge] getPendingVoipAction called. pending=\(pending ?? "(nil)")")
