@@ -12,7 +12,8 @@
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		5B2563F40BC9A8672BD67731 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F09903DE11BEB66183153F91 /* PrivacyInfo.xcprivacy */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
-		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
+		F11748422D0307B40044C1D9 /* AppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.mm */; };
+		F11748452D0307B40044C1DB /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = F11748462D0307B40044C1DB /* main.m */; };
 		FA8C1F990D384E343BB8471B /* libPods-telnyxreactnativevoicesdkdemo.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F63B7E2C15150C86EBA5ED17 /* libPods-telnyxreactnativevoicesdkdemo.a */; };
 /* End PBXBuildFile section */
 
@@ -27,7 +28,9 @@
 		E067B19F5301FD8B32345871 /* Pods-telnyxreactnativevoicesdkdemo.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-telnyxreactnativevoicesdkdemo.release.xcconfig"; path = "Target Support Files/Pods-telnyxreactnativevoicesdkdemo/Pods-telnyxreactnativevoicesdkdemo.release.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F09903DE11BEB66183153F91 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = telnyxreactnativevoicesdkdemo/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = telnyxreactnativevoicesdkdemo/AppDelegate.swift; sourceTree = "<group>"; };
+		F11748412D0307B40044C1D9 /* AppDelegate.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = AppDelegate.mm; path = telnyxreactnativevoicesdkdemo/AppDelegate.mm; sourceTree = "<group>"; };
+		F11748432D0307B40044C1DA /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = AppDelegate.h; path = telnyxreactnativevoicesdkdemo/AppDelegate.h; sourceTree = "<group>"; };
+		F11748462D0307B40044C1DB /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = main.m; path = telnyxreactnativevoicesdkdemo/main.m; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* telnyxreactnativevoicesdkdemo-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "telnyxreactnativevoicesdkdemo-Bridging-Header.h"; path = "telnyxreactnativevoicesdkdemo/telnyxreactnativevoicesdkdemo-Bridging-Header.h"; sourceTree = "<group>"; };
 		F63B7E2C15150C86EBA5ED17 /* libPods-telnyxreactnativevoicesdkdemo.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-telnyxreactnativevoicesdkdemo.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -47,7 +50,9 @@
 		13B07FAE1A68108700A75B9A /* telnyxreactnativevoicesdkdemo */ = {
 			isa = PBXGroup;
 			children = (
-				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
+				F11748432D0307B40044C1DA /* AppDelegate.h */,
+				F11748412D0307B40044C1D9 /* AppDelegate.mm */,
+				F11748462D0307B40044C1DB /* main.m */,
 				F11748442D0722820044C1D9 /* telnyxreactnativevoicesdkdemo-Bridging-Header.h */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
@@ -330,7 +335,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
+				F11748422D0307B40044C1D9 /* AppDelegate.mm in Sources */,
+				F11748452D0307B40044C1DB /* main.m in Sources */,
 				21502FC2FD36124C5754F110 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -363,6 +369,10 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/TelnyxVoiceCommons/Swift Compatibility Header\"",
+				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -400,6 +410,10 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/TelnyxVoiceCommons/Swift Compatibility Header\"",
+				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
