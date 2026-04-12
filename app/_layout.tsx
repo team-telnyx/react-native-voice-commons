@@ -70,7 +70,7 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <TelnyxVoiceApp voipClient={voipClient} enableAutoReconnect={false} debug={true}>
+    <TelnyxVoiceApp voipClient={voipClient} enableAutoReconnect={true} debug={true}>
       <ThemeProvider value={isDarkColorScheme ? DARK_THEME : LIGHT_THEME}>
         <StatusBar style="dark" backgroundColor="#ffffff" />
         <Stack

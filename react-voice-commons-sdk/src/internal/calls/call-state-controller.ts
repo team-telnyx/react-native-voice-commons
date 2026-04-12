@@ -191,6 +191,30 @@ export class CallStateController {
   }
 
   /**
+   * Clear all tracked calls. Called when the session disconnects so that
+   * calls left in non-terminal states (because the socket died before
+   * their ENDED/FAILED events could arrive) don't accumulate as ghosts
+   * across reconnect cycles.
+   */
+  clearAllCalls(): void {
+    if (this._callMap.size === 0) {
+      return;
+    }
+
+    console.log(`CallStateController: Clearing ${this._callMap.size} tracked call(s) on disconnect`);
+
+    for (const call of this._callMap.values()) {
+      try {
+        call.dispose();
+      } catch (error) {
+        console.warn('CallStateController: Error disposing call during clear:', error);
+      }
+    }
+    this._callMap.clear();
+    this._calls.next([]);
+  }
+
+  /**
    * Dispose of the controller and clean up resources
    */
   dispose(): void {

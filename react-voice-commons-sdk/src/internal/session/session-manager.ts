@@ -26,6 +26,7 @@ export class SessionManager {
   private _sessionId: string;
   private _disposed = false;
   private _onClientReady?: () => void;
+  private _onDisconnect?: () => void;
 
   constructor() {
     this._sessionId = this._generateSessionId();
@@ -43,6 +44,14 @@ export class SessionManager {
    */
   setOnClientReady(callback: () => void): void {
     this._onClientReady = callback;
+  }
+
+  /**
+   * Set callback to be called when the session disconnects, so dependent
+   * subsystems (e.g. the call state controller) can clear their state.
+   */
+  setOnDisconnect(callback: () => void): void {
+    this._onDisconnect = callback;
   }
 
   /**
@@ -91,7 +100,14 @@ export class SessionManager {
   }
 
   /**
-   * Disconnect from the Telnyx platform
+   * Disconnect from the Telnyx platform.
+   *
+   * The DISCONNECTED state is emitted BEFORE awaiting the underlying
+   * client teardown so that observers (including the auto-reconnect logic
+   * in TelnyxVoiceApp) cannot read a stale CONNECTED value during the
+   * short window while the socket is being torn down. Tracked calls are
+   * cleared here too, since a torn-down socket will never emit the
+   * ENDED/FAILED events that normally trigger per-call cleanup.
    */
   async disconnect(): Promise<void> {
     if (this._disposed) {
@@ -99,6 +115,15 @@ export class SessionManager {
     }
 
     this._currentConfig = undefined;
+    this._connectionState.next(TelnyxConnectionState.DISCONNECTED);
+
+    if (this._onDisconnect) {
+      try {
+        this._onDisconnect();
+      } catch (error) {
+        console.error('Error in onDisconnect callback:', error);
+      }
+    }
 
     if (this._telnyxClient) {
       try {
@@ -107,8 +132,6 @@ export class SessionManager {
         console.error('Error during disconnect:', error);
       }
     }
-
-    this._connectionState.next(TelnyxConnectionState.DISCONNECTED);
   }
 
   /**
