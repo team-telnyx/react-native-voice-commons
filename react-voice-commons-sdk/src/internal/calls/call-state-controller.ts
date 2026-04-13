@@ -201,7 +201,9 @@ export class CallStateController {
       return;
     }
 
-    console.log(`CallStateController: Clearing ${this._callMap.size} tracked call(s) on disconnect`);
+    console.log(
+      `CallStateController: Clearing ${this._callMap.size} tracked call(s) on disconnect`
+    );
 
     for (const call of this._callMap.values()) {
       try {
