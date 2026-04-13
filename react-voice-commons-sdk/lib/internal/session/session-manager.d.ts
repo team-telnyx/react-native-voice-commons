@@ -15,6 +15,7 @@ export declare class SessionManager {
   private _sessionId;
   private _disposed;
   private _onClientReady?;
+  private _onDisconnect?;
   constructor();
   /**
    * Observable stream of connection state changes
@@ -24,6 +25,11 @@ export declare class SessionManager {
    * Set callback to be called when the Telnyx client is ready
    */
   setOnClientReady(callback: () => void): void;
+  /**
+   * Set callback to be called when the session disconnects, so dependent
+   * subsystems (e.g. the call state controller) can clear their state.
+   */
+  setOnDisconnect(callback: () => void): void;
   /**
    * Current connection state (synchronous access)
    */
@@ -45,7 +51,14 @@ export declare class SessionManager {
    */
   connectWithToken(config: TokenConfig): Promise<void>;
   /**
-   * Disconnect from the Telnyx platform
+   * Disconnect from the Telnyx platform.
+   *
+   * The DISCONNECTED state is emitted BEFORE awaiting the underlying
+   * client teardown so that observers (including the auto-reconnect logic
+   * in TelnyxVoiceApp) cannot read a stale CONNECTED value during the
+   * short window while the socket is being torn down. Tracked calls are
+   * cleared here too, since a torn-down socket will never emit the
+   * ENDED/FAILED events that normally trigger per-call cleanup.
    */
   disconnect(): Promise<void>;
   /**

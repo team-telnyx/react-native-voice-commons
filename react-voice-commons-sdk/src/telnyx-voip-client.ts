@@ -82,6 +82,12 @@ export class TelnyxVoipClient {
       this._callStateController.initializeClientListeners();
     });
 
+    // Clear any tracked calls when the session disconnects, so ghosts
+    // don't accumulate across background → foreground reconnect cycles.
+    this._sessionManager.setOnDisconnect(() => {
+      this._callStateController.clearAllCalls();
+    });
+
     if (this._options.debug) {
       console.log('TelnyxVoipClient initialized with options:', this._options);
     }
