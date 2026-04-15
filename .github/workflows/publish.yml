@@ -32,13 +32,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Upgrade npm for OIDC trusted publishing
-        # Use corepack instead of `npm install -g npm@<ver>` because the
-        # self-replacement races on CI and intermittently fails with
-        # "Cannot find module 'promise-retry'" while the old npm is mid-teardown.
-        run: |
-          corepack enable
-          corepack prepare npm@11 --activate
-          npm --version
+        run: npm install -g npm@latest
 
       - name: Verify tag version matches package.json
         working-directory: package
@@ -58,7 +52,7 @@ jobs:
 
       - name: Publish with provenance
         working-directory: package
-        run: npm publish --provenance --access public --verbose
+        run: npm publish --provenance --access public
 
   publish-commons-sdk:
     name: Publish @telnyx/react-voice-commons-sdk
@@ -81,13 +75,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Upgrade npm for OIDC trusted publishing
-        # Use corepack instead of `npm install -g npm@<ver>` because the
-        # self-replacement races on CI and intermittently fails with
-        # "Cannot find module 'promise-retry'" while the old npm is mid-teardown.
-        run: |
-          corepack enable
-          corepack prepare npm@11 --activate
-          npm --version
+        run: npm install -g npm@latest
 
       - name: Verify tag version matches package.json
         working-directory: react-voice-commons-sdk
@@ -113,4 +101,4 @@ jobs:
 
       - name: Publish with provenance
         working-directory: react-voice-commons-sdk
-        run: npm publish --provenance --access public --verbose
+        run: npm publish --provenance --access public
