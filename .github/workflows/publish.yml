@@ -37,7 +37,7 @@ jobs:
         # "Cannot find module 'promise-retry'" while the old npm is mid-teardown.
         run: |
           corepack enable
-          corepack prepare npm@11.5.1 --activate
+          corepack prepare npm@11 --activate
           npm --version
 
       - name: Verify tag version matches package.json
@@ -58,7 +58,7 @@ jobs:
 
       - name: Publish with provenance
         working-directory: package
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public --verbose
 
   publish-commons-sdk:
     name: Publish @telnyx/react-voice-commons-sdk
@@ -86,7 +86,7 @@ jobs:
         # "Cannot find module 'promise-retry'" while the old npm is mid-teardown.
         run: |
           corepack enable
-          corepack prepare npm@11.5.1 --activate
+          corepack prepare npm@11 --activate
           npm --version
 
       - name: Verify tag version matches package.json
@@ -113,4 +113,4 @@ jobs:
 
       - name: Publish with provenance
         working-directory: react-voice-commons-sdk
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public --verbose
