@@ -11,17 +11,6 @@ const react_native_1 = require('react-native');
 const async_storage_1 = __importDefault(require('@react-native-async-storage/async-storage'));
 const connection_state_1 = require('../models/connection-state');
 const call_state_1 = require('../models/call-state');
-// Resolve `expo-router`'s router lazily so bare React Native projects (which
-// don't have expo-router installed) can import this hook without Metro
-// failing to bundle. If expo-router is absent, navigation calls become no-ops
-// and the host app is responsible for redirecting to its login screen.
-let router = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  router = require('expo-router').router;
-} catch {
-  router = null;
-}
 /**
  * Hook to handle app state changes for VoIP behavior
  * When app goes to background without an active call, disconnect socket and redirect to login
@@ -80,9 +69,6 @@ const useAppStateHandler = ({
               if (!stillInProgress) {
                 log('AppStateHandler: Push notification call completed, now disconnecting socket');
                 await voipClient.logout();
-                if (navigateToLoginOnDisconnect) {
-                  router?.replace('/');
-                }
               }
             }, 5000); // Wait 5 seconds
             appState.current = nextAppState;
@@ -93,14 +79,6 @@ const useAppStateHandler = ({
             // Disconnect the socket with background reason
             await voipClient.logout();
             log('AppStateHandler: Socket disconnected successfully');
-            // Navigate to login screen
-            if (navigateToLoginOnDisconnect) {
-              // Use a small delay to ensure the disconnect completes
-              setTimeout(() => {
-                log('AppStateHandler: Navigating to login screen');
-                router?.replace('/');
-              }, 100);
-            }
           } catch (error) {
             console.error('AppStateHandler: Error during background disconnect:', error);
           }

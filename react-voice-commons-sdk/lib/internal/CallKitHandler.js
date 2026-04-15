@@ -8,7 +8,6 @@ Object.defineProperty(exports, '__esModule', { value: true });
 exports.CallKitHandler = void 0;
 const react_1 = require('react');
 const react_native_1 = require('react-native');
-const expo_router_1 = require('expo-router');
 const async_storage_1 = __importDefault(require('@react-native-async-storage/async-storage'));
 const TelnyxVoiceContext_1 = require('../context/TelnyxVoiceContext');
 // Global flag to ensure only one CallKitHandler is active
@@ -20,7 +19,6 @@ let isCallKitHandlerActive = false;
  * @internal - Users should not use this component directly
  */
 const CallKitHandler = ({ onLoginRequired, onNavigateToDialer, onNavigateBack }) => {
-  const router = (0, expo_router_1.useRouter)();
   const { voipClient } = (0, TelnyxVoiceContext_1.useTelnyxVoice)();
   // Store active calls by CallKit UUID for coordination
   const activeCallsRef = (0, react_1.useRef)(new Map());
@@ -90,11 +88,8 @@ const CallKitHandler = ({ onLoginRequired, onNavigateToDialer, onNavigateBack })
       callUUID: eventData.callUUID,
       isTrackedCall: activeCallsRef.current.has(eventData.callUUID),
     });
-    // Navigate to dialer after answering
     if (onNavigateToDialer) {
       onNavigateToDialer();
-    } else {
-      router.replace('/dialer');
     }
   };
   const handleEndCall = async (eventData) => {
@@ -105,11 +100,8 @@ const CallKitHandler = ({ onLoginRequired, onNavigateToDialer, onNavigateBack })
     // Clean up our local tracking info
     activeCallsRef.current.delete(eventData.callUUID);
     await async_storage_1.default.removeItem('@push_notification_payload');
-    // Navigate back after call ends
     if (onNavigateBack) {
       onNavigateBack();
-    } else {
-      router.replace('/dialer');
     }
   };
   // This component doesn't render anything, it just handles events

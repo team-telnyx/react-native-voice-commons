@@ -9,9 +9,6 @@
  * integration.
  */
 
-// Polyfill URL / URLSearchParams so the WebSocket URL builder works under
-// Hermes (whose built-in URLSearchParams is missing .set/.get/.has).
-// Side-effect import — must run before any code that constructs URLs.
 import 'react-native-url-polyfill/auto';
 
 // Main client

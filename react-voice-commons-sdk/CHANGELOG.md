@@ -1,11 +1,28 @@
 # CHANGELOG.md
 
-## [0.2.2] (2026-04-15)
+## [0.3.0] (2026-04-15)
+
+### ⚠️ Breaking changes
+
+- **`expo-router` is no longer a dependency of the SDK.** The SDK previously navigated the host app in a few places (`useAppStateHandler` on background disconnect, `CallKitHandler` after CallKit answer/end). Those calls have been removed — navigation is now exclusively the host app's responsibility.
+  - **Migration for Expo consumers:** subscribe to `voipClient.connectionState$` and `voipClient.activeCall$` in your app and navigate there. Example:
+    ```tsx
+    useEffect(() => {
+      const sub = voipClient.connectionState$.subscribe((state) => {
+        if (state === TelnyxConnectionState.DISCONNECTED) {
+          router.replace('/');
+        }
+      });
+      return () => sub.unsubscribe();
+    }, []);
+    ```
+  - `CallKitHandler` already exposed `onNavigateToDialer` / `onNavigateBack` callback props; those are now the only way to wire navigation.
+  - The `navigateToLoginOnDisconnect` option on `useAppStateHandler` is retained in the type signature for source compatibility but no longer has any effect.
+- **Bare React Native (non-Expo) projects are now supported.** Metro bundling no longer fails on missing `expo-router`; SDK-level behavior is identical for Expo and bare RN consumers.
 
 ### Enhancement
 
-- Bare React Native (non-Expo) support: `expo-router` is now an optional peer dependency and `useAppStateHandler` guards its import at runtime, so bare RN projects that don't use Expo Router no longer fail Metro bundling when importing from the SDK. Navigation on background disconnect is skipped for hosts without expo-router; the host app is responsible for its own navigation.
-- `react-native-url-polyfill` is now a direct dependency and auto-loaded from the SDK entry point. Previously, bare RN apps running Hermes crashed on the second login attempt with `URLSearchParams.set is not implemented` because the SDK constructs the WebSocket URL via `URLSearchParams`, which is incomplete in Hermes.
+- **`react-native-url-polyfill` is now a direct dependency and auto-loaded** from the SDK entry point. Previously, apps running Hermes crashed on the second login attempt with `URLSearchParams.set is not implemented` because the SDK constructs the WebSocket URL via `URLSearchParams`, which is incomplete in Hermes. No action required from consumers.
 
 ## [0.2.0](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/commons-sdk-v0.2.0) (2026-04-01)
 

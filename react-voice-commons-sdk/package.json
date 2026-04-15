@@ -1,6 +1,6 @@
 {
   "name": "@telnyx/react-voice-commons-sdk",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "A high-level, state-agnostic, drop-in module for the Telnyx React Native SDK that simplifies WebRTC voice calling integration",
   "main": "lib/index.js",
   "module": "lib/index.js",
@@ -66,7 +66,6 @@
   },
   "peerDependencies": {
     "@react-native-async-storage/async-storage": "^2.1.0",
-    "expo-router": "^5.1.0",
     "react": ">=19.0.0 <20.0.0",
     "react-native": ">=0.79.0 <1.0.0",
     "react-native-webrtc": "^124.0.5"
@@ -74,9 +73,6 @@
   "peerDependenciesMeta": {
     "@react-native-async-storage/async-storage": {
       "optional": false
-    },
-    "expo-router": {
-      "optional": true
     },
     "react": {
       "optional": false
@@ -105,7 +101,6 @@
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "eslint": "^8.0.0",
-    "expo-router": "^5.1.0",
     "jest": "^29.5.0",
     "prettier": "^3.0.0",
     "ts-jest": "^29.1.0",
