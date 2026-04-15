@@ -47,15 +47,6 @@ jobs:
         working-directory: package
         run: npm install --legacy-peer-deps
 
-      - name: Debug OIDC token claims
-        run: |
-          TOKEN=$(curl -sLS \
-            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org" | jq -r .value)
-          echo "----- OIDC claims (publish-voice-sdk) -----"
-          echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq .
-          echo "-------------------------------------------"
-
       - name: Publish with provenance
         working-directory: package
         run: npm publish --provenance --access public
@@ -101,15 +92,6 @@ jobs:
       - name: Build
         working-directory: react-voice-commons-sdk
         run: npm run build
-
-      - name: Debug OIDC token claims
-        run: |
-          TOKEN=$(curl -sLS \
-            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org" | jq -r .value)
-          echo "----- OIDC claims (publish-commons-sdk) -----"
-          echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq .
-          echo "---------------------------------------------"
 
       - name: Publish with provenance
         working-directory: react-voice-commons-sdk
