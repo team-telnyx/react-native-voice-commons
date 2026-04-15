@@ -8,6 +8,7 @@
  * call state transitions, push notification processing, and native call UI
  * integration.
  */
+import 'react-native-url-polyfill/auto';
 export {
   TelnyxVoipClient,
   createTelnyxVoipClient,

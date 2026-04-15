@@ -8,7 +8,6 @@ Object.defineProperty(exports, '__esModule', { value: true });
 exports.useAppStateHandler = void 0;
 const react_1 = require('react');
 const react_native_1 = require('react-native');
-const expo_router_1 = require('expo-router');
 const async_storage_1 = __importDefault(require('@react-native-async-storage/async-storage'));
 const connection_state_1 = require('../models/connection-state');
 const call_state_1 = require('../models/call-state');
@@ -70,9 +69,6 @@ const useAppStateHandler = ({
               if (!stillInProgress) {
                 log('AppStateHandler: Push notification call completed, now disconnecting socket');
                 await voipClient.logout();
-                if (navigateToLoginOnDisconnect) {
-                  expo_router_1.router.replace('/');
-                }
               }
             }, 5000); // Wait 5 seconds
             appState.current = nextAppState;
@@ -83,14 +79,6 @@ const useAppStateHandler = ({
             // Disconnect the socket with background reason
             await voipClient.logout();
             log('AppStateHandler: Socket disconnected successfully');
-            // Navigate to login screen
-            if (navigateToLoginOnDisconnect) {
-              // Use a small delay to ensure the disconnect completes
-              setTimeout(() => {
-                log('AppStateHandler: Navigating to login screen');
-                expo_router_1.router.replace('/');
-              }, 100);
-            }
           } catch (error) {
             console.error('AppStateHandler: Error during background disconnect:', error);
           }
