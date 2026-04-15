@@ -32,7 +32,13 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Upgrade npm for OIDC trusted publishing
-        run: npm install -g npm@11
+        # Use corepack instead of `npm install -g npm@<ver>` because the
+        # self-replacement races on CI and intermittently fails with
+        # "Cannot find module 'promise-retry'" while the old npm is mid-teardown.
+        run: |
+          corepack enable
+          corepack prepare npm@11.5.1 --activate
+          npm --version
 
       - name: Verify tag version matches package.json
         working-directory: package
@@ -75,7 +81,13 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Upgrade npm for OIDC trusted publishing
-        run: npm install -g npm@11
+        # Use corepack instead of `npm install -g npm@<ver>` because the
+        # self-replacement races on CI and intermittently fails with
+        # "Cannot find module 'promise-retry'" while the old npm is mid-teardown.
+        run: |
+          corepack enable
+          corepack prepare npm@11.5.1 --activate
+          npm --version
 
       - name: Verify tag version matches package.json
         working-directory: react-voice-commons-sdk
