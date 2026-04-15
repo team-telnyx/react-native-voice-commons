@@ -1,10 +1,21 @@
 import { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TelnyxVoipClient } from '../telnyx-voip-client';
 import { TelnyxConnectionState } from '../models/connection-state';
 import { TelnyxCallState, CallStateHelpers } from '../models/call-state';
+
+// Resolve `expo-router`'s router lazily so bare React Native projects (which
+// don't have expo-router installed) can import this hook without Metro
+// failing to bundle. If expo-router is absent, navigation calls become no-ops
+// and the host app is responsible for redirecting to its login screen.
+let router: { replace: (path: string) => void } | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  router = require('expo-router').router;
+} catch {
+  router = null;
+}
 
 interface UseAppStateHandlerOptions {
   voipClient: TelnyxVoipClient;
@@ -77,7 +88,7 @@ export const useAppStateHandler = ({
                 log('AppStateHandler: Push notification call completed, now disconnecting socket');
                 await voipClient.logout();
                 if (navigateToLoginOnDisconnect) {
-                  router.replace('/');
+                  router?.replace('/');
                 }
               }
             }, 5000); // Wait 5 seconds
@@ -98,7 +109,7 @@ export const useAppStateHandler = ({
               // Use a small delay to ensure the disconnect completes
               setTimeout(() => {
                 log('AppStateHandler: Navigating to login screen');
-                router.replace('/');
+                router?.replace('/');
               }, 100);
             }
           } catch (error) {

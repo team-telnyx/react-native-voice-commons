@@ -62,6 +62,10 @@ exports.useAppReadyNotifier =
   exports.createTelnyxVoipClient =
   exports.TelnyxVoipClient =
     void 0;
+// Polyfill URL / URLSearchParams so the WebSocket URL builder works under
+// Hermes (whose built-in URLSearchParams is missing .set/.get/.has).
+// Side-effect import — must run before any code that constructs URLs.
+require('react-native-url-polyfill/auto');
 // Main client
 var telnyx_voip_client_1 = require('./telnyx-voip-client');
 Object.defineProperty(exports, 'TelnyxVoipClient', {

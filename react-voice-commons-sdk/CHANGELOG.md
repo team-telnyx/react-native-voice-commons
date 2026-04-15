@@ -1,5 +1,12 @@
 # CHANGELOG.md
 
+## [0.2.2] (2026-04-15)
+
+### Enhancement
+
+- Bare React Native (non-Expo) support: `expo-router` is now an optional peer dependency and `useAppStateHandler` guards its import at runtime, so bare RN projects that don't use Expo Router no longer fail Metro bundling when importing from the SDK. Navigation on background disconnect is skipped for hosts without expo-router; the host app is responsible for its own navigation.
+- `react-native-url-polyfill` is now a direct dependency and auto-loaded from the SDK entry point. Previously, bare RN apps running Hermes crashed on the second login attempt with `URLSearchParams.set is not implemented` because the SDK constructs the WebSocket URL via `URLSearchParams`, which is incomplete in Hermes.
+
 ## [0.2.0](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/commons-sdk-v0.2.0) (2026-04-01)
 
 ### Enhancement
