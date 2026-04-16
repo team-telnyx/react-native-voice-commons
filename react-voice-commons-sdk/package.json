@@ -112,6 +112,7 @@
     "node": ">=16"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   }
 }
