@@ -1,5 +1,12 @@
 # CHANGELOG.md
 
+## [0.3.1] (2026-04-16)
+
+### Bug Fixing
+
+- Fixed stale `CONNECTED` state during background disconnect: `SessionManager.disconnect()` now emits `DISCONNECTED` before awaiting the underlying client teardown. Previously, observers (including the auto-reconnect logic in `TelnyxVoiceApp`) could read a stale `CONNECTED` value while the socket was being torn down, causing auto-reconnection to be skipped and subsequent `newCall()` attempts to fail with `Cannot make call when connection state is: DISCONNECTED` or `No connection exists. Please connect first.`
+- Tracked calls are now cleared on disconnect. Previously, calls left in non-terminal states when the socket was torn down would accumulate across background/foreground cycles, since a dead socket never emits the `ENDED`/`FAILED` events that normally trigger per-call cleanup.
+
 ## [0.3.0] (2026-04-15)
 
 ### ⚠️ Breaking changes

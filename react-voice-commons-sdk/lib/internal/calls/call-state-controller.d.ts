@@ -72,6 +72,13 @@ export declare class CallStateController {
     onInviteAutoAccepted: () => void;
   }): void;
   /**
+   * Clear all tracked calls. Called when the session disconnects so that
+   * calls left in non-terminal states (because the socket died before
+   * their ENDED/FAILED events could arrive) don't accumulate as ghosts
+   * across reconnect cycles.
+   */
+  clearAllCalls(): void;
+  /**
    * Dispose of the controller and clean up resources
    */
   dispose(): void;
