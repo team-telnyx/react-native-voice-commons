@@ -2,7 +2,7 @@ import '~/global.css';
 
 import { DarkTheme, DefaultTheme, Theme, ThemeProvider } from '@react-navigation/native';
 import { PortalHost } from '@rn-primitives/portal';
-import { Slot, Stack } from 'expo-router';
+import { router, Slot, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as React from 'react';
 import { Appearance, Platform } from 'react-native';
@@ -10,6 +10,7 @@ import { setAndroidNavigationBar } from '~/lib/ui/android-navigation-bar';
 import { NAV_THEME } from '~/lib/theme/constants';
 import { useColorScheme } from '~/lib/theme/useColorScheme';
 import {
+  TelnyxConnectionState,
   TelnyxVoiceApp,
   TelnyxVoipClient,
   createTelnyxVoipClient,
@@ -67,6 +68,15 @@ export default function RootLayout() {
       // voipClient.loginFromStoredConfig();
       console.log('[RootLayout] Normal launch — auto-login could be triggered here');
     });
+  }, []);
+
+  React.useEffect(() => {
+    const sub = voipClient.connectionState$.subscribe((state) => {
+      if (state === TelnyxConnectionState.DISCONNECTED) {
+        router.replace('/');
+      }
+    });
+    return () => sub.unsubscribe();
   }, []);
 
   return (

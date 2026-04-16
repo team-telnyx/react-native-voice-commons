@@ -1,11 +1,35 @@
 # CHANGELOG.md
 
-## [0.2.1-beta.0] (2026-04-12)
+## [0.3.1] (2026-04-16)
 
 ### Bug Fixing
 
 - Fixed stale `CONNECTED` state during background disconnect: `SessionManager.disconnect()` now emits `DISCONNECTED` before awaiting the underlying client teardown. Previously, observers (including the auto-reconnect logic in `TelnyxVoiceApp`) could read a stale `CONNECTED` value while the socket was being torn down, causing auto-reconnection to be skipped and subsequent `newCall()` attempts to fail with `Cannot make call when connection state is: DISCONNECTED` or `No connection exists. Please connect first.`
 - Tracked calls are now cleared on disconnect. Previously, calls left in non-terminal states when the socket was torn down would accumulate across background/foreground cycles, since a dead socket never emits the `ENDED`/`FAILED` events that normally trigger per-call cleanup.
+
+## [0.3.0] (2026-04-15)
+
+### ⚠️ Breaking changes
+
+- **`expo-router` is no longer a dependency of the SDK.** The SDK previously navigated the host app in a few places (`useAppStateHandler` on background disconnect, `CallKitHandler` after CallKit answer/end). Those calls have been removed — navigation is now exclusively the host app's responsibility.
+  - **Migration for Expo consumers:** subscribe to `voipClient.connectionState$` and `voipClient.activeCall$` in your app and navigate there. Example:
+    ```tsx
+    useEffect(() => {
+      const sub = voipClient.connectionState$.subscribe((state) => {
+        if (state === TelnyxConnectionState.DISCONNECTED) {
+          router.replace('/');
+        }
+      });
+      return () => sub.unsubscribe();
+    }, []);
+    ```
+  - `CallKitHandler` already exposed `onNavigateToDialer` / `onNavigateBack` callback props; those are now the only way to wire navigation.
+  - The `navigateToLoginOnDisconnect` option on `useAppStateHandler` is retained in the type signature for source compatibility but no longer has any effect.
+- **Bare React Native (non-Expo) projects are now supported.** Metro bundling no longer fails on missing `expo-router`; SDK-level behavior is identical for Expo and bare RN consumers.
+
+### Enhancement
+
+- **`react-native-url-polyfill` is now a direct dependency and auto-loaded** from the SDK entry point. Previously, apps running Hermes crashed on the second login attempt with `URLSearchParams.set is not implemented` because the SDK constructs the WebSocket URL via `URLSearchParams`, which is incomplete in Hermes. No action required from consumers.
 
 ## [0.2.0](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/commons-sdk-v0.2.0) (2026-04-01)
 

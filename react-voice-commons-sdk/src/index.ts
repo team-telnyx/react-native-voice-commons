@@ -9,6 +9,8 @@
  * integration.
  */
 
+import 'react-native-url-polyfill/auto';
+
 // Main client
 export {
   TelnyxVoipClient,

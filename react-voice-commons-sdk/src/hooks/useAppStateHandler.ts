@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TelnyxVoipClient } from '../telnyx-voip-client';
 import { TelnyxConnectionState } from '../models/connection-state';
@@ -76,9 +75,6 @@ export const useAppStateHandler = ({
               if (!stillInProgress) {
                 log('AppStateHandler: Push notification call completed, now disconnecting socket');
                 await voipClient.logout();
-                if (navigateToLoginOnDisconnect) {
-                  router.replace('/');
-                }
               }
             }, 5000); // Wait 5 seconds
             appState.current = nextAppState;
@@ -92,15 +88,6 @@ export const useAppStateHandler = ({
             await voipClient.logout();
 
             log('AppStateHandler: Socket disconnected successfully');
-
-            // Navigate to login screen
-            if (navigateToLoginOnDisconnect) {
-              // Use a small delay to ensure the disconnect completes
-              setTimeout(() => {
-                log('AppStateHandler: Navigating to login screen');
-                router.replace('/');
-              }, 100);
-            }
           } catch (error) {
             console.error('AppStateHandler: Error during background disconnect:', error);
           }

@@ -2,7 +2,6 @@ import { Platform, AppState } from 'react-native';
 import CallKit, { CallEndReason } from './callkit';
 import { Call } from '@telnyx/react-native-voice-sdk';
 import { VoicePnBridge } from '../internal/voice-pn-bridge';
-import { router } from 'expo-router';
 import { TelnyxVoipClient } from '../telnyx-voip-client';
 import { TelnyxConnectionState } from '../models/connection-state';
 import { act } from 'react';

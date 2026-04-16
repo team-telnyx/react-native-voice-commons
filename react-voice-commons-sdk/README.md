@@ -11,6 +11,7 @@ A high-level, state-agnostic, drop-in module for the Telnyx React Native SDK tha
 - **Reactive State Management**: RxJS-based state streams for real-time UI updates
 - **TypeScript Support**: Full TypeScript definitions for better developer experience
 - **Cross-Platform**: Built for both iOS and Android with React Native
+- **Framework-agnostic**: Works in both Expo and bare React Native projects. See the [bare RN reference demo](https://github.com/team-telnyx/telnyx-react-native-bare-demo) for non-Expo integration.
 
 ## About @telnyx/react-voice-commons-sdk
 
@@ -114,6 +115,29 @@ call.callState$.subscribe((state) => {
   console.log('Call state:', state);
 });
 ```
+
+### Navigation
+
+As of **v0.3.0**, the SDK no longer navigates the host app. Routing on state transitions (e.g. redirecting to a login screen on disconnect, surfacing a dialer screen after answering a call via CallKit) is entirely the host app's responsibility. Subscribe to `connectionState$` and `activeCall$` and invoke your own navigator.
+
+Example using `expo-router`:
+
+```tsx
+import { router } from 'expo-router';
+import { useEffect } from 'react';
+import { TelnyxConnectionState } from '@telnyx/react-voice-commons-sdk';
+
+useEffect(() => {
+  const sub = voipClient.connectionState$.subscribe((state) => {
+    if (state === TelnyxConnectionState.DISCONNECTED) {
+      router.replace('/');
+    }
+  });
+  return () => sub.unsubscribe();
+}, []);
+```
+
+The same pattern works with `react-navigation`, React Router, or any other navigator — the SDK is agnostic.
 
 ### 4. Call Management
 

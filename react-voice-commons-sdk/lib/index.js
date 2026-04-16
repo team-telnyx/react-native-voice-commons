@@ -62,6 +62,7 @@ exports.useAppReadyNotifier =
   exports.createTelnyxVoipClient =
   exports.TelnyxVoipClient =
     void 0;
+require('react-native-url-polyfill/auto');
 // Main client
 var telnyx_voip_client_1 = require('./telnyx-voip-client');
 Object.defineProperty(exports, 'TelnyxVoipClient', {
