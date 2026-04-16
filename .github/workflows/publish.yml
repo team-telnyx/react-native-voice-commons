@@ -29,7 +29,6 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Verify tag version matches package.json
         working-directory: package
@@ -69,7 +68,6 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Verify tag version matches package.json
         working-directory: react-voice-commons-sdk
