@@ -112,6 +112,82 @@ await call.hold();
 await call.hangup();
 ```
 
+### 5. Push Notification Flow (What Actually Happens)
+
+You do not need to wire up JS push handlers. The native layer does the work:
+
+- **Android**: `TelnyxFirebaseMessagingService` receives the FCM message, shows the incoming call notification, and (on Answer/Decline) launches `TelnyxMainActivity` with the call intent.
+- **iOS**: `TelnyxVoipPushHandler` receives the PushKit payload and reports the call to CallKit.
+
+In both cases the SDK connects the socket and restores the call internally — you just observe the VoIP client's streams to render UI.
+
+**What to observe after the SDK-driven push login:**
+
+- `voipClient.connectionState$` — emits `CONNECTED` when the socket is up and authenticated (there is no separate `loginState$`).
+- `voipClient.activeCall$` — emits the `Call` once the SDK has processed the push and the call has arrived. Navigate to your in-call screen here.
+- `voipClient.currentActiveCall` — synchronous accessor for the cold-start race: on a push-launched mount, the call may already be present by the time you subscribe, so check this first and route immediately if set.
+
+```tsx
+React.useEffect(() => {
+  if (voipClient.currentActiveCall) router.replace('/call');
+  const sub = voipClient.activeCall$.subscribe((call) => {
+    if (call) router.replace('/call');
+  });
+  return () => sub.unsubscribe();
+}, []);
+```
+
+CallKit (iOS) and ConnectionService (Android) already render the native incoming-call UI, so this navigation only matters once the user taps into the app.
+
+#### Detecting a Push-Launched Cold Start
+
+When the OS wakes your app from a terminated state to deliver a call, the SDK is already logging in with stored credentials as part of the push flow. If your app _also_ triggers a login on mount, you will get two competing sessions (double-login), which causes the call to fail or the socket to churn.
+
+Use `TelnyxVoipClient.isLaunchedFromPushNotification()` to skip your own login when a push is in flight:
+
+```tsx
+import { TelnyxVoipClient } from '@telnyx/react-voice-commons-sdk';
+
+React.useEffect(() => {
+  TelnyxVoipClient.isLaunchedFromPushNotification().then((isFromPush) => {
+    if (isFromPush) {
+      // SDK is handling login via the push flow — do nothing.
+      return;
+    }
+    // Normal cold start — safe to auto-login.
+    voipClient.loginFromStoredConfig();
+  });
+}, []);
+```
+
+This is a static method (callable before the client is constructed) and works on both platforms. It returns `true` if the app was launched by an FCM intent (Android) or a PushKit payload (iOS) that has not yet been consumed.
+
+#### Common Mistake: Manual or Automatic Login on Push
+
+The single most common integration bug is re-logging in while the SDK is already handling a push:
+
+**Do not do this:**
+
+```tsx
+// WRONG — runs on every mount, including push-launched cold starts
+React.useEffect(() => {
+  voipClient.login(config); // or loginFromStoredConfig(), or loginWithToken()
+}, []);
+```
+
+**Do this instead:**
+
+```tsx
+// Right — guard the login on push-launched cold starts
+React.useEffect(() => {
+  TelnyxVoipClient.isLaunchedFromPushNotification().then((isFromPush) => {
+    if (!isFromPush) voipClient.loginFromStoredConfig();
+  });
+}, []);
+```
+
+Symptoms of getting this wrong: the incoming call rings briefly then disappears, the socket disconnects mid-call, or CallKit shows a call that immediately ends. If you see those, check whether your app is calling `login*` unconditionally on mount.
+
 ### Authentication & Persistent Storage
 
 The library supports both credential-based and token-based authentication with automatic persistence for seamless reconnection.
@@ -231,17 +307,10 @@ The `TelnyxMainActivity` provides:
 
 ### 2. Push Notification Setup
 
-1. Place `google-services.json` in the project root
-2. Register background message handler:
+1. Place `google-services.json` in the project root.
+2. Create an FCM service that extends `TelnyxFirebaseMessagingService` and a notification action receiver that extends `TelnyxNotificationActionReceiver`, then register both in `AndroidManifest.xml`. See [docs-markdown/push-notification/app-setup.md](./docs-markdown/push-notification/app-setup.md) for the full manifest + Kotlin boilerplate.
 
-```tsx
-import messaging from '@react-native-firebase/messaging';
-import { TelnyxVoiceApp } from '@telnyx/react-voice-commons-sdk';
-
-messaging().setBackgroundMessageHandler(async (remoteMessage) => {
-  await TelnyxVoiceApp.handleBackgroundPush(remoteMessage.data);
-});
-```
+> **Do not** register `messaging().setBackgroundMessageHandler(...)` from JS. Android push is handled entirely by the native `TelnyxFirebaseMessagingService` — adding a JS handler will fight the native layer and can double-process calls. There is no `TelnyxVoiceApp.handleBackgroundPush` step required on Android.
 
 ### iOS Integration
 
@@ -422,7 +491,10 @@ npx expo run:ios
 
 ### Double Login
 
-Ensure you're not calling login methods manually when using `TelnyxVoiceApp` with auto-reconnection enabled.
+Two causes to check:
+
+1. You're calling `login*` manually while `TelnyxVoiceApp` is running with `enableAutoReconnect={true}` — pick one.
+2. You're calling `login*` on mount without guarding against push-launched cold starts. Wrap the call with `TelnyxVoipClient.isLaunchedFromPushNotification()` — see [Push Notification Flow](#5-push-notification-flow-what-actually-happens).
 
 ### Background Disconnection
 
@@ -438,7 +510,7 @@ Check if `enableAutoReconnect` is set appropriately for your use case in the `Te
   - Ensure VoIP push certificates are configured in your Apple Developer account
   - Verify AppDelegate implements `PKPushRegistryDelegate` and delegates to `TelnyxVoipPushHandler`
   - Check that `TelnyxVoipPushHandler.initializeVoipRegistration()` is called in `didFinishLaunchingWithOptions`
-- **Both**: Check that background message handlers are properly registered
+- **Both**: Verify the SDK is authenticated (or has stored credentials) — the native push flow will attempt to log in using stored credentials when a call comes in
 
 ### Native Integration Issues
 

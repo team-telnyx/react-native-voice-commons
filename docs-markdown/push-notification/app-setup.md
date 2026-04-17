@@ -270,7 +270,82 @@ The SDK handles everything natively through:
 
 Simply extend these classes as shown in the native implementation steps above, and push notifications will work automatically.
 
-### Step 3: Token Registration (Optional)
+Do **not** call `messaging().setBackgroundMessageHandler(...)` from `@react-native-firebase/messaging`. There is no JS-side `TelnyxVoiceApp.handleBackgroundPush` step to wire up — a JS handler will fight the native service and can double-process or drop incoming calls.
+
+### Step 3: Detect Push-Launched Cold Starts (Avoid Double-Login)
+
+When the OS wakes your app from a terminated state to deliver an incoming call, the SDK is already handling the login internally as part of the push flow. If your app **also** triggers its own `login*` call on mount, you end up with two competing sessions — this is the single most common integration bug.
+
+Use the static method `TelnyxVoipClient.isLaunchedFromPushNotification()` to guard your own auto-login:
+
+```tsx
+import React from 'react';
+import { TelnyxVoipClient } from '@telnyx/react-voice-commons-sdk';
+
+export default function App() {
+  React.useEffect(() => {
+    TelnyxVoipClient.isLaunchedFromPushNotification().then((isFromPush) => {
+      if (isFromPush) {
+        // SDK is handling login via the push flow. Do nothing here —
+        // do not call login(), loginWithToken(), or loginFromStoredConfig().
+        return;
+      }
+      // Normal cold start: safe to auto-login.
+      voipClient.loginFromStoredConfig();
+    });
+  }, []);
+
+  return (
+    <TelnyxVoiceApp voipClient={voipClient} enableAutoReconnect={true}>
+      <YourAppContent />
+    </TelnyxVoiceApp>
+  );
+}
+```
+
+**How it works:** the method is static (callable before the client is constructed) and returns `true` when there is a pending FCM intent (Android) or PushKit payload (iOS) that has not yet been consumed by the SDK. It works on both platforms.
+
+**Common mistake — manual or automatic login on push:**
+
+```tsx
+// WRONG — runs on every mount, including push-launched cold starts
+React.useEffect(() => {
+  voipClient.login(config); // or loginWithToken(), or loginFromStoredConfig()
+}, []);
+```
+
+```tsx
+// Right — guard the login on push-launched cold starts
+React.useEffect(() => {
+  TelnyxVoipClient.isLaunchedFromPushNotification().then((isFromPush) => {
+    if (!isFromPush) voipClient.loginFromStoredConfig();
+  });
+}, []);
+```
+
+**Symptoms of double-login:** the incoming call rings briefly then disappears, the socket disconnects mid-call, CallKit shows a call that immediately ends, or you see rapid `CONNECTED → DISCONNECTED → CONNECTED` cycles in the logs right after a push is delivered. If you hit these, audit every `useEffect` in your app for an unguarded `login*` call on mount.
+
+Applies to any login entry point — including login forms that re-submit stored credentials, splash screens that eagerly log in, and background tasks that refresh tokens.
+
+**What to observe after the SDK finishes the push login:**
+
+- `voipClient.connectionState$` → emits `CONNECTED` (there is no separate `loginState$` — `CONNECTED` means socket up **and** authenticated).
+- `voipClient.activeCall$` → emits the `Call` once the SDK has processed the push.
+- `voipClient.currentActiveCall` → synchronous accessor; on push-launched mounts the call may already be present by the time you subscribe, so check this first.
+
+```tsx
+React.useEffect(() => {
+  if (voipClient.currentActiveCall) router.replace('/call');
+  const sub = voipClient.activeCall$.subscribe((call) => {
+    if (call) router.replace('/call');
+  });
+  return () => sub.unsubscribe();
+}, []);
+```
+
+CallKit (iOS) and ConnectionService (Android) already render the native incoming-call UI; this RN-side navigation only matters once the user taps into the app.
+
+### Step 4: Token Registration (Optional)
 
 Push tokens are handled automatically by the SDK during authentication. For most apps, you don't need to do anything additional.
 
@@ -300,7 +375,7 @@ The `VoipTokenFetcher` component automatically:
 - Retrieves FCM tokens (Android) and VoIP tokens (iOS)
 - Handles platform-specific token registration
 
-### Step 4: Authentication
+### Step 5: Authentication
 
 Include push tokens in your login configuration:
 
