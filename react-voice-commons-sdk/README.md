@@ -122,12 +122,12 @@ As of **v0.3.0**, the SDK no longer navigates the host app. Routing on state tra
 
 **What to observe:**
 
-| Observable | Emits | Use it for |
-|---|---|---|
-| `voipClient.connectionState$` | `TelnyxConnectionState` (`CONNECTING`, `CONNECTED`, `RECONNECTING`, `DISCONNECTED`, `ERROR`) | Redirect to login on `DISCONNECTED`; gate outbound-call UI on `CONNECTED`. There is no separate `loginState$` — `CONNECTED` means the socket is up **and** authenticated. |
-| `voipClient.activeCall$` | `Call \| null` | Navigate to your in-call screen when a call appears. Primary signal for push-launched cold starts — when the SDK finishes the push-driven login and the call arrives, this emits. |
-| `voipClient.calls$` | `Call[]` | Multi-call UIs (call waiting, conference). |
-| `call.callState$` | `TelnyxCallState` | Per-call transitions (ringing / active / held / ended). |
+| Observable                    | Emits                                                                                        | Use it for                                                                                                                                                                        |
+| ----------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `voipClient.connectionState$` | `TelnyxConnectionState` (`CONNECTING`, `CONNECTED`, `RECONNECTING`, `DISCONNECTED`, `ERROR`) | Redirect to login on `DISCONNECTED`; gate outbound-call UI on `CONNECTED`. There is no separate `loginState$` — `CONNECTED` means the socket is up **and** authenticated.         |
+| `voipClient.activeCall$`      | `Call \| null`                                                                               | Navigate to your in-call screen when a call appears. Primary signal for push-launched cold starts — when the SDK finishes the push-driven login and the call arrives, this emits. |
+| `voipClient.calls$`           | `Call[]`                                                                                     | Multi-call UIs (call waiting, conference).                                                                                                                                        |
+| `call.callState$`             | `TelnyxCallState`                                                                            | Per-call transitions (ringing / active / held / ended).                                                                                                                           |
 
 #### Redirect to login on disconnect
 
@@ -211,7 +211,7 @@ The SDK then connects the socket and restores the call internally. You observe `
 
 #### Detecting a Push-Launched Cold Start
 
-When the OS wakes the app from a terminated state to deliver a call, the SDK is already handling login via the push flow. If your app *also* triggers a login on mount, you get two competing sessions (double-login), which causes the call to fail or the socket to churn.
+When the OS wakes the app from a terminated state to deliver a call, the SDK is already handling login via the push flow. If your app _also_ triggers a login on mount, you get two competing sessions (double-login), which causes the call to fail or the socket to churn.
 
 Use the static `TelnyxVoipClient.isLaunchedFromPushNotification()` to guard your login:
 

@@ -141,7 +141,7 @@ CallKit (iOS) and ConnectionService (Android) already render the native incoming
 
 #### Detecting a Push-Launched Cold Start
 
-When the OS wakes your app from a terminated state to deliver a call, the SDK is already logging in with stored credentials as part of the push flow. If your app *also* triggers a login on mount, you will get two competing sessions (double-login), which causes the call to fail or the socket to churn.
+When the OS wakes your app from a terminated state to deliver a call, the SDK is already logging in with stored credentials as part of the push flow. If your app _also_ triggers a login on mount, you will get two competing sessions (double-login), which causes the call to fail or the socket to churn.
 
 Use `TelnyxVoipClient.isLaunchedFromPushNotification()` to skip your own login when a push is in flight:
 
