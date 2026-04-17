@@ -118,9 +118,18 @@ call.callState$.subscribe((state) => {
 
 ### Navigation
 
-As of **v0.3.0**, the SDK no longer navigates the host app. Routing on state transitions (e.g. redirecting to a login screen on disconnect, surfacing a dialer screen after answering a call via CallKit) is entirely the host app's responsibility. Subscribe to `connectionState$` and `activeCall$` and invoke your own navigator.
+As of **v0.3.0**, the SDK no longer navigates the host app. Routing on state transitions (e.g. redirecting to a login screen on disconnect, surfacing an in-call screen when a call arrives via push) is entirely the host app's responsibility. Subscribe to the observables below and invoke your own navigator.
 
-Example using `expo-router`:
+**What to observe:**
+
+| Observable | Emits | Use it for |
+|---|---|---|
+| `voipClient.connectionState$` | `TelnyxConnectionState` (`CONNECTING`, `CONNECTED`, `RECONNECTING`, `DISCONNECTED`, `ERROR`) | Redirect to login on `DISCONNECTED`; gate outbound-call UI on `CONNECTED`. There is no separate `loginState$` — `CONNECTED` means the socket is up **and** authenticated. |
+| `voipClient.activeCall$` | `Call \| null` | Navigate to your in-call screen when a call appears. Primary signal for push-launched cold starts — when the SDK finishes the push-driven login and the call arrives, this emits. |
+| `voipClient.calls$` | `Call[]` | Multi-call UIs (call waiting, conference). |
+| `call.callState$` | `TelnyxCallState` | Per-call transitions (ringing / active / held / ended). |
+
+#### Redirect to login on disconnect
 
 ```tsx
 import { router } from 'expo-router';
@@ -133,6 +142,43 @@ useEffect(() => {
       router.replace('/');
     }
   });
+  return () => sub.unsubscribe();
+}, []);
+```
+
+#### Navigate to in-call screen when a call arrives (push-launched or otherwise)
+
+This is the piece that pairs with the push flow: after `isLaunchedFromPushNotification()` tells you to skip manual login, the SDK drives login internally and the call shows up on `activeCall$`. The same subscription handles foreground pushes and outbound calls, so you only need one:
+
+```tsx
+import { router } from 'expo-router';
+import { useEffect } from 'react';
+
+useEffect(() => {
+  // Handle the cold-start race: if the call was already delivered before this
+  // component mounted (common on push-launched cold starts), read it synchronously.
+  if (voipClient.currentActiveCall) {
+    router.replace('/call');
+  }
+
+  const sub = voipClient.activeCall$.subscribe((call) => {
+    if (call) router.replace('/call');
+    else router.replace('/dialer');
+  });
+  return () => sub.unsubscribe();
+}, []);
+```
+
+**Note on CallKit / ConnectionService:** the native call UI (ringtone, answer/decline) is shown by the OS regardless — your RN screen is only visible once the user taps into the app. If you only need native UI, you can skip the navigation step entirely.
+
+#### Optional: gate outbound-call UI on CONNECTED
+
+```tsx
+import { canMakeCalls } from '@telnyx/react-voice-commons-sdk';
+
+const [canCall, setCanCall] = useState(false);
+useEffect(() => {
+  const sub = voipClient.connectionState$.subscribe((s) => setCanCall(canMakeCalls(s)));
   return () => sub.unsubscribe();
 }, []);
 ```

@@ -327,6 +327,24 @@ React.useEffect(() => {
 
 Applies to any login entry point — including login forms that re-submit stored credentials, splash screens that eagerly log in, and background tasks that refresh tokens.
 
+**What to observe after the SDK finishes the push login:**
+
+- `voipClient.connectionState$` → emits `CONNECTED` (there is no separate `loginState$` — `CONNECTED` means socket up **and** authenticated).
+- `voipClient.activeCall$` → emits the `Call` once the SDK has processed the push.
+- `voipClient.currentActiveCall` → synchronous accessor; on push-launched mounts the call may already be present by the time you subscribe, so check this first.
+
+```tsx
+React.useEffect(() => {
+  if (voipClient.currentActiveCall) router.replace('/call');
+  const sub = voipClient.activeCall$.subscribe((call) => {
+    if (call) router.replace('/call');
+  });
+  return () => sub.unsubscribe();
+}, []);
+```
+
+CallKit (iOS) and ConnectionService (Android) already render the native incoming-call UI; this RN-side navigation only matters once the user taps into the app.
+
 ### Step 4: Token Registration (Optional)
 
 Push tokens are handled automatically by the SDK during authentication. For most apps, you don't need to do anything additional.

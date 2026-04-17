@@ -119,7 +119,25 @@ You do not need to wire up JS push handlers. The native layer does the work:
 - **Android**: `TelnyxFirebaseMessagingService` receives the FCM message, shows the incoming call notification, and (on Answer/Decline) launches `TelnyxMainActivity` with the call intent.
 - **iOS**: `TelnyxVoipPushHandler` receives the PushKit payload and reports the call to CallKit.
 
-In both cases the SDK connects the socket and restores the call internally — you just observe `voipClient.calls$` to render UI.
+In both cases the SDK connects the socket and restores the call internally — you just observe the VoIP client's streams to render UI.
+
+**What to observe after the SDK-driven push login:**
+
+- `voipClient.connectionState$` — emits `CONNECTED` when the socket is up and authenticated (there is no separate `loginState$`).
+- `voipClient.activeCall$` — emits the `Call` once the SDK has processed the push and the call has arrived. Navigate to your in-call screen here.
+- `voipClient.currentActiveCall` — synchronous accessor for the cold-start race: on a push-launched mount, the call may already be present by the time you subscribe, so check this first and route immediately if set.
+
+```tsx
+React.useEffect(() => {
+  if (voipClient.currentActiveCall) router.replace('/call');
+  const sub = voipClient.activeCall$.subscribe((call) => {
+    if (call) router.replace('/call');
+  });
+  return () => sub.unsubscribe();
+}, []);
+```
+
+CallKit (iOS) and ConnectionService (Android) already render the native incoming-call UI, so this navigation only matters once the user taps into the app.
 
 #### Detecting a Push-Launched Cold Start
 
