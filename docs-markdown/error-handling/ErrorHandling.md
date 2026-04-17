@@ -323,26 +323,19 @@ const handlePushTokenError = async () => {
 
 ### Background Processing Errors
 
-**Error**: `BACKGROUND_PROCESSING_FAILED`
+**Symptoms**: Incoming calls not handled when the app is backgrounded or terminated.
 
-**Symptoms**: Incoming calls not handled when app is backgrounded.
+**Do not** register `messaging().setBackgroundMessageHandler(...)` from JavaScript. Android background push is handled entirely by the native `TelnyxFirebaseMessagingService` that your `AppFirebaseMessagingService` extends — a JS handler will race the native service and can drop or double-process calls. There is no `TelnyxVoiceApp.handleBackgroundPush` step on Android.
 
-**Solutions**:
+**Things to check instead:**
 
-```tsx
-// Ensure proper background handler setup
-messaging().setBackgroundMessageHandler(async (remoteMessage) => {
-  try {
-    console.log('Background message received:', remoteMessage);
-    await TelnyxVoiceApp.handleBackgroundPush(remoteMessage.data);
-  } catch (error) {
-    console.error('Background processing failed:', error);
+1. Your `MainActivity` extends `TelnyxMainActivity`.
+2. Your FCM service extends `TelnyxFirebaseMessagingService` and is registered in `AndroidManifest.xml`.
+3. Your notification action receiver extends `TelnyxNotificationActionReceiver` and is registered in `AndroidManifest.xml` with the correct action names.
+4. `google-services.json` is present at the project root and the FCM server key is configured in the Telnyx portal.
+5. On cold-start from push, you are not calling `login*` unconditionally — see [Push Notification Flow](../push-notification/app-setup.md#step-3-detect-push-launched-cold-starts-avoid-double-login) and guard with `TelnyxVoipClient.isLaunchedFromPushNotification()`.
 
-    // Log error for debugging
-    crashlytics().recordError(error);
-  }
-});
-```
+See [docs-markdown/push-notification/app-setup.md](../push-notification/app-setup.md) for the full native setup.
 
 ## Network and Connectivity Errors
 

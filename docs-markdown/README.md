@@ -227,17 +227,12 @@ The `TelnyxMainActivity` provides:
 
 ### 2. Push Notification Setup
 
-1. Place `google-services.json` in the project root
-2. Register background message handler:
+1. Place `google-services.json` in the project root.
+2. Create an FCM service that extends `TelnyxFirebaseMessagingService` and a notification action receiver that extends `TelnyxNotificationActionReceiver`, then register both in `AndroidManifest.xml`. See [push-notification/app-setup.md](./push-notification/app-setup.md) for the full boilerplate.
 
-```tsx
-import messaging from '@react-native-firebase/messaging';
-import { TelnyxVoiceApp } from '@telnyx/react-voice-commons-sdk';
-
-messaging().setBackgroundMessageHandler(async (remoteMessage) => {
-  await TelnyxVoiceApp.handleBackgroundPush(remoteMessage.data);
-});
-```
+> **Do not** register `messaging().setBackgroundMessageHandler(...)` from JS. Android push is handled entirely by the native `TelnyxFirebaseMessagingService` — adding a JS handler will fight the native layer and can double-process calls. There is no `TelnyxVoiceApp.handleBackgroundPush` step required on Android.
+>
+> To avoid double-login when the app is cold-started from a push, guard your auto-login with `TelnyxVoipClient.isLaunchedFromPushNotification()`. See [push-notification/app-setup.md → Step 3](./push-notification/app-setup.md#step-3-detect-push-launched-cold-starts-avoid-double-login).
 
 ### iOS Integration
 

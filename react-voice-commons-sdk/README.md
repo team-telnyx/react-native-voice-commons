@@ -154,6 +154,56 @@ await call.hold();
 await call.hangup();
 ```
 
+### Push Notification Flow
+
+You do not wire push handlers in JS. The native layer does the work:
+
+- **Android**: `TelnyxFirebaseMessagingService` receives the FCM message, posts the call notification, and launches `TelnyxMainActivity` with the intent on Answer/Decline.
+- **iOS**: `TelnyxVoipPushHandler` receives the PushKit payload and reports the call to CallKit.
+
+The SDK then connects the socket and restores the call internally. You observe `voipClient.calls$` to render UI.
+
+#### Detecting a Push-Launched Cold Start
+
+When the OS wakes the app from a terminated state to deliver a call, the SDK is already handling login via the push flow. If your app *also* triggers a login on mount, you get two competing sessions (double-login), which causes the call to fail or the socket to churn.
+
+Use the static `TelnyxVoipClient.isLaunchedFromPushNotification()` to guard your login:
+
+```tsx
+import { TelnyxVoipClient } from '@telnyx/react-voice-commons-sdk';
+
+React.useEffect(() => {
+  TelnyxVoipClient.isLaunchedFromPushNotification().then((isFromPush) => {
+    if (isFromPush) return; // SDK is handling login via the push flow
+    voipClient.loginFromStoredConfig(); // Normal cold start
+  });
+}, []);
+```
+
+Returns `true` when a pending FCM intent (Android) or PushKit payload (iOS) has not yet been consumed.
+
+#### Common Mistake: Manual or Automatic Login on Push
+
+The single most common integration bug is re-logging in while the SDK is already handling a push:
+
+```tsx
+// WRONG — runs on every mount, including push-launched cold starts
+React.useEffect(() => {
+  voipClient.login(config); // or loginFromStoredConfig(), or loginWithToken()
+}, []);
+```
+
+```tsx
+// Right — guard the login on push-launched cold starts
+React.useEffect(() => {
+  TelnyxVoipClient.isLaunchedFromPushNotification().then((isFromPush) => {
+    if (!isFromPush) voipClient.loginFromStoredConfig();
+  });
+}, []);
+```
+
+Symptoms of getting this wrong: the incoming call rings briefly then disappears, the socket disconnects mid-call, or CallKit shows a call that immediately ends.
+
 ### Authentication & Persistent Storage
 
 The library supports both credential-based and token-based authentication with automatic persistence for seamless reconnection.
@@ -273,17 +323,12 @@ The `TelnyxMainActivity` provides:
 
 ### 2. Push Notification Setup
 
-1. Place `google-services.json` in the project root
-2. Register background message handler:
+1. Place `google-services.json` in the project root.
+2. Create an FCM service that extends `TelnyxFirebaseMessagingService` and a notification action receiver that extends `TelnyxNotificationActionReceiver`, then register both in `AndroidManifest.xml`. See the [push notification app setup guide](../docs-markdown/push-notification/app-setup.md) for the full boilerplate.
 
-```tsx
-import messaging from '@react-native-firebase/messaging';
-import { TelnyxVoiceApp } from '@telnyx/react-voice-commons-sdk';
+> **Do not** register `messaging().setBackgroundMessageHandler(...)` from JS. Android push is handled entirely by the native `TelnyxFirebaseMessagingService` — adding a JS handler will fight the native layer and can double-process calls. There is no `TelnyxVoiceApp.handleBackgroundPush` step required on Android.
 
-messaging().setBackgroundMessageHandler(async (remoteMessage) => {
-  await TelnyxVoiceApp.handleBackgroundPush(remoteMessage.data);
-});
-```
+See [Push Notification Flow](#push-notification-flow) below for how to detect push-launched cold starts and avoid double-login.
 
 ### iOS Integration
 
