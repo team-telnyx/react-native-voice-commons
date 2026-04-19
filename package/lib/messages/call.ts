@@ -386,14 +386,20 @@ export function createDTMFRequest({ digits, sessionId }: CreateDTMFRequestParams
 type DTMFResponse = {
   id: string;
   jsonrpc: '2.0';
-  result: { message: string; sessid: string };
-  voice_sdk_id: string;
+  // `message` is legacy — the Telnyx gateway currently acks DTMF with just `sessid`.
+  // Kept optional so older servers that still emit `{ message: 'SENT', sessid }` still type-check.
+  result: { message?: string; sessid: string };
+  voice_sdk_id?: string;
 };
 
 export function isDTMFResponse(msg: unknown): msg is DTMFResponse {
-  if (!msg) {
+  if (!msg || typeof msg !== 'object') {
     return false;
   }
-  const temp: Partial<DTMFResponse> = msg;
-  return temp.result?.message === 'SENT' && Boolean(temp.result?.sessid);
+  const temp = msg as Partial<DTMFResponse>;
+  // A DTMF ack is any JSON-RPC success response for a `telnyx_rtc.info` request
+  // that echoes back the session id. The Android SDK's `Call.dtmf()` doesn't
+  // validate the response at all (fire-and-forget); this check is just enough
+  // to distinguish the success ack from a JSON-RPC error frame.
+  return Boolean(temp.result?.sessid);
 }

@@ -10,6 +10,10 @@
 
 - **Fixed `IllegalArgumentException: Could not find @ReactModule annotation in VoicePnBridgeModule` crash** on Android when the app is cold-started by a push notification action (Answer/Decline). React Native 0.79+ requires `@ReactModule(name = …)` on native modules that are looked up by class via `ReactContext.getNativeModule(Class)`. The annotation has been added to `VoicePnBridgeModule`, and the module name is now sourced from a single `NAME` constant.
 
+### Dependencies
+
+- Now requires `@telnyx/react-native-voice-sdk >= 0.4.2`, which fixes a bug where every `Call.dtmf()` invocation threw `Invalid DTMF response received` even though the tone was delivered. See the [voice-sdk 0.4.2 changelog](../package/CHANGELOG.md#042-2026-04-19) for details.
+
 ## [0.3.1] (2026-04-16)
 
 ### Bug Fixing

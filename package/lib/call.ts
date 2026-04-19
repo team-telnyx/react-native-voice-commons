@@ -514,16 +514,16 @@ export class Call extends EventEmitter<CallEvents> {
   };
 
   /**
+   * Send DTMF tones on this call as a Verto `telnyx_rtc.info` message.
    *
-   * @param digits The DTMF digits to send
-   * This method will send a DTMF request to the Telnyx platform,
-   * and return the result of the DTMF action.
-   * @throws {Error} If the DTMF response is invalid
-   * @returns {Promise<string>} A promise that resolves with the DTMF result
+   * @param digits One or more DTMF characters. Valid characters are `0-9`, `A-D`,
+   *   `*`, and `#`; anything else is silently dropped by the platform.
+   * @returns A promise that resolves with the gateway ack object (`{ sessid, message? }`)
+   *   once the INFO request has been acknowledged.
+   * @throws If the socket returns an error frame or a malformed response (no `result.sessid`).
    * @example
    * ```typescript
-   * const result = await call.dtmf('1234');
-   * console.log(result); // 'SENT' or other result based on the DTMF action
+   * await call.dtmf('1234#');
    * ```
    */
   public dtmf = async (digits: string) => {
