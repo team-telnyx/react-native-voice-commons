@@ -172,6 +172,18 @@ export declare class Call {
    */
   toggleMute(): Promise<void>;
   /**
+   * Send DTMF tones on this call.
+   *
+   * Each character in `digits` is sent as a Verto INFO message to the Telnyx
+   * platform. Valid characters are `0-9`, `A-D`, `*`, and `#`; any other
+   * characters are silently dropped by the underlying SDK.
+   *
+   * Only valid while the call is `ACTIVE` — will throw otherwise. Safe to call
+   * with a single digit (e.g. for IVR dialpad presses) or a whole string
+   * (e.g. `"123#"`).
+   */
+  dtmf(digits: string): Promise<void>;
+  /**
    * Set the call to connecting state (used for push notification calls when answered via CallKit)
    * @internal
    */

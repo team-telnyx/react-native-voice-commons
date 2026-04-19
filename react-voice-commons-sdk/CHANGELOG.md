@@ -1,5 +1,15 @@
 # CHANGELOG.md
 
+## [0.4.0] (2026-04-19)
+
+### Enhancement
+
+- **DTMF support.** Added `Call.dtmf(digits: string): Promise<void>` — sends DTMF tones on the current call as Verto `INFO` messages. Accepts a single digit (e.g. `"5"`) or a whole string (e.g. `"1234#"`). Valid characters are `0-9`, `A-D`, `*`, and `#`; anything else is silently dropped by the underlying SDK. Call state must be `ACTIVE` — will throw otherwise.
+
+### Bug Fixing
+
+- **Fixed `IllegalArgumentException: Could not find @ReactModule annotation in VoicePnBridgeModule` crash** on Android when the app is cold-started by a push notification action (Answer/Decline). React Native 0.79+ requires `@ReactModule(name = …)` on native modules that are looked up by class via `ReactContext.getNativeModule(Class)`. The annotation has been added to `VoicePnBridgeModule`, and the module name is now sourced from a single `NAME` constant.
+
 ## [0.3.1] (2026-04-16)
 
 ### Bug Fixing

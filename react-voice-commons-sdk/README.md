@@ -198,7 +198,13 @@ await call.answer();
 await call.mute();
 await call.hold();
 await call.hangup();
+
+// Send DTMF tones (for IVRs, conference pins, etc.)
+await call.dtmf('1'); // single digit
+await call.dtmf('1234#'); // whole string
 ```
+
+**DTMF:** `call.dtmf(digits)` sends each character as a Verto `INFO` message to the Telnyx platform. Valid characters are `0-9`, `A-D`, `*`, and `#`; any other characters are silently dropped by the underlying SDK. The call must be in the `ACTIVE` state — calling `dtmf()` in any other state throws. Safe to call with a single digit for dialpad presses or with a whole string for pre-recorded sequences.
 
 ### Push Notification Flow
 

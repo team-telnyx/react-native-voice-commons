@@ -2,7 +2,7 @@ import '~/global.css';
 
 import { DarkTheme, DefaultTheme, Theme, ThemeProvider } from '@react-navigation/native';
 import { PortalHost } from '@rn-primitives/portal';
-import { router, Slot, Stack } from 'expo-router';
+import { router, Slot, Stack, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as React from 'react';
 import { Appearance, Platform } from 'react-native';
@@ -55,6 +55,11 @@ const voipClient = createTelnyxVoipClient({
 export default function RootLayout() {
   usePlatformSpecificSetup();
   const { isDarkColorScheme } = useColorScheme();
+  // Gate all router.* calls on this: expo-router's navigation state is not
+  // ready until rootNavState.key is set, and router.replace() before then
+  // throws "Attempted to navigate before mounting the Root Layout component".
+  const rootNavState = useRootNavigationState();
+  const isNavReady = !!rootNavState?.key;
 
   // If the app was cold-started from a push notification, skip auto-login —
   // the SDK handles login internally via the push notification flow.
@@ -71,13 +76,19 @@ export default function RootLayout() {
   }, []);
 
   React.useEffect(() => {
+    if (!isNavReady) return;
+    let skipInitial = true;
     const sub = voipClient.connectionState$.subscribe((state) => {
+      if (skipInitial) {
+        skipInitial = false;
+        return;
+      }
       if (state === TelnyxConnectionState.DISCONNECTED) {
         router.replace('/');
       }
     });
     return () => sub.unsubscribe();
-  }, []);
+  }, [isNavReady]);
 
   return (
     <TelnyxVoiceApp voipClient={voipClient} enableAutoReconnect={true} debug={true}>
