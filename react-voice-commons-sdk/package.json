@@ -59,7 +59,7 @@
   "homepage": "https://github.com/team-telnyx/react-native-voice-commons",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/team-telnyx/react-native-voice-commons.git"
+    "url": "https://github.com/team-telnyx/react-native-voice-commons.git"
   },
   "bugs": {
     "url": "https://github.com/team-telnyx/react-native-voice-commons/issues"
