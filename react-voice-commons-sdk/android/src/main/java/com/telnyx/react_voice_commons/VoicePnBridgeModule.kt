@@ -9,17 +9,18 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.Arguments
+import com.facebook.react.module.annotations.ReactModule
 import com.facebook.react.modules.core.DeviceEventManagerModule
 
+@ReactModule(name = VoicePnBridgeModule.NAME)
 class VoicePnBridgeModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
     
     companion object {
+        const val NAME = "VoicePnBridge"
         private const val TAG = "VoicePnBridgeModule"
     }
-    
-    override fun getName(): String {
-        return "VoicePnBridge"
-    }
+
+    override fun getName(): String = NAME
     
     @ReactMethod
     fun getPendingPushAction(promise: Promise) {

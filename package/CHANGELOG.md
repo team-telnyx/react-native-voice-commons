@@ -1,5 +1,12 @@
 # CHANGELOG.md
 
+## [0.4.2](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk-v0.4.2) (2026-04-19)
+
+### Bug Fixing
+
+- **Fixed `Call.dtmf()` throwing `Invalid DTMF response received` on every call.** `isDTMFResponse` required `result.message === 'SENT'`, but the Telnyx gateway acks DTMF INFO requests with just `{ sessid }` — no `message` field — so valid acks were rejected even though the tones were delivered. The validator now accepts any JSON-RPC `result` frame that echoes back the session id (matching the Android SDK's fire-and-forget semantics). `DTMFResponse.result.message` remains in the type as an optional field so older gateway builds that still emit `{ message: 'SENT', sessid }` continue to type-check.
+- Corrected the JSDoc on `Call.dtmf()` — it previously claimed the resolved value was the string `'SENT'`; the resolved value is the gateway ack object `{ sessid, message? }`.
+
 ## [0.4.1](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk-v0.4.1) (2026-04-01)
 
 ### Bug Fixing

@@ -110,7 +110,13 @@ await call.answer();
 await call.mute();
 await call.hold();
 await call.hangup();
+
+// Send DTMF tones (for IVRs, conference pins, etc.)
+await call.dtmf('1'); // single digit
+await call.dtmf('1234#'); // whole string
 ```
+
+**DTMF:** `call.dtmf(digits)` sends each character as a Verto `INFO` message. Valid characters are `0-9`, `A-D`, `*`, and `#`; anything else is silently dropped. The call must be `ACTIVE` — throws otherwise.
 
 ### 5. Push Notification Flow (What Actually Happens)
 

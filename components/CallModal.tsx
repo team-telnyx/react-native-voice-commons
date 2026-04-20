@@ -13,6 +13,7 @@ type CallModalProps = {
     onPress: () => void;
     variant?: 'primary' | 'secondary' | 'danger';
   }>;
+  extraContent?: React.ReactNode;
   onRequestClose?: () => void;
 };
 
@@ -23,6 +24,7 @@ export function CallModal({
   isLoading,
   loadingText,
   buttons,
+  extraContent,
   onRequestClose,
 }: CallModalProps) {
   const getButtonStyle = (variant: 'primary' | 'secondary' | 'danger' = 'primary') => {
@@ -120,6 +122,9 @@ export function CallModal({
               </Text>
             )
           )}
+
+          {/* Extra content (e.g. DTMF dialpad) */}
+          {!isLoading && extraContent && <View style={{ marginBottom: 16 }}>{extraContent}</View>}
 
           {/* Buttons */}
           {!isLoading && buttons.length > 0 && (

@@ -1,5 +1,15 @@
 # CHANGELOG.md
 
+## Unreleased (2026-04-19)
+
+### Enhancement
+
+• Consumes `@telnyx/react-voice-commons-sdk@0.4.0` — demo now exposes DTMF in the active-call UI via `call.dtmf(digits)`.
+
+### Bug Fixing
+
+• Fixed `Attempted to navigate before mounting the Root Layout component` crash on cold start. `app/_layout.tsx` now gates the `connectionState$` → `router.replace('/')` subscription on `useRootNavigationState()` and skips the initial BehaviorSubject emission, so the redirect only fires on genuine `DISCONNECTED` transitions after the expo-router navigator is ready.
+
 ## [0.1.8-beta.0](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/0.1.8-beta.0) (2026-02-27)
 
 ### Bug Fixing
