@@ -1,5 +1,16 @@
 # CHANGELOG.md
 
+## [0.4.1] (2026-04-26)
+
+### Bug Fixing
+
+- **Recover from stale TelnyxRTC client on incoming VoIP push.** `SessionManager.handlePushNotification` now calls `client.isFresh(30_000)` before reusing an existing client. If the socket has been silent past the threshold (typical after an iOS app freeze), the client is disposed, state is flipped to `DISCONNECTED`, and the push falls through to the full `_connect()` path so login runs with the new push's `voice_sdk_id`. This resolves the case where an answered call would hang on "connecting" until CallKit timed out, because `processVoIPNotification()` was being called on a socket that had silently died.
+- Widened the reconnect-trigger state check in `handlePushNotification` to include `ERROR`, not only `DISCONNECTED`, so a push that arrives after a failed session re-establishes the connection instead of being dropped.
+
+### Dependencies
+
+- Now requires `@telnyx/react-native-voice-sdk >= 0.4.3`, which adds the `isFresh()` / `connectionIdleMs` API and auto-reconnects on unexpected socket errors. See the [voice-sdk 0.4.3 changelog](../package/CHANGELOG.md#043-2026-04-26) for details.
+
 ## [0.4.0] (2026-04-19)
 
 ### Enhancement
