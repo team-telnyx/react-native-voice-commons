@@ -608,9 +608,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     this.connection.addListener('telnyx.socket.message', this.onSocketMessage);
     this.connection.addListener('telnyx.socket.error', (error) => {
       log.error('[TelnyxRTC] WebSocket connection error:', error);
+      this.handleUnexpectedSocketFailure('error', error as any);
     });
     this.connection.addListener('telnyx.socket.close', () => {
       log.debug('[TelnyxRTC] WebSocket connection closed');
+      this.handleUnexpectedSocketFailure('close');
     });
 
     // Wait for WebSocket connection to be established
@@ -793,6 +795,25 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
   public get connected() {
     return this.connection !== null && this.connection.isConnected;
+  }
+
+  /**
+   * Returns true only if the socket both claims to be connected AND has seen
+   * live traffic within `maxIdleMs`. A socket that's idle longer than that
+   * cannot be trusted after an iOS app freeze — the kernel may have killed
+   * the TLS session without notifying the JS layer. Callers should treat a
+   * non-fresh connection as dead and force a reconnect.
+   */
+  public isFresh(maxIdleMs: number = 30000): boolean {
+    if (!this.connection || !this.connection.isConnected) return false;
+    return this.connection.idleMs < maxIdleMs;
+  }
+
+  /**
+   * Exposes the socket's idle duration for diagnostics / logging.
+   */
+  public get connectionIdleMs(): number {
+    return this.connection ? this.connection.idleMs : Infinity;
   }
 
   private onSocketMessage = (msg: unknown) => {
@@ -1212,6 +1233,40 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         this.onNetworkAvailable();
       }, 1500); // 1.5 seconds delay
     }
+  }
+
+  /**
+   * Handles an unexpected socket failure (error/close) after the initial
+   * connect+login has completed. Triggers the same reconnect path used for
+   * network changes so we recover when iOS thaws the app and kills the old
+   * TCP/TLS session ("Software caused connection abort").
+   *
+   * No-op if we haven't finished initial login yet (let the initial connect
+   * promise own its own error handling) or if a reconnect is already in flight.
+   */
+  private handleUnexpectedSocketFailure(reason: 'error' | 'close', error?: Error) {
+    if (!this.loginHandler) {
+      // Initial connect promise owns its own error handling.
+      return;
+    }
+    if (this.reconnecting) {
+      return;
+    }
+    log.warn(`[TelnyxRTC] Unexpected socket ${reason} after login — starting reconnect`);
+    try {
+      this.emit(
+        'telnyx.client.error',
+        error ?? new Error(`WebSocket ${reason}: reconnecting`)
+      );
+    } catch {
+      /* consumers may not be subscribed */
+    }
+    this.onNetworkUnavailable();
+    setTimeout(() => {
+      if (this.reconnecting) {
+        this.attemptReconnection();
+      }
+    }, 500);
   }
 
   /**
