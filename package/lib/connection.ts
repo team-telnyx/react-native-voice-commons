@@ -134,8 +134,10 @@ export class Connection extends EventEmitter<ConnectionEvents> {
 
     try {
       log.debug('Sending message to gateway', msg);
-      this._lastActivityAt = Date.now();
       this.socket.send(JSON.stringify(msg));
+      // Only stamp activity AFTER a successful send so a throwing/queued
+      // send doesn't make a dead socket look fresh to isFresh() callers.
+      this._lastActivityAt = Date.now();
     } catch (error) {
       log.error(
         '[Connection]: Failed to send WebSocket message - bridge may be disconnected:',

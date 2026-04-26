@@ -1241,12 +1241,16 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * network changes so we recover when iOS thaws the app and kills the old
    * TCP/TLS session ("Software caused connection abort").
    *
-   * No-op if we haven't finished initial login yet (let the initial connect
-   * promise own its own error handling) or if a reconnect is already in flight.
+   * No-op if we haven't finished login yet (let the initial connect
+   * promise own its own error handling) or if a reconnect is already in
+   * flight. We use `sessionId` as the marker because it's only assigned
+   * after `loginHandler.login()` resolves successfully — `loginHandler`
+   * itself is constructed before login runs and would let socket errors
+   * during the initial login attempt tear down the in-flight connect.
    */
   private handleUnexpectedSocketFailure(reason: 'error' | 'close', error?: Error) {
-    if (!this.loginHandler) {
-      // Initial connect promise owns its own error handling.
+    if (!this.sessionId) {
+      // Initial connect/login has not completed; let connect() own the error.
       return;
     }
     if (this.reconnecting) {
