@@ -1,5 +1,12 @@
 # CHANGELOG.md
 
+## [0.4.3](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk-v0.4.3) (2026-04-26)
+
+### Bug Fixing
+
+- **Recover from stale WebSocket after iOS app freeze.** `Connection` now stamps `lastActivityAt` on open / successful send / receive and exposes it via `Connection.idleMs`. `TelnyxRTC.isFresh(maxIdleMs = 30_000)` and `TelnyxRTC.connectionIdleMs` let callers detect a socket that _appears_ connected but has been silent past the server's keep-alive cadence — typical when iOS thaws a frozen app and the kernel has already reaped the TLS session without notifying the JS WebSocket wrapper.
+- **Auto-reconnect on socket error/close after login.** `telnyx.socket.error` and `telnyx.socket.close` now trigger the existing network-loss recovery path (`onNetworkUnavailable()` + `attemptReconnection()`). Previously these events were only logged, so a silent kernel-level abort during freeze left the client believing it was still connected indefinitely.
+
 ## [0.4.2](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk-v0.4.2) (2026-04-19)
 
 ### Bug Fixing

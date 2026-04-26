@@ -23,6 +23,12 @@ export class Connection extends EventEmitter<ConnectionEvents> {
   private reconnectAttempts: number = 0;
   private reconnectTimer: any = null;
 
+  // Track last time we observed live traffic in either direction. Used by
+  // callers to decide whether the socket is trustworthy after the app has
+  // been frozen by iOS (which can leave the JS side thinking it's still
+  // connected while the kernel has already discarded the TLS session).
+  private _lastActivityAt: number = 0;
+
   private transactions: Map<string, DeferredPromise<unknown>>;
   private messageQueue: unknown[];
 
@@ -45,6 +51,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
     this.socket.onOpen(() => {
       log.debug('[Connection]: WebSocket connection opened');
       this.isSocketConnected = true;
+      this._lastActivityAt = Date.now();
       if (this.reconnectTimer) {
         clearTimeout(this.reconnectTimer);
         this.reconnectTimer = null;
@@ -89,6 +96,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
     this.socket.onMessage((message: string) => {
       const parsedMessage = this.safeParseMessage(message);
       log.debug('Received message:', parsedMessage);
+      this._lastActivityAt = Date.now();
 
       if (isMessage(parsedMessage)) {
         const transaction = this.transactions.get(parsedMessage.id);
@@ -127,6 +135,9 @@ export class Connection extends EventEmitter<ConnectionEvents> {
     try {
       log.debug('Sending message to gateway', msg);
       this.socket.send(JSON.stringify(msg));
+      // Only stamp activity AFTER a successful send so a throwing/queued
+      // send doesn't make a dead socket look fresh to isFresh() callers.
+      this._lastActivityAt = Date.now();
     } catch (error) {
       log.error(
         '[Connection]: Failed to send WebSocket message - bridge may be disconnected:',
@@ -161,6 +172,16 @@ export class Connection extends EventEmitter<ConnectionEvents> {
   };
   public get isConnected() {
     return this.isSocketConnected;
+  }
+
+  /**
+   * Milliseconds since the last observed traffic on the socket (open, send,
+   * or receive). Returns `Infinity` if we've never seen traffic. Used to
+   * detect silently-dead sockets when iOS thaws the app after a freeze.
+   */
+  public get idleMs(): number {
+    if (this._lastActivityAt === 0) return Infinity;
+    return Date.now() - this._lastActivityAt;
   }
 
   private buildWebsocketURL = () => {
