@@ -202,6 +202,39 @@ class SessionManager {
     );
     // Store the push notification payload for when the client is created
     this._pendingPushPayload = payload;
+    // If we have a TelnyxRTC instance but its socket isn't fresh — either not
+    // connected at all, or connected but with no traffic for longer than the
+    // threshold — dispose it so we go through the full _connect() path below
+    // instead of calling processVoIPNotification on a stale client.
+    //
+    // This handles two cases iOS gives us with the same code path:
+    //   1. Terminated-then-cold-launched: a client exists (constructed at
+    //      app boot) but its connection was never opened (idleMs=Infinity).
+    //   2. Suspended-then-thawed: a client exists with `connected=true`,
+    //      but the kernel killed the TLS session during freeze without
+    //      notifying the JS WebSocket wrapper, so no error event fired.
+    //
+    // 30s threshold matches the server's keep-alive ping cadence (~20s),
+    // so a live session always remains fresh.
+    const STALE_THRESHOLD_MS = 30000;
+    if (this._telnyxClient) {
+      const client = this._telnyxClient;
+      const isFresh =
+        typeof client.isFresh === 'function'
+          ? client.isFresh(STALE_THRESHOLD_MS)
+          : !!client.connected;
+      if (!isFresh) {
+        try {
+          await this._telnyxClient.disconnect();
+        } catch (err) {
+          console.warn('SessionManager: disconnect of stale client threw:', err);
+        }
+        this._telnyxClient = undefined;
+        if (this.currentState !== connection_state_1.TelnyxConnectionState.DISCONNECTED) {
+          this._connectionState.next(connection_state_1.TelnyxConnectionState.DISCONNECTED);
+        }
+      }
+    }
     // If we don't have a config yet but we're processing a push notification,
     // attempt to load stored config first (for terminated app startup)
     if (!this._currentConfig && !this._telnyxClient) {
@@ -269,11 +302,16 @@ class SessionManager {
       console.log(
         'SessionManager: RELEASE DEBUG - No client available, checking if we can trigger immediate connection'
       );
-      // If we have config (either existing or newly loaded from storage) and are disconnected, trigger immediate connection
-      // The _connect() method will process the pending push payload BEFORE calling connect()
+      // If we have config (either existing or newly loaded from storage) and
+      // are not currently connected/connecting, trigger immediate connection.
+      // We accept DISCONNECTED and ERROR (a socket failure bumps state to
+      // ERROR) so a push after a failed session still re-establishes the
+      // connection. The _connect() method will process the pending push
+      // payload BEFORE calling connect().
       if (
         this._currentConfig &&
-        this.currentState === connection_state_1.TelnyxConnectionState.DISCONNECTED
+        (this.currentState === connection_state_1.TelnyxConnectionState.DISCONNECTED ||
+          this.currentState === connection_state_1.TelnyxConnectionState.ERROR)
       ) {
         console.log(
           'SessionManager: RELEASE DEBUG - Triggering immediate connection for push notification with config type:',
