@@ -1,6 +1,6 @@
 # CHANGELOG.md
 
-## [0.4.1] (2026-04-26)
+## [0.4.1] (2026-04-27)
 
 ### Bug Fixing
 
@@ -9,7 +9,7 @@
 
 ### Dependencies
 
-- Now requires `@telnyx/react-native-voice-sdk >= 0.4.3`, which adds the `isFresh()` / `connectionIdleMs` API and auto-reconnects on unexpected socket errors. See the [voice-sdk 0.4.3 changelog](../package/CHANGELOG.md#043-2026-04-26) for details.
+- Now requires `@telnyx/react-native-voice-sdk >= 0.4.3`, which adds the `isFresh()` / `connectionIdleMs` API and auto-reconnects on unexpected socket errors. See the [voice-sdk 0.4.3 changelog](../package/CHANGELOG.md#043-2026-04-27) for details.
 
 ## [0.4.0] (2026-04-19)
 

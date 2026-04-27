@@ -1,6 +1,6 @@
 # CHANGELOG.md
 
-## [0.4.3](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk-v0.4.3) (2026-04-26)
+## [0.4.3](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk-v0.4.3) (2026-04-27)
 
 ### Bug Fixing
 
