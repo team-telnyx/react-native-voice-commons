@@ -1,5 +1,11 @@
 # CHANGELOG.md
 
+## [0.4.2] (2026-04-27)
+
+### Bug Fixing
+
+- `Call.dtmf()` now sends the full `dialogParams` payload on `telnyx_rtc.info` to match the Android Voice SDK's wire format (via `@telnyx/react-native-voice-sdk@0.4.4`).
+
 ## [0.4.1] (2026-04-27)
 
 ### Bug Fixing
