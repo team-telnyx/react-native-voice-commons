@@ -346,6 +346,13 @@ export function isModifyCallAnswer(msg: unknown): msg is ModifyCallAnswer {
   );
 }
 
+/**
+ * Verto `telnyx_rtc.info` request used to send DTMF tones.
+ *
+ * Mirrors the shape produced by the Android Voice SDK so the gateway sees a
+ * consistent payload across platforms — including the full `dialogParams`
+ * object with empty-but-present defaults for fields we don't track.
+ */
 type DTMFRequest = {
   jsonrpc: '2.0';
   id: string;
@@ -353,11 +360,20 @@ type DTMFRequest = {
   params: {
     sessid: string;
     dtmf: string;
-    dialogParams?: {
-      telnyxLegId: string;
-      telnyxSessionId: string;
+    dialogParams: {
+      attach: boolean;
+      audio: boolean;
       callID: string;
+      caller_id_name: string;
+      caller_id_number: string;
+      clientState: string;
+      custom_headers: { name: string; value: string }[];
       destination_number: string;
+      remote_caller_id_name: string;
+      screenShare: boolean;
+      useStereo: boolean;
+      userVariables: unknown[];
+      video: boolean;
     };
   };
 };
@@ -365,20 +381,38 @@ type DTMFRequest = {
 type CreateDTMFRequestParams = {
   digits: string;
   sessionId: string;
-  telnyxLegId?: string;
-  telnyxSessionId?: string;
-  callId?: string;
+  callId: string;
+  callerIdName?: string;
+  callerIdNumber?: string;
+  clientState?: string;
+  customHeaders?: { name: string; value: string }[];
   destinationNumber?: string;
+  remoteCallerIdName?: string;
 };
 
-export function createDTMFRequest({ digits, sessionId }: CreateDTMFRequestParams): DTMFRequest {
+export function createDTMFRequest(params: CreateDTMFRequestParams): DTMFRequest {
   return {
     id: uuid(),
     jsonrpc: '2.0',
     method: TelnyxRTCMethod.INFO,
     params: {
-      sessid: sessionId,
-      dtmf: digits,
+      sessid: params.sessionId,
+      dtmf: params.digits,
+      dialogParams: {
+        attach: false,
+        audio: true,
+        callID: params.callId,
+        caller_id_name: params.callerIdName ?? '',
+        caller_id_number: params.callerIdNumber ?? '',
+        clientState: params.clientState ?? '',
+        custom_headers: params.customHeaders ?? [],
+        destination_number: params.destinationNumber ?? '',
+        remote_caller_id_name: params.remoteCallerIdName ?? '',
+        screenShare: false,
+        useStereo: false,
+        userVariables: [],
+        video: false,
+      },
     },
   };
 }
