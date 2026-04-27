@@ -1,5 +1,11 @@
 # CHANGELOG.md
 
+## [0.4.4](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk-v0.4.4) (2026-04-27)
+
+### Bug Fixing
+
+- **`Call.dtmf()` now sends a full `dialogParams` object on the `telnyx_rtc.info` request to match the Android Voice SDK.** Previously only `{ sessid, dtmf }` was sent. The new payload mirrors Android exactly — `attach`, `audio`, `callID`, `caller_id_name`, `caller_id_number`, `clientState`, `custom_headers`, `destination_number`, `remote_caller_id_name`, `screenShare`, `useStereo`, `userVariables`, `video` — populated from the call's `CallOptions` where available and empty-but-present defaults (`""`, `[]`, `false`) for fields we don't track. Fields not represented in `CallOptions` (`screenShare`, `useStereo`, `userVariables`, `video`) are always sent as their Android-equivalent defaults.
+
 ## [0.4.3](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk-v0.4.3) (2026-04-27)
 
 ### Bug Fixing

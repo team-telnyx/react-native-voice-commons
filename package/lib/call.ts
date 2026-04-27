@@ -531,6 +531,12 @@ export class Call extends EventEmitter<CallEvents> {
       digits,
       sessionId: this.sessionId,
       callId: this.callId,
+      callerIdName: this.options.callerIdName,
+      callerIdNumber: this.options.callerIdNumber,
+      clientState: this.options.clientState,
+      customHeaders: this.options.customHeaders,
+      destinationNumber: this.options.destinationNumber,
+      remoteCallerIdName: this.options.remoteCallerIdName,
     });
 
     const response = await this.connection.sendAndWait(DTMFRequest);
