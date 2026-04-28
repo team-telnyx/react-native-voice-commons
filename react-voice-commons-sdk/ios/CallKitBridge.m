@@ -38,7 +38,13 @@ RCT_EXTERN_METHOD(updateCall:(NSString *)callUUID
                   resolver:(RCTPromiseResolveBlock)resolve 
                   rejecter:(RCTPromiseRejectBlock)reject)
 
-RCT_EXTERN_METHOD(getActiveCalls:(RCTPromiseResolveBlock)resolve 
+RCT_EXTERN_METHOD(getActiveCalls:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(publicLog:(NSString *)tag
+                  level:(NSString *)level
+                  message:(NSString *)message
+                  resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
 @end

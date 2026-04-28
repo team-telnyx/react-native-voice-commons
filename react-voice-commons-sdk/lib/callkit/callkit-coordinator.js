@@ -56,6 +56,7 @@ exports.callKitCoordinator = void 0;
 const react_native_1 = require('react-native');
 const callkit_1 = __importStar(require('./callkit'));
 const voice_pn_bridge_1 = require('../internal/voice-pn-bridge');
+const release_log_1 = require('../internal/release-log');
 /**
  * CallKit Coordinator - Manages the proper CallKit-first flow for iOS
  *
@@ -284,25 +285,33 @@ class CallKitCoordinator {
       if (call.direction === 'inbound') {
         const voipClient = this.getSDKClient();
         if (voipClient) {
-          console.log(
-            'CallKitCoordinator: Setting incoming call to CONNECTING state for CallKit answer'
-          );
           voipClient.setCallConnecting(call.callId);
         }
+        release_log_1.txlog.info(
+          'Coord',
+          `Inbound answer flow started uuid=${callKitUUID} webrtcCallId=${call.callId}`
+        );
         // Report call as connected to CallKit to trigger audio session activation
         setTimeout(async () => {
           try {
+            release_log_1.txlog.info(
+              'Coord',
+              `Calling CallKit.reportCallConnected (200ms) uuid=${callKitUUID}`
+            );
             await callkit_1.default.reportCallConnected(callKitUUID);
-            console.log('CallKitCoordinator: Reported call connected to activate audio session');
             this.connectedCalls.add(callKitUUID);
           } catch (error) {
-            console.error(
-              'CallKitCoordinator: Error reporting call connected for audio session:',
-              error
+            release_log_1.txlog.error(
+              'Coord',
+              `reportCallConnected failed: ${error?.message ?? error}`
             );
           }
         }, 200);
         setTimeout(() => {
+          release_log_1.txlog.info(
+            'Coord',
+            `Calling call.answer() (500ms) uuid=${callKitUUID} state=${call.state}`
+          );
           call.answer();
         }, 500);
       } else {
@@ -417,30 +426,33 @@ class CallKitCoordinator {
       isCallFromPush: this.isCallFromPush,
     });
     try {
-      // Get VoIP client instance
+      release_log_1.txlog.info(
+        'Coord',
+        `handleCallKitPushReceived entry uuid=${callKitUUID} autoAnswer=${this.shouldAutoAnswerNextCall}`
+      );
       const voipClient = this.getSDKClient();
       if (!voipClient) {
-        console.error('CallKitCoordinator: VoIP client not available');
+        release_log_1.txlog.error(
+          'Coord',
+          'VoIP client NOT available at push receive — JS not ready yet'
+        );
         return;
       }
-      // Retrieve pending push data from VoIP bridge
       const pendingPushJson = await voice_pn_bridge_1.VoicePnBridge.getPendingVoipPush();
       if (!pendingPushJson) {
-        console.warn('CallKitCoordinator: No pending push data found');
+        release_log_1.txlog.warn('Coord', 'No pending push data found in VoicePnBridge');
         return;
       }
       const pendingPush = JSON.parse(pendingPushJson);
       const realPushData = pendingPush?.payload;
       if (!realPushData?.metadata) {
-        console.warn('CallKitCoordinator: Invalid push data structure');
+        release_log_1.txlog.error('Coord', 'Invalid push data structure — metadata missing');
         return;
       }
-      // Prepare push metadata with CallKit flag
       const enhancedMetadata = {
         ...realPushData.metadata,
         from_callkit: true,
       };
-      // Check if auto-answer is set and add from_notification flag
       const shouldAddFromNotification = this.shouldAutoAnswerNextCall;
       let pushData;
       if (shouldAddFromNotification) {
@@ -450,16 +462,26 @@ class CallKitCoordinator {
           action: 'answer',
         };
         voipClient.queueAnswerFromCallKit();
+        release_log_1.txlog.info(
+          'Coord',
+          `Queued auto-answer, voice_sdk_id=${enhancedMetadata.voice_sdk_id ?? 'MISSING'} call_id=${enhancedMetadata.call_id ?? 'MISSING'}`
+        );
       } else {
         pushData = {
           metadata: enhancedMetadata,
         };
+        release_log_1.txlog.info(
+          'Coord',
+          `No auto-answer yet (push-only), voice_sdk_id=${enhancedMetadata.voice_sdk_id ?? 'MISSING'}`
+        );
       }
-      // Process the push notification
       await voipClient.handlePushNotification(pushData);
-      console.log('CallKitCoordinator: Push notification processed successfully');
+      release_log_1.txlog.info('Coord', 'voipClient.handlePushNotification resolved');
     } catch (error) {
-      console.error('CallKitCoordinator: Error processing push received event:', error);
+      release_log_1.txlog.error(
+        'Coord',
+        `handleCallKitPushReceived error: ${error?.message ?? error}`
+      );
     }
   }
   /**
@@ -584,30 +606,37 @@ class CallKitCoordinator {
    */
   setupWebRTCCallListeners(call, callKitUUID) {
     const handleStateChange = async (call, state) => {
-      console.log('CallKitCoordinator: WebRTC call state changed', {
-        callKitUUID,
-        webrtcCallId: call.callId,
-        state,
-      });
+      release_log_1.txlog.info(
+        'Coord',
+        `WebRTC state=${state} uuid=${callKitUUID} webrtcCallId=${call.callId}`
+      );
       switch (state) {
         case 'active':
           // When WebRTC call becomes active, just report as connected
           // (CallKit call was already answered in answerCallFromUI)
           if (!this.connectedCalls.has(callKitUUID)) {
-            console.log('CallKitCoordinator: WebRTC call active - reporting connected to CallKit');
+            release_log_1.txlog.info(
+              'Coord',
+              `Peer connection READY — reporting connected to CallKit uuid=${callKitUUID}`
+            );
             try {
               await callkit_1.default.reportCallConnected(callKitUUID);
             } catch (error) {
-              console.error('CallKitCoordinator: Error reporting call connected:', error);
+              release_log_1.txlog.error(
+                'Coord',
+                `reportCallConnected failed: ${error?.message ?? error}`
+              );
             }
             this.connectedCalls.add(callKitUUID);
           }
           break;
         case 'ended':
         case 'failed':
-          // Report call ended to CallKit (if not already ended)
           if (!this.endedCalls.has(callKitUUID)) {
-            console.log('CallKitCoordinator: Reporting call ended to CallKit');
+            release_log_1.txlog.info(
+              'Coord',
+              `Reporting call ended to CallKit state=${state} uuid=${callKitUUID}`
+            );
             const reason =
               state === 'failed'
                 ? callkit_1.CallEndReason.Failed

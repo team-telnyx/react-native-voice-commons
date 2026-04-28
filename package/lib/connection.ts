@@ -6,6 +6,7 @@ import type { DeferredPromise } from './promise';
 import log from 'loglevel';
 import { updateVoiceSDKId, VOICE_SDK_ID } from './global';
 import WebSocketSelfSigned from 'react-native-websocket-self-signed';
+import { logVertoEvent, logVertoInbound, logVertoOutbound } from './verto-log';
 
 type ConnectionEvents = {
   'telnyx.socket.open': () => void;
@@ -50,6 +51,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
 
     this.socket.onOpen(() => {
       log.debug('[Connection]: WebSocket connection opened');
+      logVertoEvent('SOCKET', `OPEN url=${wsUrl}`);
       this.isSocketConnected = true;
       this._lastActivityAt = Date.now();
       if (this.reconnectTimer) {
@@ -70,6 +72,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
 
     this.socket.onError((error: string) => {
       log.error('[Connection]: WebSocket error occurred', error);
+      logVertoEvent('SOCKET', `ERROR ${String(error)}`);
       try {
         this.emit('telnyx.socket.error', error as any);
       } catch (emitError) {
@@ -82,6 +85,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
 
     this.socket.onClose(() => {
       log.debug('[Connection]: WebSocket connection closed');
+      logVertoEvent('SOCKET', 'CLOSE');
       this.isSocketConnected = false;
       try {
         this.emit('telnyx.socket.close');
@@ -97,6 +101,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
       const parsedMessage = this.safeParseMessage(message);
       log.debug('Received message:', parsedMessage);
       this._lastActivityAt = Date.now();
+      logVertoInbound(parsedMessage);
 
       if (isMessage(parsedMessage)) {
         const transaction = this.transactions.get(parsedMessage.id);
@@ -134,6 +139,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
 
     try {
       log.debug('Sending message to gateway', msg);
+      logVertoOutbound(msg);
       this.socket.send(JSON.stringify(msg));
       // Only stamp activity AFTER a successful send so a throwing/queued
       // send doesn't make a dead socket look fresh to isFresh() callers.

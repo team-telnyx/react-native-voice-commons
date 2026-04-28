@@ -4,6 +4,7 @@ import { TelnyxVoipClient, createBackgroundTelnyxVoipClient } from './telnyx-voi
 import { TelnyxConnectionState } from './models/connection-state';
 import { Call } from './models/call';
 import { TelnyxVoiceProvider } from './context/TelnyxVoiceContext';
+import { txlog } from './internal/release-log';
 
 /**
  * Configuration options for TelnyxVoiceApp
@@ -456,20 +457,30 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
           const callId = pushData.metadata?.call_id;
           if (callId) {
             const { callKitCoordinator } = require('./callkit/callkit-coordinator');
-            log('Notifying CallKit coordinator about push notification:', callId);
+            txlog.info(
+              'App',
+              `Initial push detected on iOS, dispatching to CallKitCoordinator call_id=${callId} voice_sdk_id=${pushData.metadata?.voice_sdk_id ?? 'MISSING'} fromAppResume=${fromAppResume}`
+            );
             await callKitCoordinator.handleCallKitPushReceived(callId, {
               callData: { source: 'push_notification' },
               pushData: pushData,
             });
           } else {
-            log('No call_id found in push data, falling back to direct handling');
+            txlog.warn(
+              'App',
+              'iOS push with no call_id — falling back to direct voipClient.handlePushNotification'
+            );
             await voipClient.handlePushNotification(pushData);
           }
         } else {
+          txlog.info('App', 'Android initial push — dispatching to voipClient');
           await voipClient.handlePushNotification(pushData);
         }
 
-        log('Initial push notification processed');
+        txlog.info(
+          'App',
+          'Initial push notification processed (JS side done, now waiting on socket+INVITE+peer)'
+        );
       } catch (e) {
         log('Error processing initial push notification:', e);
         setIsHandlingForegroundCall(false);

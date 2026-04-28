@@ -1,5 +1,6 @@
 import Foundation
 import React
+import os
 
 #if os(iOS)
     import CallKit
@@ -7,6 +8,28 @@ import React
     import UIKit
     import PushKit
     import WebRTC
+
+    // MARK: - Public release-mode logger
+    // Writes to Apple's unified logging with %{public}@ so strings are NOT
+    // redacted in release. Filter in Console.app with:
+    //   subsystem:com.telnyx.voice
+    @objc public class TXLog: NSObject {
+        public static let subsystem = "com.telnyx.voice"
+        public static let osLog = OSLog(subsystem: TXLog.subsystem, category: "Telnyx")
+
+        @objc public static func info(_ tag: String, _ message: String) {
+            os_log("[%{public}@] %{public}@", log: TXLog.osLog, type: .info, tag, message)
+            NSLog("[TXLog][\(tag)] \(message)")
+        }
+        @objc public static func error(_ tag: String, _ message: String) {
+            os_log("[%{public}@] ❌ %{public}@", log: TXLog.osLog, type: .error, tag, message)
+            NSLog("[TXLog][\(tag)] ❌ \(message)")
+        }
+        @objc public static func warn(_ tag: String, _ message: String) {
+            os_log("[%{public}@] ⚠️ %{public}@", log: TXLog.osLog, type: .default, tag, message)
+            NSLog("[TXLog][\(tag)] ⚠️ \(message)")
+        }
+    }
 
     @objc(CallKitBridge)
     class CallKitBridge: RCTEventEmitter {
@@ -208,10 +231,18 @@ import React
 
             // Fulfill deferred CXAnswerCallAction now that peer connection is ready
             if let pendingAction = manager.pendingAnswerAction {
-                NSLog("TelnyxVoice: reportCallConnected - fulfilling deferred CXAnswerCallAction")
+                let elapsed = manager.pendingAnswerAt.map { Date().timeIntervalSince($0) } ?? -1
+                TXLog.info(
+                    "CallKit",
+                    "reportCallConnected - fulfilling deferred CXAnswerCallAction after \(String(format: "%.2f", elapsed))s UUID=\(uuid.uuidString)"
+                )
                 pendingAction.fulfill()
                 manager.pendingAnswerAction = nil
+                manager.pendingAnswerAt = nil
+                manager.pendingAnswerWatchdog?.cancel()
+                manager.pendingAnswerWatchdog = nil
             } else {
+                TXLog.info("CallKit", "reportCallConnected - no pending action UUID=\(uuid.uuidString)")
                 // Fallback: ensure audio is enabled for non-push or already-fulfilled cases
                 let rtcAudioSession = RTCAudioSession.sharedInstance()
                 rtcAudioSession.lockForConfiguration()
@@ -265,6 +296,22 @@ import React
             resolver(activeCalls)
         }
 
+        // Release-safe log bridge for JS. Writes via os_log with %{public}@
+        // so Console.app shows the message in release builds (not <private>).
+        // Level: "info" | "warn" | "error".
+        @objc func publicLog(
+            _ tag: String, level: String, message: String,
+            resolver resolve: @escaping RCTPromiseResolveBlock,
+            rejecter reject: @escaping RCTPromiseRejectBlock
+        ) {
+            switch level {
+            case "error": TXLog.error(tag, message)
+            case "warn": TXLog.warn(tag, message)
+            default: TXLog.info(tag, message)
+            }
+            resolve(["success": true])
+        }
+
         @objc func updateCall(
             _ callUUID: String, displayName: String, handle: String,
             resolver resolve: @escaping RCTPromiseResolveBlock,
@@ -304,6 +351,8 @@ import React
         public var callKitController: CXCallController?
         public var activeCalls: [UUID: [String: Any]] = [:]
         public var pendingAnswerAction: CXAnswerCallAction?
+        public var pendingAnswerAt: Date?
+        public var pendingAnswerWatchdog: DispatchWorkItem?
 
         private override init() {
             super.init()
@@ -530,8 +579,7 @@ import React
         }
 
         public func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
-            NSLog("📞 TelnyxVoice: CALLKIT ANSWER ACTION - Provider: \(provider), Action: \(action)")
-            NSLog("TelnyxVoice: User answered call with UUID: \(action.callUUID)")
+            TXLog.info("CallKit", "ANSWER ACTION received - UUID=\(action.callUUID.uuidString)")
 
             // Check if this is a programmatic answer (call already answered in WebRTC)
             // vs a user answer from CallKit UI
@@ -539,17 +587,37 @@ import React
                 let isAlreadyAnswered = callData["isAlreadyAnswered"] as? Bool,
                 isAlreadyAnswered
             {
-                NSLog("TelnyxVoice: Call already answered in WebRTC, skipping emission")
+                TXLog.info("CallKit", "Call already answered in WebRTC, skipping emission UUID=\(action.callUUID.uuidString)")
             } else {
-                // Notify React Native via CallKit bridge (only for user-initiated answers)
+                let hasBridge = CallKitBridge.shared != nil
+                TXLog.info("CallKit", "Emitting CallKitDidPerformAnswerCallAction to RN (bridgeReady=\(hasBridge)) UUID=\(action.callUUID.uuidString)")
                 CallKitBridge.shared?.emitCallEvent(
                     "CallKitDidPerformAnswerCallAction", callUUID: action.callUUID,
                     callData: activeCalls[action.callUUID])
             }
 
             // Defer action.fulfill() until reportCallConnected when peer connection is ready
-            NSLog("TelnyxVoice: Deferring CXAnswerCallAction.fulfill() until peer connection is ready")
+            TXLog.info("CallKit", "Deferring CXAnswerCallAction.fulfill() until peer connection is ready UUID=\(action.callUUID.uuidString)")
             self.pendingAnswerAction = action
+            self.pendingAnswerAt = Date()
+
+            // Watchdog: if JS never signals reportCallConnected within 15s log
+            // loudly so the failure is visible in Console.app. We do NOT
+            // fulfill here — that would hide the bug.
+            self.pendingAnswerWatchdog?.cancel()
+            let uuidStr = action.callUUID.uuidString
+            let watchdog = DispatchWorkItem { [weak self] in
+                guard let self = self else { return }
+                if let pending = self.pendingAnswerAction, pending.callUUID.uuidString == uuidStr {
+                    let elapsed = self.pendingAnswerAt.map { Date().timeIntervalSince($0) } ?? -1
+                    TXLog.error(
+                        "CallKit.Watchdog",
+                        "Peer connection NEVER became ready after \(String(format: "%.1f", elapsed))s — call stuck on 'connecting' UUID=\(uuidStr). Check SessionManager / WebSocket / INVITE logs above."
+                    )
+                }
+            }
+            self.pendingAnswerWatchdog = watchdog
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: watchdog)
         }
 
         public func provider(_ provider: CXProvider, perform action: CXEndCallAction) {

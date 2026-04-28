@@ -7,6 +7,7 @@ const react_native_1 = require('react-native');
 const telnyx_voip_client_1 = require('./telnyx-voip-client');
 const connection_state_1 = require('./models/connection-state');
 const TelnyxVoiceContext_1 = require('./context/TelnyxVoiceContext');
+const release_log_1 = require('./internal/release-log');
 /**
  * A comprehensive wrapper component that handles all Telnyx SDK lifecycle management.
  *
@@ -345,19 +346,29 @@ const TelnyxVoiceAppComponent = ({
           const callId = pushData.metadata?.call_id;
           if (callId) {
             const { callKitCoordinator } = require('./callkit/callkit-coordinator');
-            log('Notifying CallKit coordinator about push notification:', callId);
+            release_log_1.txlog.info(
+              'App',
+              `Initial push detected on iOS, dispatching to CallKitCoordinator call_id=${callId} voice_sdk_id=${pushData.metadata?.voice_sdk_id ?? 'MISSING'} fromAppResume=${fromAppResume}`
+            );
             await callKitCoordinator.handleCallKitPushReceived(callId, {
               callData: { source: 'push_notification' },
               pushData: pushData,
             });
           } else {
-            log('No call_id found in push data, falling back to direct handling');
+            release_log_1.txlog.warn(
+              'App',
+              'iOS push with no call_id — falling back to direct voipClient.handlePushNotification'
+            );
             await voipClient.handlePushNotification(pushData);
           }
         } else {
+          release_log_1.txlog.info('App', 'Android initial push — dispatching to voipClient');
           await voipClient.handlePushNotification(pushData);
         }
-        log('Initial push notification processed');
+        release_log_1.txlog.info(
+          'App',
+          'Initial push notification processed (JS side done, now waiting on socket+INVITE+peer)'
+        );
       } catch (e) {
         log('Error processing initial push notification:', e);
         setIsHandlingForegroundCall(false);

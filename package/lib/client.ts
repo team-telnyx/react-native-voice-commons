@@ -27,6 +27,7 @@ import type { MediaEvent } from './messages/media';
 import { isMediaEvent } from './messages/media';
 import { isValidGatewayStateResponse } from './messages/gateway';
 import { from } from 'rxjs';
+import { logVertoEvent } from './verto-log';
 
 type TelnyxRTCEvents = {
   'telnyx.client.ready': () => void;
@@ -1250,12 +1251,20 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    */
   private handleUnexpectedSocketFailure(reason: 'error' | 'close', error?: Error) {
     if (!this.sessionId) {
-      // Initial connect/login has not completed; let connect() own the error.
+      logVertoEvent(
+        'Client',
+        `socket ${reason} before initial login completed — ignoring (initial connect owns it)`
+      );
       return;
     }
     if (this.reconnecting) {
+      logVertoEvent('Client', `socket ${reason} while already reconnecting — ignoring`);
       return;
     }
+    logVertoEvent(
+      'Client',
+      `unexpected socket ${reason} after login — starting reconnect: ${error?.message ?? ''}`
+    );
     log.warn(`[TelnyxRTC] Unexpected socket ${reason} after login — starting reconnect`);
     try {
       this.emit(
@@ -1268,7 +1277,10 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     this.onNetworkUnavailable();
     setTimeout(() => {
       if (this.reconnecting) {
+        logVertoEvent('Client', 'calling attemptReconnection() after 500ms');
         this.attemptReconnection();
+      } else {
+        logVertoEvent('Client', 'reconnecting flag cleared before attempt — skipping');
       }
     }, 500);
   }
@@ -1324,24 +1336,25 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    */
   private async attemptReconnection() {
     if (!this.reconnecting) {
-      log.debug('[TelnyxRTC] Not in reconnection state, skipping reconnection attempt');
+      logVertoEvent('Client', 'attemptReconnection: not in reconnecting state, skipping');
       return;
     }
 
     this.reconnecting = false;
 
     try {
-      log.debug('[TelnyxRTC] Starting reconnection process...');
-
-      // Connect (this will create new connection and login)
+      logVertoEvent('Client', 'attemptReconnection: calling connect() …');
       await this.connect();
-
-      log.debug('[TelnyxRTC] Reconnection and relogin successful');
+      logVertoEvent('Client', 'attemptReconnection: connect() resolved, login successful');
       this.cancelReconnectionTimer();
 
       // If there was an active call, the attach message will be handled in onAttachReceived
       log.debug('[TelnyxRTC] Waiting for attach message to reestablish call...');
-    } catch (error) {
+    } catch (error: any) {
+      logVertoEvent(
+        'Client',
+        `attemptReconnection FAILED: ${error?.message ?? error}`
+      );
       log.error('[TelnyxRTC] Reconnection attempt failed:', error);
     }
   }

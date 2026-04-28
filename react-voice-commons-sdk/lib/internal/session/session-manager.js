@@ -59,6 +59,7 @@ const TelnyxSDK = __importStar(require('@telnyx/react-native-voice-sdk'));
 const pkg = __importStar(require('../../../package.json'));
 const connection_state_1 = require('../../models/connection-state');
 const config_1 = require('../../models/config');
+const release_log_1 = require('../release-log');
 /**
  * Manages the connection lifecycle to the Telnyx platform.
  *
@@ -196,10 +197,13 @@ class SessionManager {
     if (this._disposed) {
       return;
     }
-    console.log(
-      'SessionManager: RELEASE DEBUG - Processing push notification, payload:',
-      JSON.stringify(payload)
+    release_log_1.txlog.info(
+      'Session',
+      `handlePushNotification entry, hasClient=${!!this._telnyxClient} hasConfig=${!!this._currentConfig} state=${this.currentState}`
     );
+    try {
+      release_log_1.txlog.info('Session', `push payload=${JSON.stringify(payload).slice(0, 500)}`);
+    } catch {}
     // Store the push notification payload for when the client is created
     this._pendingPushPayload = payload;
     // If we have a TelnyxRTC instance but its socket isn't fresh — either not
@@ -219,18 +223,34 @@ class SessionManager {
     const STALE_THRESHOLD_MS = 30000;
     if (this._telnyxClient) {
       const client = this._telnyxClient;
+      const isConnected = !!client.connected;
+      const idleMs =
+        typeof client.connectionIdleMs === 'number' ? client.connectionIdleMs : Infinity;
       const isFresh =
-        typeof client.isFresh === 'function'
-          ? client.isFresh(STALE_THRESHOLD_MS)
-          : !!client.connected;
+        typeof client.isFresh === 'function' ? client.isFresh(STALE_THRESHOLD_MS) : isConnected;
+      release_log_1.txlog.info(
+        'Session',
+        `freshness check: connected=${isConnected} idleMs=${idleMs === Infinity ? 'Inf' : Math.round(idleMs)} isFresh=${isFresh} threshold=${STALE_THRESHOLD_MS}ms`
+      );
       if (!isFresh) {
+        release_log_1.txlog.warn(
+          'Session',
+          `Client present but NOT fresh (connected=${isConnected} idleMs=${idleMs === Infinity ? 'Inf' : Math.round(idleMs)}) — disposing to force reconnect with push voice_sdk_id`
+        );
         try {
           await this._telnyxClient.disconnect();
         } catch (err) {
-          console.warn('SessionManager: disconnect of stale client threw:', err);
+          release_log_1.txlog.warn(
+            'Session',
+            `Disconnect of stale client threw: ${err?.message ?? err}`
+          );
         }
         this._telnyxClient = undefined;
         if (this.currentState !== connection_state_1.TelnyxConnectionState.DISCONNECTED) {
+          release_log_1.txlog.info(
+            'Session',
+            `state was ${this.currentState} — forcing DISCONNECTED before reconnect`
+          );
           this._connectionState.next(connection_state_1.TelnyxConnectionState.DISCONNECTED);
         }
       }
@@ -280,67 +300,53 @@ class SessionManager {
       console.log(
         'SessionManager: RELEASE DEBUG - Client available, processing push notification immediately'
       );
-      // Use type assertion to access the processVoIPNotification method
-      // This method sets the isCallFromPush flag which is needed for proper push handling
       if (typeof this._telnyxClient.processVoIPNotification === 'function') {
-        console.log(
-          'SessionManager: RELEASE DEBUG - Calling processVoIPNotification with payload:',
-          JSON.stringify(payload)
-        );
-        // Extract the actual push notification metadata that the client expects
         const actualPayload = this._extractPushPayload(payload);
+        release_log_1.txlog.info(
+          'Session',
+          `Calling processVoIPNotification on existing client, voice_sdk_id=${actualPayload?.voice_sdk_id ?? 'MISSING'}`
+        );
         this._telnyxClient.processVoIPNotification(actualPayload);
-        console.log('SessionManager: RELEASE DEBUG - Called processVoIPNotification successfully');
+        release_log_1.txlog.info('Session', 'processVoIPNotification called (existing client)');
       } else {
-        console.warn(
-          'SessionManager: processVoIPNotification method not available on TelnyxRTC client'
+        release_log_1.txlog.error(
+          'Session',
+          'processVoIPNotification NOT available on TelnyxRTC client'
         );
       }
       // Clear the pending payload since it was processed
       this._pendingPushPayload = null;
     } else {
-      console.log(
-        'SessionManager: RELEASE DEBUG - No client available, checking if we can trigger immediate connection'
+      release_log_1.txlog.info(
+        'Session',
+        `No client — will attempt reconnect if config available and state allows (hasConfig=${!!this._currentConfig} state=${this.currentState})`
       );
-      // If we have config (either existing or newly loaded from storage) and
-      // are not currently connected/connecting, trigger immediate connection.
-      // We accept DISCONNECTED and ERROR (a socket failure bumps state to
-      // ERROR) so a push after a failed session still re-establishes the
-      // connection. The _connect() method will process the pending push
-      // payload BEFORE calling connect().
       if (
         this._currentConfig &&
         (this.currentState === connection_state_1.TelnyxConnectionState.DISCONNECTED ||
           this.currentState === connection_state_1.TelnyxConnectionState.ERROR)
       ) {
-        console.log(
-          'SessionManager: RELEASE DEBUG - Triggering immediate connection for push notification with config type:',
-          this._currentConfig.type || 'credential'
+        release_log_1.txlog.info(
+          'Session',
+          `Triggering _connect() for push, state=${this.currentState} configType=${this._currentConfig.type || 'credential'}`
         );
         try {
           await this._connect();
-          console.log(
-            'SessionManager: RELEASE DEBUG - Successfully connected after push notification trigger'
-          );
+          release_log_1.txlog.info('Session', '_connect() resolved after push trigger');
         } catch (error) {
-          console.error(
-            'SessionManager: Failed to connect after push notification trigger:',
-            error
+          release_log_1.txlog.error(
+            'Session',
+            `_connect() threw after push trigger: ${error?.message ?? error}`
           );
         }
       } else {
-        console.log(
-          'SessionManager: RELEASE DEBUG - Cannot trigger connection, config available:',
-          !!this._currentConfig,
-          'current state:',
-          this.currentState
-        );
-        console.log(
-          'SessionManager: RELEASE DEBUG - Push payload stored for later processing when client becomes available'
+        release_log_1.txlog.warn(
+          'Session',
+          `Cannot trigger connect — hasConfig=${!!this._currentConfig} state=${this.currentState}. Push payload stored for later.`
         );
       }
     }
-    console.log('SessionManager: RELEASE DEBUG - Push notification handling complete');
+    release_log_1.txlog.info('Session', 'handlePushNotification complete');
   }
   /**
    * Dispose of the session manager and clean up resources
@@ -413,51 +419,51 @@ class SessionManager {
       // This ensures voice_sdk_id and other payload variables are set before connect() is called
       const pendingPushPayload = this._pendingPushPayload;
       if (pendingPushPayload) {
-        console.log(
-          'SessionManager: RELEASE DEBUG - Processing pending push notification BEFORE connect:',
-          JSON.stringify(pendingPushPayload)
-        );
         if (typeof this._telnyxClient.processVoIPNotification === 'function') {
-          console.log(
-            'SessionManager: RELEASE DEBUG - Calling processVoIPNotification BEFORE connect to set voice_sdk_id'
-          );
-          // Extract the actual push notification metadata that the client expects
           const actualPayload = this._extractPushPayload(pendingPushPayload);
-          this._telnyxClient.processVoIPNotification(actualPayload);
-          console.log(
-            'SessionManager: RELEASE DEBUG - Successfully processed pending push notification before connect'
+          release_log_1.txlog.info(
+            'Session',
+            `processVoIPNotification BEFORE connect, voice_sdk_id=${actualPayload?.voice_sdk_id ?? 'MISSING'} call_id=${actualPayload?.call_id ?? 'MISSING'}`
           );
+          this._telnyxClient.processVoIPNotification(actualPayload);
         } else {
-          console.warn(
-            'SessionManager: processVoIPNotification method not available on new client'
+          release_log_1.txlog.error(
+            'Session',
+            'processVoIPNotification NOT available on new client'
           );
         }
         // Clear the pending payload
         this._pendingPushPayload = null;
+      } else {
+        release_log_1.txlog.info('Session', '_connect: no pending push payload');
       }
       this._setupClientListeners();
-      // Set up CallStateController listeners immediately after client creation
-      // This ensures they're ready before any incoming call events are emitted
-      console.log(
-        '🔧 SessionManager: Setting up CallStateController listeners before connection...'
-      );
-      console.log('🔧 SessionManager: _onClientReady callback exists:', !!this._onClientReady);
       if (this._onClientReady) {
-        console.log('🔧 SessionManager: Calling _onClientReady callback now...');
         this._onClientReady();
-        console.log('🔧 SessionManager: _onClientReady callback completed');
-      } else {
-        console.log('🔧 SessionManager: No _onClientReady callback found');
       }
-      // Connect to the platform AFTER processing push notification
-      console.log(
-        'SessionManager: RELEASE DEBUG - About to call connect() after processing push notification'
+      // SYNTHETIC REPRO ONLY — set DEBUG_CONNECT_DELAY_MS via globalThis to add
+      // an artificial pre-connect delay so the answer-before-INVITE race fires
+      // reliably without needing real iOS freeze + slow network. Off by default.
+      // Example (in app code or before connect): (globalThis as any).DEBUG_CONNECT_DELAY_MS = 2000;
+      const debugDelay = globalThis.DEBUG_CONNECT_DELAY_MS;
+      if (typeof debugDelay === 'number' && debugDelay > 0) {
+        release_log_1.txlog.warn(
+          'Session',
+          `DEBUG_CONNECT_DELAY_MS=${debugDelay} — sleeping before connect()`
+        );
+        await new Promise((resolve) => setTimeout(resolve, debugDelay));
+      }
+      release_log_1.txlog.info(
+        'Session',
+        'Calling telnyxClient.connect() (WebSocket handshake starts here)'
       );
       await this._telnyxClient.connect();
-      // Notify that client is ready for event listeners
-      console.log('🔧 SessionManager: Client connected successfully');
+      release_log_1.txlog.info(
+        'Session',
+        'telnyxClient.connect() resolved (awaiting telnyx.client.ready event)'
+      );
     } catch (error) {
-      console.error('Connection failed:', error);
+      release_log_1.txlog.error('Session', `connect() failed: ${error?.message ?? error}`);
       this._connectionState.next(connection_state_1.TelnyxConnectionState.ERROR);
       throw error;
     }
@@ -470,25 +476,17 @@ class SessionManager {
       return;
     }
     this._telnyxClient.on('telnyx.client.ready', () => {
-      console.log('Telnyx client ready');
-      this._connectionState.next(connection_state_1.TelnyxConnectionState.CONNECTED);
-      // Ensure CallStateController listeners are set up when client becomes ready
-      // This handles both initial connection and automatic reconnection
-      console.log(
-        '🔧 SessionManager: Client ready event - reinitializing CallStateController listeners'
+      release_log_1.txlog.info(
+        'Session',
+        'telnyx.client.ready — WebSocket authenticated, CONNECTED. Awaiting INVITE/peer connection.'
       );
+      this._connectionState.next(connection_state_1.TelnyxConnectionState.CONNECTED);
       if (this._onClientReady) {
-        console.log(
-          '🔧 SessionManager: Calling _onClientReady callback from client ready event...'
-        );
         this._onClientReady();
-        console.log('🔧 SessionManager: _onClientReady callback completed from client ready event');
-      } else {
-        console.log('🔧 SessionManager: No _onClientReady callback found in client ready event');
       }
     });
     this._telnyxClient.on('telnyx.client.error', (error) => {
-      console.error('Telnyx client error:', error);
+      release_log_1.txlog.error('Session', `telnyx.client.error: ${error?.message ?? error}`);
       this._connectionState.next(connection_state_1.TelnyxConnectionState.ERROR);
     });
     // Note: Socket-level events are not exposed in the current SDK
