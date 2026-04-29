@@ -206,54 +206,19 @@ class SessionManager {
     } catch {}
     // Store the push notification payload for when the client is created
     this._pendingPushPayload = payload;
-    // If we have a TelnyxRTC instance but its socket isn't fresh — either not
-    // connected at all, or connected but with no traffic for longer than the
-    // threshold — dispose it so we go through the full _connect() path below
-    // instead of calling processVoIPNotification on a stale client.
-    //
-    // This handles two cases iOS gives us with the same code path:
-    //   1. Terminated-then-cold-launched: a client exists (constructed at
-    //      app boot) but its connection was never opened (idleMs=Infinity).
-    //   2. Suspended-then-thawed: a client exists with `connected=true`,
-    //      but the kernel killed the TLS session during freeze without
-    //      notifying the JS WebSocket wrapper, so no error event fired.
-    //
-    // 30s threshold matches the server's keep-alive ping cadence (~20s),
-    // so a live session always remains fresh.
-    const STALE_THRESHOLD_MS = 30000;
+    // Each push always rebuilds. The voice_sdk_id is baked into the socket
+    // URL and can't be mutated mid-flight.
     if (this._telnyxClient) {
-      const client = this._telnyxClient;
-      const isConnected = !!client.connected;
-      const idleMs =
-        typeof client.connectionIdleMs === 'number' ? client.connectionIdleMs : Infinity;
-      const isFresh =
-        typeof client.isFresh === 'function' ? client.isFresh(STALE_THRESHOLD_MS) : isConnected;
-      release_log_1.txlog.info(
-        'Session',
-        `freshness check: connected=${isConnected} idleMs=${idleMs === Infinity ? 'Inf' : Math.round(idleMs)} isFresh=${isFresh} threshold=${STALE_THRESHOLD_MS}ms`
-      );
-      if (!isFresh) {
-        release_log_1.txlog.warn(
-          'Session',
-          `Client present but NOT fresh (connected=${isConnected} idleMs=${idleMs === Infinity ? 'Inf' : Math.round(idleMs)}) — disposing to force reconnect with push voice_sdk_id`
-        );
-        try {
-          await this._telnyxClient.disconnect();
-        } catch (err) {
-          release_log_1.txlog.warn(
-            'Session',
-            `Disconnect of stale client threw: ${err?.message ?? err}`
-          );
-        }
-        this._telnyxClient = undefined;
-        if (this.currentState !== connection_state_1.TelnyxConnectionState.DISCONNECTED) {
-          release_log_1.txlog.info(
-            'Session',
-            `state was ${this.currentState} — forcing DISCONNECTED before reconnect`
-          );
-          this._connectionState.next(connection_state_1.TelnyxConnectionState.DISCONNECTED);
-        }
+      release_log_1.txlog.warn('Session', 'Disposing prior TelnyxRTC');
+      try {
+        await this._telnyxClient.disconnect();
+      } catch (err) {
+        release_log_1.txlog.warn('Session', `disconnect() threw: ${err?.message ?? err}`);
       }
+    }
+    this._telnyxClient = undefined;
+    if (this.currentState !== connection_state_1.TelnyxConnectionState.DISCONNECTED) {
+      this._connectionState.next(connection_state_1.TelnyxConnectionState.DISCONNECTED);
     }
     // If we don't have a config yet but we're processing a push notification,
     // attempt to load stored config first (for terminated app startup)

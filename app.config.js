@@ -16,9 +16,9 @@ export default {
     assetBundlePatterns: ['**/*'],
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'com.telnyx.rn-voice-sdk-demo',
+      bundleIdentifier: 'com.telnyx.rn-voice-sdk-demo-personal',
       bitcode: false,
-      buildNumber: '47',
+      buildNumber: '66',
     },
     android: {
       adaptiveIcon: {

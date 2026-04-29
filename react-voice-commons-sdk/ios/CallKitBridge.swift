@@ -10,24 +10,50 @@ import os
     import WebRTC
 
     // MARK: - Public release-mode logger
-    // Writes to Apple's unified logging with %{public}@ so strings are NOT
-    // redacted in release. Filter in Console.app with:
+    // Uses the Swift `Logger` API (iOS 14+) which has reliable string-
+    // interpolation privacy hints. Filter in Console.app with:
     //   subsystem:com.telnyx.voice
+    // The `, privacy: .public` interpolation flag forces the message body
+    // to render as plain text instead of <private> in release builds.
+    //
+    // The `os_log` Swift overload loses the %{public}@ marker across the
+    // bridge in some toolchains, so we deliberately use Logger here, not
+    // os_log, and we do NOT call NSLog (whose arguments are also redacted
+    // in release builds).
     @objc public class TXLog: NSObject {
         public static let subsystem = "com.telnyx.voice"
-        public static let osLog = OSLog(subsystem: TXLog.subsystem, category: "Telnyx")
 
+        // Logger is iOS 14+; we re-create per call (cheap) so we don't have
+        // to gate a static property with @available, which Swift won't allow
+        // at file scope. For iOS 13 fallback we use the C os_log %s format.
         @objc public static func info(_ tag: String, _ message: String) {
-            os_log("[%{public}@] %{public}@", log: TXLog.osLog, type: .info, tag, message)
-            NSLog("[TXLog][\(tag)] \(message)")
+            if #available(iOS 14.0, *) {
+                let logger = Logger(subsystem: subsystem, category: "Telnyx")
+                logger.info("[\(tag, privacy: .public)] \(message, privacy: .public)")
+            } else {
+                let log = OSLog(subsystem: subsystem, category: "Telnyx")
+                os_log("[%{public}s] %{public}s", log: log, type: .info, tag, message)
+            }
         }
+
         @objc public static func error(_ tag: String, _ message: String) {
-            os_log("[%{public}@] ❌ %{public}@", log: TXLog.osLog, type: .error, tag, message)
-            NSLog("[TXLog][\(tag)] ❌ \(message)")
+            if #available(iOS 14.0, *) {
+                let logger = Logger(subsystem: subsystem, category: "Telnyx")
+                logger.error("[\(tag, privacy: .public)] ❌ \(message, privacy: .public)")
+            } else {
+                let log = OSLog(subsystem: subsystem, category: "Telnyx")
+                os_log("[%{public}s] ❌ %{public}s", log: log, type: .error, tag, message)
+            }
         }
+
         @objc public static func warn(_ tag: String, _ message: String) {
-            os_log("[%{public}@] ⚠️ %{public}@", log: TXLog.osLog, type: .default, tag, message)
-            NSLog("[TXLog][\(tag)] ⚠️ \(message)")
+            if #available(iOS 14.0, *) {
+                let logger = Logger(subsystem: subsystem, category: "Telnyx")
+                logger.warning("[\(tag, privacy: .public)] ⚠️ \(message, privacy: .public)")
+            } else {
+                let log = OSLog(subsystem: subsystem, category: "Telnyx")
+                os_log("[%{public}s] ⚠️ %{public}s", log: log, type: .default, tag, message)
+            }
         }
     }
 

@@ -607,22 +607,36 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     log.debug('[TelnyxRTC] Setting up connection event listeners');
     this.connection.addListener('telnyx.socket.message', this.onSocketMessage);
+    // Socket error/close are intentionally not auto-reconnected here. Mid-call
+    // network changes are handled by the NetInfo-driven onNetworkUnavailable
+    // path, and post-push lifecycle is owned by SessionManager (which tears
+    // down and rebuilds with the correct voice_sdk_id on every push). Adding
+    // a third reconnect path here previously caused a multi-instance race
+    // where a zombie reconnect would fire after SessionManager disposed the
+    // client, ending up with the server `punt`-ing one of the parallel
+    // sessions and dropping the active call.
     this.connection.addListener('telnyx.socket.error', (error) => {
       log.error('[TelnyxRTC] WebSocket connection error:', error);
-      this.handleUnexpectedSocketFailure('error', error as any);
     });
     this.connection.addListener('telnyx.socket.close', () => {
       log.debug('[TelnyxRTC] WebSocket connection closed');
-      this.handleUnexpectedSocketFailure('close');
     });
 
-    // Wait for WebSocket connection to be established
+    // Wait for WebSocket connection to be established.
+    // The timeout is overridable via globalThis.DEBUG_WS_OPEN_TIMEOUT_MS
+    // for synthetic reproduction of the cold-launch "WebSocket connection
+    // timeout" failure mode that the customer reports. Default 15s.
     if (!this.connection.isConnected) {
-      log.debug('[TelnyxRTC] Waiting for WebSocket connection...');
+      const wsOpenTimeoutMs = (() => {
+        const knob = (globalThis as any).DEBUG_WS_OPEN_TIMEOUT_MS;
+        return typeof knob === 'number' && knob > 0 ? knob : 15000;
+      })();
+      log.debug(`[TelnyxRTC] Waiting for WebSocket connection (timeout=${wsOpenTimeoutMs}ms)...`);
+      logVertoEvent('Client', `WebSocket open wait, timeout=${wsOpenTimeoutMs}ms`);
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
-          reject(new Error('WebSocket connection timeout after 15 seconds'));
-        }, 15000); // 15 second timeout
+          reject(new Error(`WebSocket connection timeout after ${wsOpenTimeoutMs}ms`));
+        }, wsOpenTimeoutMs);
 
         const onOpen = () => {
           log.debug('[TelnyxRTC] WebSocket connection established');
@@ -773,13 +787,16 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
 
     // Reset push flags on disconnect to ensure clean state for next connection
-    // Preserve push-related flags during reconnection so they survive the disconnect
-    if (!this.reconnecting) {
+    // Preserve push-related flags during reconnection (driven internally) so
+    // they survive a transient disconnect inside attemptReconnection.
+    // External disconnect() callers (fromReconnection=false) want a hard
+    // tear-down — including clearing `reconnecting` — to avoid a zombie
+    // reconnect chain firing after the caller has moved on.
+    if (!this.reconnecting || !fromReconnection) {
       this.isCallFromPush = false;
       this.pushNotificationPayload = null;
       this.pendingInvite = null;
       this.pushNotificationCallKitUUID = null;
-      // Cancel any ongoing reconnection process
       this.reconnecting = false;
       log.debug('[TelnyxRTC] Reset push flags on disconnect');
 
@@ -792,6 +809,16 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
 
     log.warn('[TelnyxRTC] Disconnected from Telnyx RTC');
+  }
+
+  /**
+   * True while an internal reconnect is in flight (network change or socket
+   * failure). Exposed so external callers (e.g. SessionManager) can avoid
+   * starting a parallel reconnect that would race ours for the same singleton
+   * WebSocket.
+   */
+  public get isReconnecting(): boolean {
+    return this.reconnecting;
   }
 
   public get connected() {
@@ -1234,55 +1261,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         this.onNetworkAvailable();
       }, 1500); // 1.5 seconds delay
     }
-  }
-
-  /**
-   * Handles an unexpected socket failure (error/close) after the initial
-   * connect+login has completed. Triggers the same reconnect path used for
-   * network changes so we recover when iOS thaws the app and kills the old
-   * TCP/TLS session ("Software caused connection abort").
-   *
-   * No-op if we haven't finished login yet (let the initial connect
-   * promise own its own error handling) or if a reconnect is already in
-   * flight. We use `sessionId` as the marker because it's only assigned
-   * after `loginHandler.login()` resolves successfully — `loginHandler`
-   * itself is constructed before login runs and would let socket errors
-   * during the initial login attempt tear down the in-flight connect.
-   */
-  private handleUnexpectedSocketFailure(reason: 'error' | 'close', error?: Error) {
-    if (!this.sessionId) {
-      logVertoEvent(
-        'Client',
-        `socket ${reason} before initial login completed — ignoring (initial connect owns it)`
-      );
-      return;
-    }
-    if (this.reconnecting) {
-      logVertoEvent('Client', `socket ${reason} while already reconnecting — ignoring`);
-      return;
-    }
-    logVertoEvent(
-      'Client',
-      `unexpected socket ${reason} after login — starting reconnect: ${error?.message ?? ''}`
-    );
-    log.warn(`[TelnyxRTC] Unexpected socket ${reason} after login — starting reconnect`);
-    try {
-      this.emit(
-        'telnyx.client.error',
-        error ?? new Error(`WebSocket ${reason}: reconnecting`)
-      );
-    } catch {
-      /* consumers may not be subscribed */
-    }
-    this.onNetworkUnavailable();
-    setTimeout(() => {
-      if (this.reconnecting) {
-        logVertoEvent('Client', 'calling attemptReconnection() after 500ms');
-        this.attemptReconnection();
-      } else {
-        logVertoEvent('Client', 'reconnecting flag cleared before attempt — skipping');
-      }
-    }, 500);
   }
 
   /**

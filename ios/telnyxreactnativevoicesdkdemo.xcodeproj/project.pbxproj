@@ -347,8 +347,8 @@
 				CODE_SIGN_ENTITLEMENTS = telnyxreactnativevoicesdkdemo/telnyxreactnativevoicesdkdemo.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 46;
-				DEVELOPMENT_TEAM = YKUVNPU9FS;
+				CURRENT_PROJECT_VERSION = 66;
+				DEVELOPMENT_TEAM = JVG2N36PSN;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
@@ -369,8 +369,8 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.telnyx.rn-voice-sdk-demo";
-				PRODUCT_NAME = "telnyxreactnativevoicesdkdemo";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.telnyx.rn-voice-sdk-demo-personal";
+				PRODUCT_NAME = telnyxreactnativevoicesdkdemo;
 				SWIFT_OBJC_BRIDGING_HEADER = "telnyxreactnativevoicesdkdemo/telnyxreactnativevoicesdkdemo-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -388,8 +388,8 @@
 				CODE_SIGN_ENTITLEMENTS = telnyxreactnativevoicesdkdemo/telnyxreactnativevoicesdkdemo.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 46;
-				DEVELOPMENT_TEAM = YKUVNPU9FS;
+				CURRENT_PROJECT_VERSION = 66;
+				DEVELOPMENT_TEAM = JVG2N36PSN;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = telnyxreactnativevoicesdkdemo/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Telnyx React WebRtc";
@@ -406,8 +406,8 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.telnyx.rn-voice-sdk-demo";
-				PRODUCT_NAME = "telnyxreactnativevoicesdkdemo";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.telnyx.rn-voice-sdk-demo-personal";
+				PRODUCT_NAME = telnyxreactnativevoicesdkdemo;
 				SWIFT_OBJC_BRIDGING_HEADER = "telnyxreactnativevoicesdkdemo/telnyxreactnativevoicesdkdemo-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

@@ -401,22 +401,14 @@ export class TelnyxVoipClient {
     }
 
     try {
-      // First, pass the push notification to the session manager for processing
-      // This will set the isCallFromPush flag on the TelnyxRTC client
+      // SessionManager owns the entire push lifecycle: it disposes any stale
+      // client, loads stored credentials if needed, and rebuilds the TelnyxRTC
+      // bound to THIS push's voice_sdk_id. We deliberately do not fall back to
+      // a generic loginFromStoredConfig() here — that would create a parallel
+      // client with no voice_sdk_id awareness, which the gateway then has to
+      // `punt` once the SessionManager-driven session also registers,
+      // dropping the active call.
       await this._sessionManager.handlePushNotification(payload);
-
-      // Connect if not already connected
-      const currentState = this.currentConnectionState;
-      if (currentState !== TelnyxConnectionState.CONNECTED) {
-        // Try to login from stored config - now the push flags should be set
-        const loginSuccess = await this.loginFromStoredConfig();
-        if (!loginSuccess) {
-          console.warn(
-            'TelnyxVoipClient: Could not login from stored config for push notification'
-          );
-          return;
-        }
-      }
     } catch (error) {
       console.error('TelnyxVoipClient: Error handling push notification:', error);
       throw error;
