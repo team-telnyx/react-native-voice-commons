@@ -1,5 +1,12 @@
 # CHANGELOG.md
 
+## [0.4.5-beta.0](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk-v0.4.5-beta.0) (2026-04-30)
+
+### Bug Fixing
+
+- **Removed automatic socket-level reconnect on `telnyx.socket.error` / `telnyx.socket.close`.** This auto-reconnect path (added in 0.4.3) created a multi-instance race when consumers (e.g. `@telnyx/react-voice-commons-sdk`) rebuild a `TelnyxRTC` on each VoIP push: the prior client's `setTimeout`-scheduled reconnect would fire after disposal and open a parallel session with the previous push's `voice_sdk_id`, causing the gateway to deliver the new INVITE elsewhere and `punt` the parallel session — dropping the active call. Mid-call network changes are still handled by the existing `NetInfo`-driven `onNetworkUnavailable` / `attemptReconnection` path. Socket error/close after login are now logged but do not auto-reconnect; the consumer is responsible for the recovery decision.
+- **`disconnect()` now unconditionally clears `reconnecting` when called externally** (`fromReconnection=false`). Previously a client whose `reconnecting` flag was set could keep that flag through external disposal, leaving a window where a subsequent call to `attemptReconnection` would re-enter the reconnect path on a disposed instance.
+
 ## [0.4.4](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk-v0.4.4) (2026-04-27)
 
 ### Bug Fixing

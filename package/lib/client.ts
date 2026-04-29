@@ -606,13 +606,18 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     log.debug('[TelnyxRTC] Setting up connection event listeners');
     this.connection.addListener('telnyx.socket.message', this.onSocketMessage);
+    // Socket error/close are intentionally not auto-reconnected here. Mid-call
+    // network changes are handled by the NetInfo-driven onNetworkUnavailable
+    // path, and post-push lifecycle is owned by SessionManager (which tears
+    // down and rebuilds with the correct voice_sdk_id on every push). A
+    // third reconnect path here previously caused a multi-instance race
+    // where a zombie reconnect would fire after SessionManager disposed the
+    // client, producing parallel sessions that the gateway then `punt`-ed.
     this.connection.addListener('telnyx.socket.error', (error) => {
       log.error('[TelnyxRTC] WebSocket connection error:', error);
-      this.handleUnexpectedSocketFailure('error', error as any);
     });
     this.connection.addListener('telnyx.socket.close', () => {
       log.debug('[TelnyxRTC] WebSocket connection closed');
-      this.handleUnexpectedSocketFailure('close');
     });
 
     // Wait for WebSocket connection to be established
@@ -1233,44 +1238,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         this.onNetworkAvailable();
       }, 1500); // 1.5 seconds delay
     }
-  }
-
-  /**
-   * Handles an unexpected socket failure (error/close) after the initial
-   * connect+login has completed. Triggers the same reconnect path used for
-   * network changes so we recover when iOS thaws the app and kills the old
-   * TCP/TLS session ("Software caused connection abort").
-   *
-   * No-op if we haven't finished login yet (let the initial connect
-   * promise own its own error handling) or if a reconnect is already in
-   * flight. We use `sessionId` as the marker because it's only assigned
-   * after `loginHandler.login()` resolves successfully — `loginHandler`
-   * itself is constructed before login runs and would let socket errors
-   * during the initial login attempt tear down the in-flight connect.
-   */
-  private handleUnexpectedSocketFailure(reason: 'error' | 'close', error?: Error) {
-    if (!this.sessionId) {
-      // Initial connect/login has not completed; let connect() own the error.
-      return;
-    }
-    if (this.reconnecting) {
-      return;
-    }
-    log.warn(`[TelnyxRTC] Unexpected socket ${reason} after login — starting reconnect`);
-    try {
-      this.emit(
-        'telnyx.client.error',
-        error ?? new Error(`WebSocket ${reason}: reconnecting`)
-      );
-    } catch {
-      /* consumers may not be subscribed */
-    }
-    this.onNetworkUnavailable();
-    setTimeout(() => {
-      if (this.reconnecting) {
-        this.attemptReconnection();
-      }
-    }, 500);
   }
 
   /**
