@@ -127,6 +127,8 @@ You do not need to wire up JS push handlers. The native layer does the work:
 
 In both cases the SDK connects the socket and restores the call internally — you just observe the VoIP client's streams to render UI.
 
+> In the snippets below, `voipClient` is the instance returned by `createTelnyxVoipClient()` (see [Basic Setup](#basic-setup)). It is a singleton, so it's safe to reference the same module-level value from any component, or to read it from context.
+
 **What to observe after the SDK-driven push login:**
 
 - `voipClient.connectionState$` — emits `CONNECTED` when the socket is up and authenticated (there is no separate `loginState$`).

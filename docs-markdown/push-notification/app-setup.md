@@ -276,7 +276,9 @@ Do **not** call `messaging().setBackgroundMessageHandler(...)` from `@react-nati
 
 When the OS wakes your app from a terminated state to deliver an incoming call, the SDK is already handling the login internally as part of the push flow. If your app **also** triggers its own `login*` call on mount, you end up with two competing sessions — this is the single most common integration bug.
 
-Use the static method `TelnyxVoipClient.isLaunchedFromPushNotification()` to guard your own auto-login:
+> **This applies to _any_ login entry point**, not just a splash screen `useEffect`. Login forms that auto-resubmit stored credentials, deep-link handlers that call `loginWithToken()`, and background tasks that refresh tokens all need the same guard. If any code path can run `login*` on a cold start, wrap it with the `isLaunchedFromPushNotification()` check below.
+
+Use the static method `TelnyxVoipClient.isLaunchedFromPushNotification()` to guard your own auto-login. `voipClient` in the examples below is the instance returned by `createTelnyxVoipClient()` (see [Step 1](#step-1-configure-telnyxvoiceapp) above) — typically a module-level singleton or a value read from React context:
 
 ```tsx
 import React from 'react';
@@ -324,8 +326,6 @@ React.useEffect(() => {
 ```
 
 **Symptoms of double-login:** the incoming call rings briefly then disappears, the socket disconnects mid-call, CallKit shows a call that immediately ends, or you see rapid `CONNECTED → DISCONNECTED → CONNECTED` cycles in the logs right after a push is delivered. If you hit these, audit every `useEffect` in your app for an unguarded `login*` call on mount.
-
-Applies to any login entry point — including login forms that re-submit stored credentials, splash screens that eagerly log in, and background tasks that refresh tokens.
 
 **What to observe after the SDK finishes the push login:**
 
