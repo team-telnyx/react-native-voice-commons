@@ -972,6 +972,13 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     log.debug('[TelnyxRTC] Call object created, checking for pending actions');
 
+    // Set when a push action (`reject` / pendingEndAction) caused us to
+    // hang up the incoming call before surfacing it. Used to suppress the
+    // `telnyx.call.incoming` emission below — otherwise the consumer briefly
+    // sees an "incoming" call that's already in `ended` state, flashing a
+    // ringing screen for a call that's already dead.
+    let rejectedByPushAction = false;
+
     // Check for pending actions from CallKit (matching iOS SDK behavior)
     if (this.isCallFromPush) {
       log.debug('[TelnyxRTC] This is a push notification call, checking pending actions');
@@ -991,6 +998,14 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
           incomingCall.answer();
         } else if (action === 'reject') {
           incomingCall.hangup();
+          // Push action already rejected this call — bye was sent, the call
+          // is in 'ended' state. Don't surface it to consumers as an
+          // incoming call; otherwise the UI flashes a ringing screen for a
+          // call that's already dead. Socket teardown for "user kills the
+          // app afterwards" is handled by the consumer's app-backgrounded
+          // path (mirroring the Android SDK's MainActivity.onStop disconnect
+          // pattern), not here.
+          rejectedByPushAction = true;
         }
         // Reset push flags immediately since the action was handled inline
         this.resetPendingActions();
@@ -1004,6 +1019,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         // Execute pending end asynchronously
         // Push flags are reset inside resetPendingActions() after execution
         setTimeout(() => this.executePendingEnd(), 100);
+        // Same reasoning as the inline `action === 'reject'` branch above —
+        // we've decided to end this call before the user sees it.
+        rejectedByPushAction = true;
       } else {
         log.debug('[TelnyxRTC] No pending actions to execute for push notification call');
         // No pending actions yet - keep isCallFromPush alive so that
@@ -1012,6 +1030,13 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       }
     } else {
       log.debug('[TelnyxRTC] Not a push notification call, no pending actions to check');
+    }
+
+    if (rejectedByPushAction) {
+      log.debug(
+        '[TelnyxRTC] Suppressing telnyx.call.incoming for call rejected via push action'
+      );
+      return;
     }
 
     log.debug('[TelnyxRTC] Emitting telnyx.call.incoming event');
