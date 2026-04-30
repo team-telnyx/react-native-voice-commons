@@ -1,6 +1,6 @@
 {
   "name": "@telnyx/react-native-voice-sdk",
-  "version": "0.4.5-beta.0",
+  "version": "0.4.5",
   "description": "Telnyx React Native Voice SDK - A complete WebRTC voice calling solution",
   "main": "lib/index.ts",
   "module": "lib/index.ts",

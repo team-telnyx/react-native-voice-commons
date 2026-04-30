@@ -1,6 +1,6 @@
 # CHANGELOG.md
 
-## [0.4.3-beta.0] (2026-04-30)
+## [0.4.3] (2026-04-30)
 
 ### Bug Fixing
 
@@ -9,7 +9,7 @@
 
 ### Dependencies
 
-- Now requires `@telnyx/react-native-voice-sdk >= 0.4.5-beta.0`, which removes the auto-reconnect on socket error/close that was triggering the multi-instance race. See the [voice-sdk 0.4.5-beta.0 changelog](../package/CHANGELOG.md#045-beta0-2026-04-30) for details.
+- Now requires `@telnyx/react-native-voice-sdk >= 0.4.5`, which removes the auto-reconnect on socket error/close that was triggering the multi-instance race. See the [voice-sdk 0.4.5 changelog](../package/CHANGELOG.md#045-2026-04-30) for details.
 
 ## [0.4.2] (2026-04-27)
 
