@@ -10,6 +10,7 @@ const config_1 = require('./models/config');
 const session_manager_1 = require('./internal/session/session-manager');
 const call_state_controller_1 = require('./internal/calls/call-state-controller');
 const voice_pn_bridge_1 = require('./internal/voice-pn-bridge');
+const release_log_1 = require('./internal/release-log');
 /**
  * The main public interface for the react-voice-commons module.
  *
@@ -329,17 +330,21 @@ class TelnyxVoipClient {
    */
   async handlePushNotification(payload) {
     this._throwIfDisposed();
+    release_log_1.txlog.info(
+      'VoipClient',
+      'handlePushNotification entry — delegating to SessionManager'
+    );
     if (this._options.debug) {
       console.log('TelnyxVoipClient: Handling push notification:', payload);
     }
     try {
-      // SessionManager owns the entire push lifecycle: it disposes any stale
-      // client, loads stored credentials if needed, and rebuilds the TelnyxRTC
-      // bound to THIS push's voice_sdk_id. We deliberately do not fall back to
-      // a generic loginFromStoredConfig() here — that would create a parallel
-      // client with no voice_sdk_id awareness, which the gateway then has to
-      // `punt` once the SessionManager-driven session also registers,
-      // dropping the active call.
+      // SessionManager owns the entire push lifecycle: it disposes any prior
+      // client, loads stored credentials if needed, and rebuilds the
+      // TelnyxRTC bound to THIS push's voice_sdk_id. We deliberately do not
+      // fall back to a generic loginFromStoredConfig() here — that would
+      // create a parallel client with no voice_sdk_id awareness, which the
+      // gateway then has to `punt` once the SessionManager-driven session
+      // also registers, dropping the active call.
       await this._sessionManager.handlePushNotification(payload);
     } catch (error) {
       console.error('TelnyxVoipClient: Error handling push notification:', error);

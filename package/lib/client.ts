@@ -11,6 +11,7 @@ import type { CallReportConfig } from './call-report-models';
 import { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
 import { Connection } from './connection';
 import { setSDKVersion } from './env';
+import { logVertoEvent } from './verto-log';
 import { KeepAliveHandler } from './keep-alive-handler';
 import { eventBus } from './legacy-event-bus';
 import { LoginHandler } from './login-handler';
@@ -27,7 +28,6 @@ import type { MediaEvent } from './messages/media';
 import { isMediaEvent } from './messages/media';
 import { isValidGatewayStateResponse } from './messages/gateway';
 import { from } from 'rxjs';
-import { logVertoEvent } from './verto-log';
 
 type TelnyxRTCEvents = {
   'telnyx.client.ready': () => void;
@@ -607,36 +607,43 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     log.debug('[TelnyxRTC] Setting up connection event listeners');
     this.connection.addListener('telnyx.socket.message', this.onSocketMessage);
-    // Socket error/close are intentionally not auto-reconnected here. Mid-call
-    // network changes are handled by the NetInfo-driven onNetworkUnavailable
-    // path, and post-push lifecycle is owned by SessionManager (which tears
-    // down and rebuilds with the correct voice_sdk_id on every push). Adding
-    // a third reconnect path here previously caused a multi-instance race
-    // where a zombie reconnect would fire after SessionManager disposed the
-    // client, ending up with the server `punt`-ing one of the parallel
-    // sessions and dropping the active call.
+    // Socket error/close are propagated as `telnyx.client.error` so consumers
+    // (e.g. SessionManager) can move to ERROR state and decide what to do
+    // next, but we deliberately do NOT auto-reconnect from here. A previous
+    // implementation triggered an internal reconnect on these events, which
+    // raced against consumer-driven rebuilds (e.g. SessionManager rebuilding
+    // on each VoIP push) and created parallel sessions the gateway then
+    // `punt`-ed. Mid-call network changes are still handled by the NetInfo-
+    // driven onNetworkUnavailable path. Pre-login failures are owned by the
+    // initial connect() promise and ignored here.
     this.connection.addListener('telnyx.socket.error', (error) => {
       log.error('[TelnyxRTC] WebSocket connection error:', error);
+      if (this.sessionId) {
+        try {
+          this.emit('telnyx.client.error', error as any);
+        } catch {
+          /* consumers may not be subscribed */
+        }
+      }
     });
     this.connection.addListener('telnyx.socket.close', () => {
       log.debug('[TelnyxRTC] WebSocket connection closed');
+      if (this.sessionId) {
+        try {
+          this.emit('telnyx.client.error', new Error('WebSocket closed'));
+        } catch {
+          /* consumers may not be subscribed */
+        }
+      }
     });
 
-    // Wait for WebSocket connection to be established.
-    // The timeout is overridable via globalThis.DEBUG_WS_OPEN_TIMEOUT_MS
-    // for synthetic reproduction of the cold-launch "WebSocket connection
-    // timeout" failure mode that the customer reports. Default 15s.
+    // Wait for WebSocket connection to be established
     if (!this.connection.isConnected) {
-      const wsOpenTimeoutMs = (() => {
-        const knob = (globalThis as any).DEBUG_WS_OPEN_TIMEOUT_MS;
-        return typeof knob === 'number' && knob > 0 ? knob : 15000;
-      })();
-      log.debug(`[TelnyxRTC] Waiting for WebSocket connection (timeout=${wsOpenTimeoutMs}ms)...`);
-      logVertoEvent('Client', `WebSocket open wait, timeout=${wsOpenTimeoutMs}ms`);
+      log.debug('[TelnyxRTC] Waiting for WebSocket connection...');
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
-          reject(new Error(`WebSocket connection timeout after ${wsOpenTimeoutMs}ms`));
-        }, wsOpenTimeoutMs);
+          reject(new Error('WebSocket connection timeout after 15 seconds'));
+        }, 15000); // 15 second timeout
 
         const onOpen = () => {
           log.debug('[TelnyxRTC] WebSocket connection established');
@@ -787,16 +794,13 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
 
     // Reset push flags on disconnect to ensure clean state for next connection
-    // Preserve push-related flags during reconnection (driven internally) so
-    // they survive a transient disconnect inside attemptReconnection.
-    // External disconnect() callers (fromReconnection=false) want a hard
-    // tear-down — including clearing `reconnecting` — to avoid a zombie
-    // reconnect chain firing after the caller has moved on.
-    if (!this.reconnecting || !fromReconnection) {
+    // Preserve push-related flags during reconnection so they survive the disconnect
+    if (!this.reconnecting) {
       this.isCallFromPush = false;
       this.pushNotificationPayload = null;
       this.pendingInvite = null;
       this.pushNotificationCallKitUUID = null;
+      // Cancel any ongoing reconnection process
       this.reconnecting = false;
       log.debug('[TelnyxRTC] Reset push flags on disconnect');
 
@@ -809,16 +813,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
 
     log.warn('[TelnyxRTC] Disconnected from Telnyx RTC');
-  }
-
-  /**
-   * True while an internal reconnect is in flight (network change or socket
-   * failure). Exposed so external callers (e.g. SessionManager) can avoid
-   * starting a parallel reconnect that would race ours for the same singleton
-   * WebSocket.
-   */
-  public get isReconnecting(): boolean {
-    return this.reconnecting;
   }
 
   public get connected() {
@@ -979,6 +973,13 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     log.debug('[TelnyxRTC] Call object created, checking for pending actions');
 
+    // Set when a push action (`reject` / pendingEndAction) caused us to
+    // hang up the incoming call before surfacing it. Used to suppress the
+    // `telnyx.call.incoming` emission below — otherwise the consumer briefly
+    // sees an "incoming" call that's already in `ended` state, flashing a
+    // ringing screen for a call that's already dead.
+    let rejectedByPushAction = false;
+
     // Check for pending actions from CallKit (matching iOS SDK behavior)
     if (this.isCallFromPush) {
       log.debug('[TelnyxRTC] This is a push notification call, checking pending actions');
@@ -998,6 +999,14 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
           incomingCall.answer();
         } else if (action === 'reject') {
           incomingCall.hangup();
+          // Push action already rejected this call — bye was sent, the call
+          // is in 'ended' state. Don't surface it to consumers as an
+          // incoming call; otherwise the UI flashes a ringing screen for a
+          // call that's already dead. Socket teardown for "user kills the
+          // app afterwards" is handled by the consumer's app-backgrounded
+          // path (mirroring the Android SDK's MainActivity.onStop disconnect
+          // pattern), not here.
+          rejectedByPushAction = true;
         }
         // Reset push flags immediately since the action was handled inline
         this.resetPendingActions();
@@ -1011,6 +1020,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         // Execute pending end asynchronously
         // Push flags are reset inside resetPendingActions() after execution
         setTimeout(() => this.executePendingEnd(), 100);
+        // Same reasoning as the inline `action === 'reject'` branch above —
+        // we've decided to end this call before the user sees it.
+        rejectedByPushAction = true;
       } else {
         log.debug('[TelnyxRTC] No pending actions to execute for push notification call');
         // No pending actions yet - keep isCallFromPush alive so that
@@ -1019,6 +1031,13 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       }
     } else {
       log.debug('[TelnyxRTC] Not a push notification call, no pending actions to check');
+    }
+
+    if (rejectedByPushAction) {
+      log.debug(
+        '[TelnyxRTC] Suppressing telnyx.call.incoming for call rejected via push action'
+      );
+      return;
     }
 
     log.debug('[TelnyxRTC] Emitting telnyx.call.incoming event');
@@ -1315,6 +1334,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private async attemptReconnection() {
     if (!this.reconnecting) {
       logVertoEvent('Client', 'attemptReconnection: not in reconnecting state, skipping');
+      log.debug('[TelnyxRTC] Not in reconnection state, skipping reconnection attempt');
       return;
     }
 
@@ -1322,17 +1342,19 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     try {
       logVertoEvent('Client', 'attemptReconnection: calling connect() …');
+      log.debug('[TelnyxRTC] Starting reconnection process...');
+
+      // Connect (this will create new connection and login)
       await this.connect();
+
       logVertoEvent('Client', 'attemptReconnection: connect() resolved, login successful');
+      log.debug('[TelnyxRTC] Reconnection and relogin successful');
       this.cancelReconnectionTimer();
 
       // If there was an active call, the attach message will be handled in onAttachReceived
       log.debug('[TelnyxRTC] Waiting for attach message to reestablish call...');
     } catch (error: any) {
-      logVertoEvent(
-        'Client',
-        `attemptReconnection FAILED: ${error?.message ?? error}`
-      );
+      logVertoEvent('Client', `attemptReconnection: FAILED ${error?.message ?? error}`);
       log.error('[TelnyxRTC] Reconnection attempt failed:', error);
     }
   }
