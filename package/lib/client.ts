@@ -606,18 +606,34 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     log.debug('[TelnyxRTC] Setting up connection event listeners');
     this.connection.addListener('telnyx.socket.message', this.onSocketMessage);
-    // Socket error/close are intentionally not auto-reconnected here. Mid-call
-    // network changes are handled by the NetInfo-driven onNetworkUnavailable
-    // path, and post-push lifecycle is owned by SessionManager (which tears
-    // down and rebuilds with the correct voice_sdk_id on every push). A
-    // third reconnect path here previously caused a multi-instance race
-    // where a zombie reconnect would fire after SessionManager disposed the
-    // client, producing parallel sessions that the gateway then `punt`-ed.
+    // Socket error/close are propagated as `telnyx.client.error` so consumers
+    // (e.g. SessionManager) can move to ERROR state and decide what to do
+    // next, but we deliberately do NOT auto-reconnect from here. A previous
+    // implementation triggered an internal reconnect on these events, which
+    // raced against consumer-driven rebuilds (e.g. SessionManager rebuilding
+    // on each VoIP push) and created parallel sessions the gateway then
+    // `punt`-ed. Mid-call network changes are still handled by the NetInfo-
+    // driven onNetworkUnavailable path. Pre-login failures are owned by the
+    // initial connect() promise and ignored here.
     this.connection.addListener('telnyx.socket.error', (error) => {
       log.error('[TelnyxRTC] WebSocket connection error:', error);
+      if (this.sessionId) {
+        try {
+          this.emit('telnyx.client.error', error as any);
+        } catch {
+          /* consumers may not be subscribed */
+        }
+      }
     });
     this.connection.addListener('telnyx.socket.close', () => {
       log.debug('[TelnyxRTC] WebSocket connection closed');
+      if (this.sessionId) {
+        try {
+          this.emit('telnyx.client.error', new Error('WebSocket closed'));
+        } catch {
+          /* consumers may not be subscribed */
+        }
+      }
     });
 
     // Wait for WebSocket connection to be established
