@@ -1,5 +1,16 @@
 # CHANGELOG.md
 
+## [0.4.3] (2026-04-30)
+
+### Bug Fixing
+
+- **VoIP push always rebuilds the `TelnyxRTC` instance.** `SessionManager.handlePushNotification` now unconditionally disposes any prior client and runs `_connect()` afresh, so the new socket's URL bakes in THIS push's `voice_sdk_id`. Reusing a prior connection would cause the gateway to route this push's INVITE to whichever client announced with the new `voice_sdk_id` (i.e. a different connection), leaving us listening on the wrong socket until CallKit timed out.
+- **Dropped the `loginFromStoredConfig()` fallback inside `TelnyxVoipClient.handlePushNotification`.** When SessionManager's push-driven `_connect()` didn't immediately reach `CONNECTED`, the fallback would create a second TelnyxRTC instance with no `voice_sdk_id` awareness. The gateway then `punt`-ed one of the parallel sessions, dropping the active call. SessionManager already loads stored credentials internally for the cold-launch path; the redundant fallback only created races.
+
+### Dependencies
+
+- Now requires `@telnyx/react-native-voice-sdk >= 0.4.5`, which removes the auto-reconnect on socket error/close that was triggering the multi-instance race. See the [voice-sdk 0.4.5 changelog](../package/CHANGELOG.md#045-2026-04-30) for details.
+
 ## [0.4.2] (2026-04-27)
 
 ### Bug Fixing

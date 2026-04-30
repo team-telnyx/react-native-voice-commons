@@ -178,38 +178,21 @@ export class SessionManager {
     // Store the push notification payload for when the client is created
     (this as any)._pendingPushPayload = payload;
 
-    // If we have a TelnyxRTC instance but its socket isn't fresh — either not
-    // connected at all, or connected but with no traffic for longer than the
-    // threshold — dispose it so we go through the full _connect() path below
-    // instead of calling processVoIPNotification on a stale client.
-    //
-    // This handles two cases iOS gives us with the same code path:
-    //   1. Terminated-then-cold-launched: a client exists (constructed at
-    //      app boot) but its connection was never opened (idleMs=Infinity).
-    //   2. Suspended-then-thawed: a client exists with `connected=true`,
-    //      but the kernel killed the TLS session during freeze without
-    //      notifying the JS WebSocket wrapper, so no error event fired.
-    //
-    // 30s threshold matches the server's keep-alive ping cadence (~20s),
-    // so a live session always remains fresh.
-    const STALE_THRESHOLD_MS = 30000;
+    // Each push always rebuilds the TelnyxRTC client. The voice_sdk_id is
+    // baked into the WebSocket URL at socket-open time and can't be mutated
+    // mid-flight; reusing a connection from a previous push means the
+    // gateway routes THIS push's INVITE to a different (correctly-stamped)
+    // client and we sit on the wrong socket forever.
     if (this._telnyxClient) {
-      const client = this._telnyxClient as any;
-      const isFresh =
-        typeof client.isFresh === 'function'
-          ? client.isFresh(STALE_THRESHOLD_MS)
-          : !!client.connected;
-      if (!isFresh) {
-        try {
-          await this._telnyxClient.disconnect();
-        } catch (err) {
-          console.warn('SessionManager: disconnect of stale client threw:', err);
-        }
-        this._telnyxClient = undefined;
-        if (this.currentState !== TelnyxConnectionState.DISCONNECTED) {
-          this._connectionState.next(TelnyxConnectionState.DISCONNECTED);
-        }
+      try {
+        await this._telnyxClient.disconnect();
+      } catch (err) {
+        console.warn('SessionManager: disconnect of prior client threw:', err);
       }
+    }
+    this._telnyxClient = undefined;
+    if (this.currentState !== TelnyxConnectionState.DISCONNECTED) {
+      this._connectionState.next(TelnyxConnectionState.DISCONNECTED);
     }
 
     // If we don't have a config yet but we're processing a push notification,
