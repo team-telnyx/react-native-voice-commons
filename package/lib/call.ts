@@ -6,7 +6,9 @@ import { Connection } from './connection';
 import type { AnswerEvent, ByeEvent, RingingEvent } from './messages/call';
 import {
   createAnswerMessage,
+  createCandidateMessage,
   createDTMFRequest,
+  createEndOfCandidatesMessage,
   createHangupRequest,
   createInviteMessage,
   createModifyCallRequest,
@@ -19,6 +21,8 @@ import {
 } from './messages/call';
 import { createAttachMessage } from './messages/attach';
 import { Peer } from './peer';
+import type { TrickleIceCandidate } from './peer';
+import { prepareTrickleSdp, normalizeRemoteCandidateString } from './sdp-utils';
 import { WebRTCReporter } from './webrtc-reporter';
 import { CallReportCollector } from './call-report-collector';
 import type { CallReportConfig, CallReportSummary } from './call-report-models';
@@ -177,6 +181,7 @@ export class Call extends EventEmitter<CallEvents> {
     }
 
     call.peer = new Peer(options);
+    call.setupTrickleIceCallbacks();
     call.peer.createPeerConnection();
     call.peer.setRemoteDescription({ type: 'offer', sdp: remoteSDP });
 
@@ -346,22 +351,27 @@ export class Call extends EventEmitter<CallEvents> {
     log.debug('[Call] Setting state to connecting before answering');
     this.setState('connecting');
 
-    await this.peer
-      .attachLocalStream({ audio: true, video: false })
-      .then((peer) => peer.createAnswer())
-      .then((peer) => peer.waitForIceGatheringComplete());
+    await this.peer.attachLocalStream({ audio: true, video: false }).then((peer) => peer.createAnswer());
+
+    if (!this.isTrickleIceEnabled()) {
+      await this.peer.waitForIceGatheringComplete();
+    }
 
     await this.connection.sendAndWait(
       createAnswerMessage({
         callId: this.callId,
         dialogParams: {},
-        sdp: this.peer.localDescription!.sdp,
+        sdp: this.getLocalSdpForSignaling(),
         telnyxLegId: this.telnyxLegId!,
         telnyxSessionId: this.telnyxSessionId!,
         sessionId: this.sessionId,
         customHeaders,
       })
     );
+
+    if (this.isTrickleIceEnabled()) {
+      this.peer.flushPendingLocalCandidates();
+    }
 
     this.setState('active');
   };
@@ -384,18 +394,17 @@ export class Call extends EventEmitter<CallEvents> {
 
     try {
       log.debug('[Call] Attaching local stream and creating answer for reattachment');
-      await this.peer
-        .attachLocalStream({ audio: true, video: false })
-        .then((peer) => {
-          log.debug('[Call] Local stream attached, creating answer');
-          return peer.createAnswer();
-        })
-        .then((peer) => {
-          log.debug('[Call] Answer created, waiting for ICE gathering');
-          return peer.waitForIceGatheringComplete();
-        });
+      await this.peer.attachLocalStream({ audio: true, video: false }).then((peer) => {
+        log.debug('[Call] Local stream attached, creating answer');
+        return peer.createAnswer();
+      });
 
-      log.debug('[Call] ICE gathering complete, preparing answer message');
+      if (!this.isTrickleIceEnabled()) {
+        log.debug('[Call] Answer created, waiting for ICE gathering');
+        await this.peer.waitForIceGatheringComplete();
+      }
+
+      log.debug('[Call] Preparing answer attach message');
 
       if (!this.peer.localDescription?.sdp) {
         log.error('[Call] No local SDP available for answer message');
@@ -405,7 +414,7 @@ export class Call extends EventEmitter<CallEvents> {
       const attachMessage = createAttachMessage({
         callId: this.callId,
         sessionId: this.sessionId,
-        sdp: this.peer.localDescription.sdp,
+        sdp: this.getLocalSdpForSignaling(),
         customHeaders: this.inviteCustomHeaders || [],
         destinationNumber: this.options.destinationNumber || '',
         callerIdName: this.options.callerIdName || '',
@@ -422,6 +431,10 @@ export class Call extends EventEmitter<CallEvents> {
 
       // Send attach message for call reattachment (critical for WebRTC media flow)
       await this.connection.sendAndWait(attachMessage);
+
+      if (this.isTrickleIceEnabled()) {
+        this.peer.flushPendingLocalCandidates();
+      }
 
       log.debug('[Call] Attach message sent successfully, setting call to active');
       this.setState('active');
@@ -728,6 +741,7 @@ export class Call extends EventEmitter<CallEvents> {
   }
   public invite = async () => {
     this.peer = await Peer.createOffer(this.options);
+    this.setupTrickleIceCallbacks();
 
     // Initialize WebRTC reporter if debug mode is enabled
     if (this.debugEnabled) {
@@ -743,7 +757,7 @@ export class Call extends EventEmitter<CallEvents> {
         callOptions: this.options,
         sessionId: this.sessionId,
         callId: this.callId,
-        sdp: this.peer.localDescription!.sdp,
+        sdp: this.getLocalSdpForSignaling(),
       })
     );
 
@@ -751,6 +765,79 @@ export class Call extends EventEmitter<CallEvents> {
       throw new Error(`[Call] Invalid invite ACK message received: ${JSON.stringify(msg)}`);
     }
     this.callId = msg.result.callID;
+
+    if (this.isTrickleIceEnabled()) {
+      this.peer.flushPendingLocalCandidates();
+    }
+  };
+
+  private isTrickleIceEnabled = () => Boolean(this.options.peerConnectionOptions?.useTrickleIce);
+
+  private getLocalSdpForSignaling = () => {
+    const sdp = this.peer?.localDescription?.sdp;
+    if (!sdp) {
+      throw new Error('[Call] Local SDP not available');
+    }
+    return this.isTrickleIceEnabled() ? prepareTrickleSdp(sdp) : sdp;
+  };
+
+  private setupTrickleIceCallbacks = () => {
+    if (!this.peer || !this.isTrickleIceEnabled()) {
+      return;
+    }
+
+    this.peer.onLocalCandidate = (candidate) => {
+      this.sendLocalCandidate(candidate);
+    };
+    this.peer.onLocalEndOfCandidates = () => {
+      this.sendLocalEndOfCandidates();
+    };
+  };
+
+  private sendLocalCandidate = (candidate: TrickleIceCandidate) => {
+    if (!this.isTrickleIceEnabled()) {
+      return;
+    }
+    this.connection.send(
+      createCandidateMessage({
+        sessionId: this.sessionId,
+        callId: this.callId,
+        candidate: candidate.candidate,
+        sdpMid: candidate.sdpMid,
+        sdpMLineIndex: candidate.sdpMLineIndex,
+      })
+    );
+  };
+
+  private sendLocalEndOfCandidates = () => {
+    if (!this.isTrickleIceEnabled()) {
+      return;
+    }
+    this.connection.send(
+      createEndOfCandidatesMessage({
+        sessionId: this.sessionId,
+        callId: this.callId,
+      })
+    );
+  };
+
+  public handleRemoteCandidate = (candidate: TrickleIceCandidate) => {
+    if (!this.peer) {
+      log.warn('[Call] No peer connection available for remote ICE candidate');
+      return;
+    }
+    this.peer.addRemoteCandidate({
+      ...candidate,
+      candidate: normalizeRemoteCandidateString(candidate.candidate),
+    });
+  };
+
+  public handleRemoteEndOfCandidates = () => {
+    if (!this.peer) {
+      log.warn('[Call] No peer connection available for remote end-of-candidates');
+      return;
+    }
+    this.peer.addRemoteEndOfCandidates();
   };
 
   private setState = (state: CallState) => {

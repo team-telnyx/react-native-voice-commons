@@ -15,6 +15,8 @@ export const TelnyxRTCMethod = {
   PING: 'telnyx_rtc.ping',
   ATTACH: 'telnyx_rtc.attach',
   ATTACH_CALLS: 'telnyx_rtc.attachCalls',
+  CANDIDATE: 'telnyx_rtc.candidate',
+  END_OF_CANDIDATES: 'telnyx_rtc.endOfCandidates',
   CLIENT_READY: 'telnyx_rtc.clientReady',
   GATEWAY_STATE: 'telnyx_rtc.gatewayState',
   DISABLE_PUSH_NOTIFICATION: 'telnyx_rtc.disable_push_notification',

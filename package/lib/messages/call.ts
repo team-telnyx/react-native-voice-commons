@@ -42,6 +42,8 @@ export function createInviteMessage({
         callID: callId,
         audio: callOptions.audio,
         prefetchIceCandidates: callOptions.peerConnectionOptions?.prefetchIceCandidates,
+        useTrickleIce: callOptions.peerConnectionOptions?.useTrickleIce,
+        trickle: callOptions.peerConnectionOptions?.useTrickleIce,
         destination_number: callOptions.destinationNumber,
         remote_caller_id_name: callOptions.remoteCallerIdName,
         remote_caller_id_number: callOptions.remoteCallerIdNumber,
@@ -64,6 +66,141 @@ export function isInviteACKMessage(msg: unknown): msg is InviteACKMessage {
     Boolean(temp.result?.sessid) &&
     temp.result?.message === 'CALL CREATED'
   );
+}
+
+type CandidateMessage = {
+  jsonrpc: '2.0';
+  id: string;
+  method: 'telnyx_rtc.candidate';
+  params: {
+    sessid: string;
+    candidate: string;
+    sdpMid?: string | null;
+    sdpMLineIndex?: number | null;
+    dialogParams: {
+      callID: string;
+    };
+  };
+};
+
+type CreateCandidateMessageParams = {
+  sessionId: string;
+  callId: string;
+  candidate: string;
+  sdpMid?: string | null;
+  sdpMLineIndex?: number | null;
+};
+
+export function createCandidateMessage({
+  sessionId,
+  callId,
+  candidate,
+  sdpMid,
+  sdpMLineIndex,
+}: CreateCandidateMessageParams): CandidateMessage {
+  return {
+    id: uuid(),
+    jsonrpc: '2.0',
+    method: TelnyxRTCMethod.CANDIDATE,
+    params: {
+      sessid: sessionId,
+      candidate,
+      sdpMid,
+      sdpMLineIndex,
+      dialogParams: {
+        callID: callId,
+      },
+    },
+  };
+}
+
+export type CandidateEvent = {
+  id?: string | number;
+  jsonrpc?: '2.0';
+  method: 'telnyx_rtc.candidate';
+  params: {
+    sessid?: string;
+    candidate: string;
+    sdpMid?: string | null;
+    sdpMLineIndex?: number | null;
+    dialogParams?: {
+      callID?: string;
+      callId?: string;
+    };
+    callID?: string;
+    callId?: string;
+  };
+  voice_sdk_id?: string;
+};
+
+export function isCandidateEvent(msg: unknown): msg is CandidateEvent {
+  if (!msg) {
+    return false;
+  }
+  const temp = msg as Partial<CandidateEvent>;
+  const params = temp.params;
+  const callId = params?.dialogParams?.callID ?? params?.dialogParams?.callId ?? params?.callID ?? params?.callId;
+  return temp.method === TelnyxRTCMethod.CANDIDATE && Boolean(params?.candidate) && Boolean(callId);
+}
+
+type EndOfCandidatesMessage = {
+  jsonrpc: '2.0';
+  id: string;
+  method: 'telnyx_rtc.endOfCandidates';
+  params: {
+    sessid: string;
+    dialogParams: {
+      callID: string;
+    };
+  };
+};
+
+type CreateEndOfCandidatesMessageParams = {
+  sessionId: string;
+  callId: string;
+};
+
+export function createEndOfCandidatesMessage({
+  sessionId,
+  callId,
+}: CreateEndOfCandidatesMessageParams): EndOfCandidatesMessage {
+  return {
+    id: uuid(),
+    jsonrpc: '2.0',
+    method: TelnyxRTCMethod.END_OF_CANDIDATES,
+    params: {
+      sessid: sessionId,
+      dialogParams: {
+        callID: callId,
+      },
+    },
+  };
+}
+
+export type EndOfCandidatesEvent = {
+  id?: string | number;
+  jsonrpc?: '2.0';
+  method: 'telnyx_rtc.endOfCandidates';
+  params: {
+    sessid?: string;
+    dialogParams?: {
+      callID?: string;
+      callId?: string;
+    };
+    callID?: string;
+    callId?: string;
+  };
+  voice_sdk_id?: string;
+};
+
+export function isEndOfCandidatesEvent(msg: unknown): msg is EndOfCandidatesEvent {
+  if (!msg) {
+    return false;
+  }
+  const temp = msg as Partial<EndOfCandidatesEvent>;
+  const params = temp.params;
+  const callId = params?.dialogParams?.callID ?? params?.dialogParams?.callId ?? params?.callID ?? params?.callId;
+  return temp.method === TelnyxRTCMethod.END_OF_CANDIDATES && Boolean(callId);
 }
 
 export type RingingEvent = {

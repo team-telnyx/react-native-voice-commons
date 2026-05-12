@@ -14,10 +14,12 @@ import { setSDKVersion } from './env';
 import { KeepAliveHandler } from './keep-alive-handler';
 import { eventBus } from './legacy-event-bus';
 import { LoginHandler } from './login-handler';
-import type { InviteEvent, AnswerEvent } from './messages/call';
+import type { InviteEvent, AnswerEvent, CandidateEvent, EndOfCandidatesEvent } from './messages/call';
 import {
   isInviteEvent,
   isAnswerEvent,
+  isCandidateEvent,
+  isEndOfCandidatesEvent,
 } from './messages/call';
 import { TelnyxRTCMethod } from './messages/methods';
 import { createAttachCallMessage } from './messages/attach';
@@ -879,6 +881,16 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       return this.handleCallAnswer(msg);
     }
 
+    if (isCandidateEvent(msg)) {
+      log.debug('[TelnyxRTC] Detected ICE candidate event, processing...');
+      return this.handleCandidateEvent(msg);
+    }
+
+    if (isEndOfCandidatesEvent(msg)) {
+      log.debug('[TelnyxRTC] Detected end-of-candidates event, processing...');
+      return this.handleEndOfCandidatesEvent(msg);
+    }
+
     // Check if this is an invite message that's not being detected
     if (msg && typeof msg === 'object' && (msg as any).method === TelnyxRTCMethod.INVITE) {
       log.warn('[TelnyxRTC] Received invite message but isInviteEvent returned false:', msg);
@@ -948,7 +960,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         callId: msg.params.callID,
         telnyxLegId: msg.params.telnyx_leg_id,
         telnyxSessionId: msg.params.telnyx_session_id,
-        options: { destinationNumber: msg.params.caller_id_number },
+        options: {
+          destinationNumber: msg.params.caller_id_number,
+          peerConnectionOptions: {
+            useTrickleIce: this.options.useTrickleIce,
+          },
+        },
         inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
         debug: this.options.debug,
         callReportConfig: this.getCallReportConfig(),
@@ -1081,6 +1098,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       telnyxSessionId: msg.params.telnyx_session_id,
       options: {
         destinationNumber: msg.params.caller_id_number,
+        peerConnectionOptions: {
+          useTrickleIce: this.options.useTrickleIce,
+        },
       },
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
       initialState: 'connecting', // Set initial state to connecting
@@ -1221,6 +1241,50 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   
 
     log.debug('[TelnyxRTC] ====== CALL ANSWER HANDLING COMPLETE ======');
+  };
+
+  private getCallIdFromTrickleParams(params: {
+    dialogParams?: { callID?: string; callId?: string };
+    callID?: string;
+    callId?: string;
+  }): string | undefined {
+    return params.dialogParams?.callID ?? params.dialogParams?.callId ?? params.callID ?? params.callId;
+  }
+
+  private handleCandidateEvent = (msg: CandidateEvent) => {
+    const callID = this.getCallIdFromTrickleParams(msg.params);
+    if (!callID) {
+      log.warn('[TelnyxRTC] Candidate event missing call ID');
+      return;
+    }
+
+    const targetCall = this.getCall(callID);
+    if (!targetCall) {
+      log.warn('[TelnyxRTC] No call found for ICE candidate event');
+      return;
+    }
+
+    targetCall.handleRemoteCandidate({
+      candidate: msg.params.candidate,
+      sdpMid: msg.params.sdpMid,
+      sdpMLineIndex: msg.params.sdpMLineIndex,
+    });
+  };
+
+  private handleEndOfCandidatesEvent = (msg: EndOfCandidatesEvent) => {
+    const callID = this.getCallIdFromTrickleParams(msg.params);
+    if (!callID) {
+      log.warn('[TelnyxRTC] End-of-candidates event missing call ID');
+      return;
+    }
+
+    const targetCall = this.getCall(callID);
+    if (!targetCall) {
+      log.warn('[TelnyxRTC] No call found for end-of-candidates event');
+      return;
+    }
+
+    targetCall.handleRemoteEndOfCandidates();
   };
 
   private onNetInfoStateChange = (state: NetInfoState) => {
