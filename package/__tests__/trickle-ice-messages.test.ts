@@ -107,8 +107,8 @@ describe('Trickle ICE SDP utilities', () => {
   });
 
   it('normalizes incoming candidate strings for RTCIceCandidate', () => {
-    expect(normalizeRemoteCandidateString('a=candidate:1 1 UDP 2122252543 192.0.2.1 54400 typ host')).toBe(
-      'candidate:1 1 UDP 2122252543 192.0.2.1 54400 typ host'
-    );
+    expect(
+      normalizeRemoteCandidateString('a=candidate:1 1 UDP 2122252543 192.0.2.1 54400 typ host')
+    ).toBe('candidate:1 1 UDP 2122252543 192.0.2.1 54400 typ host');
   });
 });
