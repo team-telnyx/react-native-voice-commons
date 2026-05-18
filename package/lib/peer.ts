@@ -73,8 +73,11 @@ export class Peer {
       this.instance.close();
       this.instance = null;
     }
-    this.iceGatheringComplete?.reject(new Error('Peer connection closed'));
-    this.iceGatheringComplete = null;
+    if (this.iceGatheringComplete) {
+      this.iceGatheringComplete.promise.catch(() => {});
+      this.iceGatheringComplete.reject(new Error('Peer connection closed'));
+      this.iceGatheringComplete = null;
+    }
     this.options.localStream?.getTracks().forEach((track) => {
       track.stop();
     });
