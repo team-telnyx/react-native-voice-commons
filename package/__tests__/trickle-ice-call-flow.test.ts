@@ -97,4 +97,45 @@ describe('Trickle ICE call lifecycle', () => {
     });
     expect(call.handleRemoteEndOfCandidates).toHaveBeenCalledTimes(1);
   });
+
+  it('queues remote trickle events until the matching call is tracked', () => {
+    const client = new TelnyxRTC({ logLevel: 'error' });
+    const call = {
+      callId: 'call-123',
+      state: 'active',
+      on: jest.fn(),
+      off: jest.fn(),
+      handleRemoteCandidate: jest.fn(),
+      handleRemoteEndOfCandidates: jest.fn(),
+    } as any;
+
+    (client as any).onSocketMessage({
+      method: TelnyxRTCMethod.CANDIDATE,
+      params: {
+        candidate: 'candidate:1 1 UDP 2122252543 192.0.2.1 54400 typ host',
+        sdpMid: '0',
+        sdpMLineIndex: 0,
+        dialogParams: { callID: 'call-123' },
+      },
+    });
+
+    (client as any).onSocketMessage({
+      method: TelnyxRTCMethod.END_OF_CANDIDATES,
+      params: {
+        dialogParams: { callID: 'call-123' },
+      },
+    });
+
+    expect(call.handleRemoteCandidate).not.toHaveBeenCalled();
+    expect(call.handleRemoteEndOfCandidates).not.toHaveBeenCalled();
+
+    (client as any).addCall(call);
+
+    expect(call.handleRemoteCandidate).toHaveBeenCalledWith({
+      candidate: 'candidate:1 1 UDP 2122252543 192.0.2.1 54400 typ host',
+      sdpMid: '0',
+      sdpMLineIndex: 0,
+    });
+    expect(call.handleRemoteEndOfCandidates).toHaveBeenCalledTimes(1);
+  });
 });

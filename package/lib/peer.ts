@@ -231,6 +231,12 @@ export class Peer {
     return this;
   };
 
+  public clearPendingLocalCandidates = () => {
+    this.pendingLocalCandidates = [];
+    this.pendingLocalEndOfCandidates = false;
+    return this;
+  };
+
   public addRemoteCandidate = async (candidate: TrickleIceCandidate) => {
     if (!this.instance) {
       throw new Error('[Peer] Peer connection not created');
@@ -240,6 +246,8 @@ export class Peer {
       this.pendingRemoteCandidates.push(candidate);
       return this;
     }
+    // react-native-webrtc accepts RTCIceCandidateInit here, but its TS surface
+    // can lag the native implementation.
     await (this.instance as any).addIceCandidate(candidate).catch((error: unknown) => {
       log.error('[Peer] Error adding remote ICE candidate', error);
     });
@@ -254,6 +262,8 @@ export class Peer {
       return this;
     }
     if (typeof (this.instance as any).addIceCandidate === 'function') {
+      // Some RN WebRTC versions ignore or reject null end-of-candidates.
+      // Treat that as non-fatal because candidates have already been delivered.
       await (this.instance as any).addIceCandidate(null).catch((error: unknown) => {
         log.debug('[Peer] Remote end-of-candidates ignored by peer connection', error);
       });

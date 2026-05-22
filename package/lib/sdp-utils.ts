@@ -10,18 +10,27 @@ function joinSdpLines(lines: string[], originalSdp: string): string {
 /**
  * Advertise Trickle ICE support in SDP.
  *
- * Native Telnyx SDKs add `a=ice-options:trickle` before sending the initial
- * offer/answer when Trickle ICE is enabled. This helper is idempotent so it can
- * safely be applied from multiple call paths.
+ * Native Telnyx SDKs add `a=ice-options:trickle` at the session level after
+ * the origin line. If WebRTC generated extra options, normalize the line to
+ * only `trickle` so the signaling payload matches Android.
  */
 export function addTrickleIceCapability(sdp: string): string {
-  if (!sdp || /(^|\r?\n)a=ice-options:.*\btrickle\b/.test(sdp)) {
+  if (!sdp) {
     return sdp;
   }
 
   const lines = sdp.split(SDP_LINE_SEPARATOR);
-  const firstMediaLineIndex = lines.findIndex((line) => line.startsWith('m='));
-  const insertAt = firstMediaLineIndex >= 0 ? firstMediaLineIndex : lines.length;
+  const existingIndex = lines.findIndex((line) => line.startsWith('a=ice-options:'));
+  if (existingIndex >= 0) {
+    if (lines[existingIndex] === 'a=ice-options:trickle') {
+      return sdp;
+    }
+    lines[existingIndex] = 'a=ice-options:trickle';
+    return joinSdpLines(lines, sdp);
+  }
+
+  const originIndex = lines.findIndex((line) => line.startsWith('o='));
+  const insertAt = originIndex >= 0 ? originIndex + 1 : lines.length;
   lines.splice(insertAt, 0, 'a=ice-options:trickle');
   return joinSdpLines(lines, sdp);
 }
@@ -48,6 +57,29 @@ export function removeCandidateLines(sdp: string): string {
  */
 export function normalizeRemoteCandidateString(candidate: string): string {
   return candidate.replace(/^a=/, '');
+}
+
+/**
+ * Match Android's candidate cleaning before signaling: keep the RFC candidate
+ * fields and drop WebRTC-specific extensions like generation, ufrag, network-id
+ * and network-cost.
+ */
+export function cleanCandidateString(candidate: string): string {
+  const normalized = normalizeRemoteCandidateString(candidate).trim();
+  const parts = normalized.split(/\s+/);
+  if (!parts[0]?.startsWith('candidate:') || parts.length < 8) {
+    return normalized;
+  }
+
+  const cleaned = parts.slice(0, 8);
+  for (let i = 8; i < parts.length; i++) {
+    const part = parts[i];
+    if ((part === 'raddr' || part === 'rport') && i + 1 < parts.length) {
+      cleaned.push(part, parts[i + 1]);
+      i++;
+    }
+  }
+  return cleaned.join(' ');
 }
 
 export function prepareTrickleSdp(sdp: string): string {

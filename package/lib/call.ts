@@ -22,7 +22,7 @@ import {
 import { createAttachMessage } from './messages/attach';
 import { Peer } from './peer';
 import type { TrickleIceCandidate } from './peer';
-import { prepareTrickleSdp, normalizeRemoteCandidateString } from './sdp-utils';
+import { prepareTrickleSdp, normalizeRemoteCandidateString, cleanCandidateString } from './sdp-utils';
 import { WebRTCReporter } from './webrtc-reporter';
 import { CallReportCollector } from './call-report-collector';
 import type { CallReportConfig, CallReportSummary } from './call-report-models';
@@ -751,23 +751,28 @@ export class Call extends EventEmitter<CallEvents> {
     // Store the custom headers we're sending with the invite
     this.inviteCustomHeaders = this.options.customHeaders || null;
 
-    const msg = await this.connection.sendAndWait(
-      createInviteMessage({
-        attach: false,
-        callOptions: this.options,
-        sessionId: this.sessionId,
-        callId: this.callId,
-        sdp: this.getLocalSdpForSignaling(),
-      })
-    );
+    try {
+      const msg = await this.connection.sendAndWait(
+        createInviteMessage({
+          attach: false,
+          callOptions: this.options,
+          sessionId: this.sessionId,
+          callId: this.callId,
+          sdp: this.getLocalSdpForSignaling(),
+        })
+      );
 
-    if (!isInviteACKMessage(msg)) {
-      throw new Error(`[Call] Invalid invite ACK message received: ${JSON.stringify(msg)}`);
-    }
-    this.callId = msg.result.callID;
+      if (!isInviteACKMessage(msg)) {
+        throw new Error(`[Call] Invalid invite ACK message received: ${JSON.stringify(msg)}`);
+      }
+      this.callId = msg.result.callID;
 
-    if (this.isTrickleIceEnabled()) {
-      this.peer.flushPendingLocalCandidates();
+      if (this.isTrickleIceEnabled()) {
+        this.peer.flushPendingLocalCandidates();
+      }
+    } catch (error) {
+      this.peer.clearPendingLocalCandidates();
+      throw error;
     }
   };
 
@@ -802,7 +807,7 @@ export class Call extends EventEmitter<CallEvents> {
       createCandidateMessage({
         sessionId: this.sessionId,
         callId: this.callId,
-        candidate: candidate.candidate,
+        candidate: cleanCandidateString(candidate.candidate),
         sdpMid: candidate.sdpMid,
         sdpMLineIndex: candidate.sdpMLineIndex,
       })

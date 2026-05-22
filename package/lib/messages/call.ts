@@ -43,6 +43,8 @@ export function createInviteMessage({
         audio: callOptions.audio,
         prefetchIceCandidates: callOptions.peerConnectionOptions?.prefetchIceCandidates,
         useTrickleIce: callOptions.peerConnectionOptions?.useTrickleIce,
+        // Keep both keys for signaling compatibility. Android sends top-level
+        // `trickle`; existing RN consumers read `useTrickleIce` from dialogParams.
         trickle: callOptions.peerConnectionOptions?.useTrickleIce,
         destination_number: callOptions.destinationNumber,
         remote_caller_id_name: callOptions.remoteCallerIdName,
@@ -133,14 +135,33 @@ export type CandidateEvent = {
   voice_sdk_id?: string;
 };
 
+export function getCallIdFromTrickleParams(params: {
+  dialogParams?: { callID?: string; callId?: string };
+  callID?: string;
+  callId?: string;
+}): string | undefined {
+  return (
+    params.dialogParams?.callID ??
+    params.dialogParams?.callId ??
+    params.callID ??
+    params.callId
+  );
+}
+
 export function isCandidateEvent(msg: unknown): msg is CandidateEvent {
   if (!msg) {
     return false;
   }
   const temp = msg as Partial<CandidateEvent>;
   const params = temp.params;
-  const callId = params?.dialogParams?.callID ?? params?.dialogParams?.callId ?? params?.callID ?? params?.callId;
-  return temp.method === TelnyxRTCMethod.CANDIDATE && Boolean(params?.candidate) && Boolean(callId);
+  const callId = params ? getCallIdFromTrickleParams(params) : undefined;
+  return (
+    temp.method === TelnyxRTCMethod.CANDIDATE &&
+    typeof params?.candidate === 'string' &&
+    params.sdpMid != null &&
+    typeof params.sdpMLineIndex === 'number' &&
+    Boolean(callId)
+  );
 }
 
 type EndOfCandidatesMessage = {
@@ -199,7 +220,7 @@ export function isEndOfCandidatesEvent(msg: unknown): msg is EndOfCandidatesEven
   }
   const temp = msg as Partial<EndOfCandidatesEvent>;
   const params = temp.params;
-  const callId = params?.dialogParams?.callID ?? params?.dialogParams?.callId ?? params?.callID ?? params?.callId;
+  const callId = params ? getCallIdFromTrickleParams(params) : undefined;
   return temp.method === TelnyxRTCMethod.END_OF_CANDIDATES && Boolean(callId);
 }
 

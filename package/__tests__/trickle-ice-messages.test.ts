@@ -7,6 +7,7 @@ import {
 import { TelnyxRTCMethod } from '../lib/messages/methods';
 import {
   addTrickleIceCapability,
+  cleanCandidateString,
   removeCandidateLines,
   normalizeRemoteCandidateString,
 } from '../lib/sdp-utils';
@@ -59,6 +60,8 @@ describe('Trickle ICE signaling messages', () => {
         method: TelnyxRTCMethod.CANDIDATE,
         params: {
           candidate: 'candidate:1 1 UDP 2122252543 192.0.2.1 54400 typ host',
+          sdpMid: '0',
+          sdpMLineIndex: 0,
           dialogParams: { callID: 'call-123' },
         },
       })
@@ -98,6 +101,25 @@ describe('Trickle ICE SDP utilities', () => {
     expect(twice.match(/a=ice-options:trickle/g)).toHaveLength(1);
   });
 
+  it('inserts ice-options after origin and normalizes existing ICE options', () => {
+    const withTrickle = addTrickleIceCapability(sdp);
+    const lines = withTrickle.split(/\r\n|\n|\r/);
+    const originIndex = lines.findIndex((line) => line.startsWith('o='));
+
+    expect(lines[originIndex + 1]).toBe('a=ice-options:trickle');
+
+    expect(
+      addTrickleIceCapability(
+        [
+          'v=0',
+          'o=- 46117317 2 IN IP4 127.0.0.1',
+          'a=ice-options:trickle renomination',
+          's=-',
+        ].join('\r\n')
+      )
+    ).toContain('a=ice-options:trickle\r\ns=-');
+  });
+
   it('removes candidate and end-of-candidates lines from initial SDP', () => {
     const stripped = removeCandidateLines(sdp);
 
@@ -110,5 +132,21 @@ describe('Trickle ICE SDP utilities', () => {
     expect(
       normalizeRemoteCandidateString('a=candidate:1 1 UDP 2122252543 192.0.2.1 54400 typ host')
     ).toBe('candidate:1 1 UDP 2122252543 192.0.2.1 54400 typ host');
+  });
+
+  it('cleans local candidates before signaling to match Android', () => {
+    expect(
+      cleanCandidateString(
+        'a=candidate:1 1 UDP 2122252543 192.0.2.1 54400 typ host generation 0 ufrag abc network-id 3 network-cost 10'
+      )
+    ).toBe('candidate:1 1 UDP 2122252543 192.0.2.1 54400 typ host');
+
+    expect(
+      cleanCandidateString(
+        'candidate:2 1 UDP 1686052607 203.0.113.1 54000 typ srflx raddr 10.0.0.1 rport 54000 generation 0 ufrag xyz'
+      )
+    ).toBe(
+      'candidate:2 1 UDP 1686052607 203.0.113.1 54000 typ srflx raddr 10.0.0.1 rport 54000'
+    );
   });
 });

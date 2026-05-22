@@ -20,6 +20,7 @@ import {
   isAnswerEvent,
   isCandidateEvent,
   isEndOfCandidatesEvent,
+  getCallIdFromTrickleParams,
 } from './messages/call';
 import { TelnyxRTCMethod } from './messages/methods';
 import { createAttachCallMessage } from './messages/attach';
@@ -40,6 +41,10 @@ type TelnyxRTCEvents = {
   'telnyx.call.stateChanged': (call: Call, state: string) => void;
   'telnyx.call.removed': (callId: string) => void;
 };
+
+type PendingTrickleEvent =
+  | { type: 'candidate'; msg: CandidateEvent; receivedAt: number }
+  | { type: 'endOfCandidates'; msg: EndOfCandidatesEvent; receivedAt: number };
 
 export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   public options: ClientOptions;
@@ -95,6 +100,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
   // Early media/ringback support
   private pendingMediaEvents: Map<string, MediaEvent> = new Map();
+  private pendingTrickleEvents: Map<string, PendingTrickleEvent[]> = new Map();
+  private static readonly PENDING_TRICKLE_TTL_MS = 30000;
 
   // Pending call actions (matching iOS SDK behavior)
   private pendingAnswerAction: boolean = false;
@@ -281,7 +288,79 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     this.callStateListeners.set(callId, stateListener);
     call.on('telnyx.call.state', stateListener);
 
+    this.drainPendingTrickleEvents(callId);
+
     log.debug(`[TelnyxRTC] Total calls tracked: ${this.calls.size}`);
+  }
+
+  private updateTrackedCallId(previousCallId: string, call: Call): void {
+    if (previousCallId === call.callId) {
+      this.drainPendingTrickleEvents(call.callId);
+      return;
+    }
+
+    const previousListener = this.callStateListeners.get(previousCallId);
+    if (previousListener) {
+      call.off('telnyx.call.state', previousListener);
+      this.callStateListeners.delete(previousCallId);
+    }
+    this.calls.delete(previousCallId);
+    this.addCall(call);
+  }
+
+  private prunePendingTrickleEvents(): void {
+    const expiresBefore = Date.now() - TelnyxRTC.PENDING_TRICKLE_TTL_MS;
+
+    for (const [callId, events] of this.pendingTrickleEvents.entries()) {
+      const freshEvents = events.filter((event) => event.receivedAt >= expiresBefore);
+      if (freshEvents.length > 0) {
+        this.pendingTrickleEvents.set(callId, freshEvents);
+      } else {
+        this.pendingTrickleEvents.delete(callId);
+      }
+    }
+  }
+
+  private queuePendingTrickleEvent(
+    callId: string,
+    event: Omit<PendingTrickleEvent, 'receivedAt'>
+  ): void {
+    this.prunePendingTrickleEvents();
+
+    const pending = this.pendingTrickleEvents.get(callId) || [];
+    pending.push({ ...event, receivedAt: Date.now() });
+    this.pendingTrickleEvents.set(callId, pending);
+  }
+
+  private drainPendingTrickleEvents(callId: string): void {
+    const targetCall = this.getCall(callId);
+    if (!targetCall) {
+      return;
+    }
+
+    const pending = this.pendingTrickleEvents.get(callId);
+    if (!pending?.length) {
+      return;
+    }
+
+    this.pendingTrickleEvents.delete(callId);
+
+    const expiresBefore = Date.now() - TelnyxRTC.PENDING_TRICKLE_TTL_MS;
+    for (const event of pending) {
+      if (event.receivedAt < expiresBefore) {
+        continue;
+      }
+
+      if (event.type === 'candidate') {
+        targetCall.handleRemoteCandidate({
+          candidate: event.msg.params.candidate,
+          sdpMid: event.msg.params.sdpMid,
+          sdpMLineIndex: event.msg.params.sdpMLineIndex,
+        });
+      } else {
+        targetCall.handleRemoteEndOfCandidates();
+      }
+    }
   }
 
   /**
@@ -355,7 +434,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     // Add to calls tracking (matches iOS SDK behavior)
     this.addCall(newCall);
 
+    const provisionalCallId = newCall.callId;
     await newCall.invite();
+    this.updateTrackedCallId(provisionalCallId, newCall);
     return newCall;
   };
 
@@ -1238,21 +1319,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       log.warn('[TelnyxRTC] No call found for callID in answer event');
     }
 
-  
-
     log.debug('[TelnyxRTC] ====== CALL ANSWER HANDLING COMPLETE ======');
   };
 
-  private getCallIdFromTrickleParams(params: {
-    dialogParams?: { callID?: string; callId?: string };
-    callID?: string;
-    callId?: string;
-  }): string | undefined {
-    return params.dialogParams?.callID ?? params.dialogParams?.callId ?? params.callID ?? params.callId;
-  }
-
   private handleCandidateEvent = (msg: CandidateEvent) => {
-    const callID = this.getCallIdFromTrickleParams(msg.params);
+    const callID = getCallIdFromTrickleParams(msg.params);
     if (!callID) {
       log.warn('[TelnyxRTC] Candidate event missing call ID');
       return;
@@ -1260,7 +1331,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     const targetCall = this.getCall(callID);
     if (!targetCall) {
-      log.warn('[TelnyxRTC] No call found for ICE candidate event');
+      log.debug('[TelnyxRTC] Queueing ICE candidate event until call is tracked');
+      this.queuePendingTrickleEvent(callID, { type: 'candidate', msg });
       return;
     }
 
@@ -1272,7 +1344,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   };
 
   private handleEndOfCandidatesEvent = (msg: EndOfCandidatesEvent) => {
-    const callID = this.getCallIdFromTrickleParams(msg.params);
+    const callID = getCallIdFromTrickleParams(msg.params);
     if (!callID) {
       log.warn('[TelnyxRTC] End-of-candidates event missing call ID');
       return;
@@ -1280,7 +1352,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     const targetCall = this.getCall(callID);
     if (!targetCall) {
-      log.warn('[TelnyxRTC] No call found for end-of-candidates event');
+      log.debug('[TelnyxRTC] Queueing end-of-candidates event until call is tracked');
+      this.queuePendingTrickleEvent(callID, { type: 'endOfCandidates', msg });
       return;
     }
 
