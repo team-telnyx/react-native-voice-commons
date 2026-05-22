@@ -73,8 +73,13 @@ export class Peer {
       this.instance.close();
       this.instance = null;
     }
-    this.iceGatheringComplete?.reject(new Error('Peer connection closed'));
-    this.iceGatheringComplete = null;
+    if (this.iceGatheringComplete) {
+      // Inbound pre-accept flows may never await ICE completion. Attach a handler
+      // before rejecting so close() is marked handled while awaited callers still reject.
+      this.iceGatheringComplete.promise.catch(() => {});
+      this.iceGatheringComplete.reject(new Error('Peer connection closed'));
+      this.iceGatheringComplete = null;
+    }
     this.options.localStream?.getTracks().forEach((track) => {
       track.stop();
     });
