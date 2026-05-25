@@ -145,8 +145,6 @@ describe('Trickle ICE SDP utilities', () => {
       cleanCandidateString(
         'candidate:2 1 UDP 1686052607 203.0.113.1 54000 typ srflx raddr 10.0.0.1 rport 54000 generation 0 ufrag xyz'
       )
-    ).toBe(
-      'candidate:2 1 UDP 1686052607 203.0.113.1 54000 typ srflx raddr 10.0.0.1 rport 54000'
-    );
+    ).toBe('candidate:2 1 UDP 1686052607 203.0.113.1 54000 typ srflx raddr 10.0.0.1 rport 54000');
   });
 });

@@ -11,6 +11,8 @@
     "ios": "expo start -c --ios",
     "web": "expo start -c --web",
     "clean": "rm -rf .expo node_modules",
+    "prepare": "git config core.hooksPath .githooks || true",
+    "hooks:install": "git config core.hooksPath .githooks",
     "postinstall": "npx tailwindcss -i ./global.css -o ./node_modules/.cache/nativewind/global.css",
     "lint": "prettier --check \"**/*.{js,jsx,ts,tsx,json,md}\"",
     "lint:fix": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\"",
