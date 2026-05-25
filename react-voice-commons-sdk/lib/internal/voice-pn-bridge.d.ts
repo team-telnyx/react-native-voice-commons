@@ -30,6 +30,8 @@ export interface VoicePnBridgeInterface {
   clearPendingVoipPush(): Promise<boolean>;
   getPendingVoipAction(): Promise<string | null>;
   clearPendingVoipAction(): Promise<boolean>;
+  setMissedCallNotificationsEnabled(enabled: boolean): Promise<boolean>;
+  getMissedCallNotificationsEnabled(): Promise<boolean>;
 }
 declare const NativeBridge: VoicePnBridgeInterface;
 /**
@@ -107,6 +109,15 @@ export declare class VoicePnBridge {
    * Clear pending VoIP action from native storage (iOS only)
    */
   static clearPendingVoipAction(): Promise<boolean>;
+  /**
+   * Enable or disable local missed call notifications on iOS.
+   * Missed-call VoIP pushes are still handled through CallKit either way.
+   */
+  static setMissedCallNotificationsEnabled(enabled: boolean): Promise<boolean>;
+  /**
+   * Returns true by default, matching the sample-app behavior for missed calls.
+   */
+  static getMissedCallNotificationsEnabled(): Promise<boolean>;
   /**
    * Android → React Native: Listen for immediate call action events from notification buttons
    * Use this for active calls where immediate response is needed (e.g., ending ongoing calls)

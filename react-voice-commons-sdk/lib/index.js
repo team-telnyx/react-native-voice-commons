@@ -38,6 +38,7 @@ var __exportStar =
   };
 Object.defineProperty(exports, '__esModule', { value: true });
 exports.useAppReadyNotifier =
+  exports.VoicePnBridge =
   exports.createTokenConfig =
   exports.createCredentialConfig =
   exports.validateTokenConfig =
@@ -215,6 +216,14 @@ Object.defineProperty(exports, 'createTokenConfig', {
 });
 // Export CallKit functionality
 __exportStar(require('./callkit'), exports);
+// Native push notification helpers
+var voice_pn_bridge_1 = require('./internal/voice-pn-bridge');
+Object.defineProperty(exports, 'VoicePnBridge', {
+  enumerable: true,
+  get: function () {
+    return voice_pn_bridge_1.VoicePnBridge;
+  },
+});
 // Export hooks
 var useAppReadyNotifier_1 = require('./hooks/useAppReadyNotifier');
 Object.defineProperty(exports, 'useAppReadyNotifier', {

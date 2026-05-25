@@ -8,6 +8,7 @@ object VoicePnManager {
     
     private const val TAG = "VoicePnManager"
     private const val PREFS_NAME = "telnyx_voice_prefs"
+    private const val MISSED_CALL_NOTIFICATIONS_ENABLED = "telnyx_enable_missed_call_notifications"
     
     private fun getSharedPreferences(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -76,6 +77,21 @@ object VoicePnManager {
         editor.remove("pending_voip_action")
         editor.apply()
         return true
+    }
+
+    fun setMissedCallNotificationsEnabled(context: Context, enabled: Boolean): Boolean {
+        Log.d(TAG, "setMissedCallNotificationsEnabled called with: $enabled")
+        getSharedPreferences(context)
+            .edit()
+            .putBoolean(MISSED_CALL_NOTIFICATIONS_ENABLED, enabled)
+            .apply()
+        return true
+    }
+
+    fun getMissedCallNotificationsEnabled(context: Context): Boolean {
+        Log.d(TAG, "getMissedCallNotificationsEnabled called")
+        return getSharedPreferences(context)
+            .getBoolean(MISSED_CALL_NOTIFICATIONS_ENABLED, true)
     }
 
     // PnModule functions

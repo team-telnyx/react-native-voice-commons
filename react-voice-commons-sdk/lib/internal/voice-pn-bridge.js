@@ -185,6 +185,29 @@ class VoicePnBridge {
     }
   }
   /**
+   * Enable or disable local missed call notifications on iOS.
+   * Missed-call VoIP pushes are still handled through CallKit either way.
+   */
+  static async setMissedCallNotificationsEnabled(enabled) {
+    try {
+      return await NativeBridge.setMissedCallNotificationsEnabled(enabled);
+    } catch (error) {
+      console.error('VoicePnBridge: Error setting missed call notifications:', error);
+      return false;
+    }
+  }
+  /**
+   * Returns true by default, matching the sample-app behavior for missed calls.
+   */
+  static async getMissedCallNotificationsEnabled() {
+    try {
+      return await NativeBridge.getMissedCallNotificationsEnabled();
+    } catch (error) {
+      console.error('VoicePnBridge: Error getting missed call notifications setting:', error);
+      return true;
+    }
+  }
+  /**
    * Android → React Native: Listen for immediate call action events from notification buttons
    * Use this for active calls where immediate response is needed (e.g., ending ongoing calls)
    */
