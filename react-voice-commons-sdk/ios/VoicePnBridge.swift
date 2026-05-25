@@ -84,4 +84,22 @@ class VoicePnBridge: NSObject {
         NSLog("[VoicePnBridge] clearPendingVoipAction called. Cleared key pending_voip_action")
         resolve(true)
     }
+
+    @objc
+    func setMissedCallNotificationsEnabled(_ enabled: Bool, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        UserDefaults.standard.set(enabled, forKey: "telnyx_enable_missed_call_notifications")
+        UserDefaults.standard.synchronize()
+        NSLog("[VoicePnBridge] setMissedCallNotificationsEnabled called. enabled=\(enabled)")
+        resolve(true)
+    }
+
+    @objc
+    func getMissedCallNotificationsEnabled(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        if UserDefaults.standard.object(forKey: "telnyx_enable_missed_call_notifications") == nil {
+            resolve(true)
+            return
+        }
+
+        resolve(UserDefaults.standard.bool(forKey: "telnyx_enable_missed_call_notifications"))
+    }
 }

@@ -222,6 +222,30 @@ class VoicePnBridgeModule(reactContext: ReactApplicationContext) : ReactContextB
             promise.reject("HIDE_INCOMING_NOTIFICATION_ERROR", e.message, e)
         }
     }
+
+    @ReactMethod
+    fun setMissedCallNotificationsEnabled(enabled: Boolean, promise: Promise) {
+        try {
+            val result = VoicePnManager.setMissedCallNotificationsEnabled(
+                reactApplicationContext,
+                enabled
+            )
+            promise.resolve(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting missed call notifications", e)
+            promise.reject("SET_MISSED_CALL_NOTIFICATIONS_ERROR", e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun getMissedCallNotificationsEnabled(promise: Promise) {
+        try {
+            promise.resolve(VoicePnManager.getMissedCallNotificationsEnabled(reactApplicationContext))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting missed call notifications", e)
+            promise.reject("GET_MISSED_CALL_NOTIFICATIONS_ERROR", e.message, e)
+        }
+    }
     
     /**
      * Emit call action event to React Native (for immediate notification)
