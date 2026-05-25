@@ -24,6 +24,12 @@ export interface ClientOptions {
    */
   prefetchIceCandidates?: boolean;
   /**
+   * Enable Trickle ICE by default for inbound calls created by this client.
+   * Outbound calls can override this per call with peerConnectionOptions.useTrickleIce.
+   * @default false
+   */
+  useTrickleIce?: boolean;
+  /**
    * The push notification device token, used for receiving push notifications on a specific device.
    * This is typically used for mobile applications to receive incoming call notifications.
    */

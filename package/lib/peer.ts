@@ -19,13 +19,22 @@ type MediaConstraints = {
   video?: boolean | MediaTrackConstraints;
 };
 
+export type TrickleIceCandidate = {
+  candidate: string;
+  sdpMid?: string | null;
+  sdpMLineIndex?: number | null;
+};
+
 export class Peer {
   public static createOffer = async (callOptions: CallOptions) => {
     const peer = await new Peer(callOptions)
       .createPeerConnection()
       .attachLocalStream({ audio: true, video: false })
-      .then((peer) => peer.createOffer())
-      .then((peer) => peer.waitForIceGatheringComplete());
+      .then((peer) => peer.createOffer());
+
+    if (!peer.useTrickleIce) {
+      await peer.waitForIceGatheringComplete();
+    }
 
     return peer;
   };
@@ -35,6 +44,16 @@ export class Peer {
   private options: CallOptions;
   private iceGatheringComplete: DeferredPromise<boolean> | null;
   private reporter: WebRTCReporter | null = null;
+  private pendingRemoteCandidates: TrickleIceCandidate[] = [];
+  private pendingLocalCandidates: TrickleIceCandidate[] = [];
+  private pendingLocalEndOfCandidates = false;
+  private localCandidateDispatchEnabled = false;
+
+  /** Callback for local Trickle ICE candidates. Call owns signaling transport. */
+  public onLocalCandidate: ((candidate: TrickleIceCandidate) => void) | null = null;
+
+  /** Callback for local ICE completion when Trickle ICE is enabled. */
+  public onLocalEndOfCandidates: (() => void) | null = null;
 
   /** Callback for logging peer events to call report collector */
   public onPeerEventLog: ((event: string, context: Record<string, unknown>) => void) | null = null;
@@ -88,6 +107,10 @@ export class Peer {
       track.stop();
     });
     this.options.remoteStream = undefined;
+    this.pendingRemoteCandidates = [];
+    this.pendingLocalCandidates = [];
+    this.pendingLocalEndOfCandidates = false;
+    this.localCandidateDispatchEnabled = false;
     return this;
   };
 
@@ -99,6 +122,7 @@ export class Peer {
     await this.instance.setRemoteDescription(new RTCSessionDescription(session)).catch((error) => {
       log.error('[Peer] Error setting remote description', error);
     });
+    await this.flushPendingRemoteCandidates();
     return this;
   };
   public get remoteDescription() {
@@ -195,6 +219,86 @@ export class Peer {
     return this;
   };
 
+  public get useTrickleIce(): boolean {
+    return Boolean(this.options.peerConnectionOptions?.useTrickleIce);
+  }
+
+  public flushPendingLocalCandidates = () => {
+    this.localCandidateDispatchEnabled = true;
+    while (this.pendingLocalCandidates.length > 0) {
+      const candidate = this.pendingLocalCandidates.shift()!;
+      this.onLocalCandidate?.(candidate);
+    }
+    if (this.pendingLocalEndOfCandidates) {
+      this.pendingLocalEndOfCandidates = false;
+      this.onLocalEndOfCandidates?.();
+    }
+    return this;
+  };
+
+  public clearPendingLocalCandidates = () => {
+    this.pendingLocalCandidates = [];
+    this.pendingLocalEndOfCandidates = false;
+    return this;
+  };
+
+  public addRemoteCandidate = async (candidate: TrickleIceCandidate) => {
+    if (!this.instance) {
+      throw new Error('[Peer] Peer connection not created');
+    }
+    if (!this.instance.remoteDescription) {
+      log.debug('[Peer] Queueing remote ICE candidate until remote description is set');
+      this.pendingRemoteCandidates.push(candidate);
+      return this;
+    }
+    // react-native-webrtc accepts RTCIceCandidateInit here, but its TS surface
+    // can lag the native implementation.
+    await (this.instance as any).addIceCandidate(candidate).catch((error: unknown) => {
+      log.error('[Peer] Error adding remote ICE candidate', error);
+    });
+    return this;
+  };
+
+  public addRemoteEndOfCandidates = async () => {
+    if (!this.instance) {
+      throw new Error('[Peer] Peer connection not created');
+    }
+    if (!this.instance.remoteDescription) {
+      return this;
+    }
+    if (typeof (this.instance as any).addIceCandidate === 'function') {
+      // Some RN WebRTC versions ignore or reject null end-of-candidates.
+      // Treat that as non-fatal because candidates have already been delivered.
+      await (this.instance as any).addIceCandidate(null).catch((error: unknown) => {
+        log.debug('[Peer] Remote end-of-candidates ignored by peer connection', error);
+      });
+    }
+    return this;
+  };
+
+  private flushPendingRemoteCandidates = async () => {
+    while (this.pendingRemoteCandidates.length > 0) {
+      const candidate = this.pendingRemoteCandidates.shift()!;
+      await this.addRemoteCandidate(candidate);
+    }
+  };
+
+  private emitOrQueueLocalCandidate(candidate: TrickleIceCandidate) {
+    if (this.localCandidateDispatchEnabled) {
+      this.onLocalCandidate?.(candidate);
+      return;
+    }
+    this.pendingLocalCandidates.push(candidate);
+  }
+
+  private emitOrQueueLocalEndOfCandidates() {
+    if (this.localCandidateDispatchEnabled) {
+      this.onLocalEndOfCandidates?.();
+      return;
+    }
+    this.pendingLocalEndOfCandidates = true;
+  }
+
   public setMediaStreamState = (stream: MediaStream, enabled: boolean) => {
     log.debug('[Peer] Setting media stream state', { enabled, stream });
     if (!stream) {
@@ -234,6 +338,21 @@ export class Peer {
     // Report to WebRTCReporter if available
     if (this.reporter && ev.candidate) {
       this.reporter.onIceCandidate(ev.candidate as unknown as RTCIceCandidate);
+    }
+
+    if (this.useTrickleIce) {
+      if (ev.candidate) {
+        const candidate = ev.candidate as unknown as TrickleIceCandidate;
+        this.emitOrQueueLocalCandidate({
+          candidate: candidate.candidate,
+          sdpMid: candidate.sdpMid,
+          sdpMLineIndex: candidate.sdpMLineIndex,
+        });
+      } else {
+        this.emitOrQueueLocalEndOfCandidates();
+        this.iceGatheringComplete?.resolve(true);
+      }
+      return;
     }
 
     this.iceGatheringComplete?.resolve(true);

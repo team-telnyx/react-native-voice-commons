@@ -82,6 +82,14 @@ export interface CallOptions {
   peerConnectionOptions?: {
     prefetchIceCandidates?: boolean;
     /**
+     * Enable Trickle ICE for this call.
+     *
+     * When true, the SDK sends the initial SDP immediately and trickles ICE
+     * candidates through telnyx_rtc.candidate / telnyx_rtc.endOfCandidates.
+     * Defaults to false to preserve legacy full-ICE-gathering behavior.
+     */
+    useTrickleIce?: boolean;
+    /**
      * The ICE servers to use for the WebRTC connection.
      * This can include STUN and TURN servers.
      * @example
