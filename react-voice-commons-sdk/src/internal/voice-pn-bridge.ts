@@ -38,6 +38,8 @@ export interface VoicePnBridgeInterface {
   clearPendingVoipPush(): Promise<boolean>;
   getPendingVoipAction(): Promise<string | null>;
   clearPendingVoipAction(): Promise<boolean>;
+  setMissedCallNotificationsEnabled(enabled: boolean): Promise<boolean>;
+  getMissedCallNotificationsEnabled(): Promise<boolean>;
 }
 
 const NativeBridge: VoicePnBridgeInterface = NativeModules.VoicePnBridge;
@@ -241,6 +243,31 @@ export class VoicePnBridge {
     } catch (error) {
       console.error('VoicePnBridge: Error clearing pending VoIP action:', error);
       return false;
+    }
+  }
+
+  /**
+   * Enable or disable local missed call notifications on iOS.
+   * Missed-call VoIP pushes are still handled through CallKit either way.
+   */
+  static async setMissedCallNotificationsEnabled(enabled: boolean): Promise<boolean> {
+    try {
+      return await NativeBridge.setMissedCallNotificationsEnabled(enabled);
+    } catch (error) {
+      console.error('VoicePnBridge: Error setting missed call notifications:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Returns true by default, matching the sample-app behavior for missed calls.
+   */
+  static async getMissedCallNotificationsEnabled(): Promise<boolean> {
+    try {
+      return await NativeBridge.getMissedCallNotificationsEnabled();
+    } catch (error) {
+      console.error('VoicePnBridge: Error getting missed call notifications setting:', error);
+      return true;
     }
   }
 

@@ -1,5 +1,6 @@
 package com.telnyx.react_voice_commons
 
+import android.content.Intent
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -86,7 +87,20 @@ open class TelnyxFirebaseMessagingService : FirebaseMessagingService() {
             
             // Show missed call notification (this will hide any existing incoming call notification)
             val notificationHelper = TelnyxNotificationHelper(this)
-            notificationHelper.showMissedCallNotification(callerName, callerNumber, callId)
+            notificationHelper.hideIncomingCallNotification()
+            notificationHelper.hideOngoingCallNotification()
+
+            try {
+                stopService(Intent(this, CallForegroundService::class.java))
+            } catch (e: Exception) {
+                Log.e(tag, "Failed to stop CallForegroundService for missed call", e)
+            }
+
+            if (VoicePnManager.getMissedCallNotificationsEnabled(this)) {
+                notificationHelper.showMissedCallNotification(callerName, callerNumber, callId)
+            } else {
+                Log.d(tag, "Missed call notification display disabled")
+            }
             
             Log.d(tag, "Telnyx missed call notification processed successfully")
         } catch (e: Exception) {

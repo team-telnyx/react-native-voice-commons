@@ -6,6 +6,7 @@ import React
     import AVFoundation
     import UIKit
     import PushKit
+    import UserNotifications
     import WebRTC
 
     @objc(CallKitBridge)
@@ -291,6 +292,210 @@ import React
         }
     }
 
+    // MARK: - Missed Call
+    enum TelnyxVoiceUserDefaultsKey {
+        static let missedCallNotificationsEnabled = "telnyx_enable_missed_call_notifications"
+    }
+
+    private enum TelnyxMissedCallPush {
+        static let processedMissedCallIdsKey = "telnyx_processed_missed_call_ids"
+        private static let missedCallMarkerKeys: Set<String> = [
+            "is_missed_call",
+            "message",
+            "missed",
+            "missed_call",
+            "notification_type",
+            "push_type",
+            "type",
+        ]
+        private static let affirmativeMissedCallValues: Set<String> = [
+            "1",
+            "missed",
+            "missed call",
+            "true",
+            "yes",
+        ]
+
+        static func isMissedCallPayload(_ payload: [AnyHashable: Any]) -> Bool {
+            return containsMissedCallMarker(payload)
+        }
+
+        static func stableIdentifier(from payload: [AnyHashable: Any]) -> String {
+            if let callId = callId(from: payload), !callId.isEmpty {
+                return callId
+            }
+
+            return "payload-\(hashHex(canonicalString(from: payload)))"
+        }
+
+        static func uuid(from identifier: String) -> UUID {
+            if let uuid = UUID(uuidString: identifier) {
+                return uuid
+            }
+
+            let firstHash = hashHex(identifier)
+            let secondHash = hashHex("telnyx-\(identifier)")
+            let uuidString =
+                "\(firstHash.prefix(8))-\(firstHash.dropFirst(8).prefix(4))-\(firstHash.dropFirst(12).prefix(4))-\(secondHash.prefix(4))-\(secondHash.dropFirst(4).prefix(12))"
+
+            return UUID(uuidString: uuidString) ?? UUID()
+        }
+
+        static func callId(from payload: [AnyHashable: Any]) -> String? {
+            return stringValue(for: ["call_id", "callId"], in: payload)
+        }
+
+        static func callerName(from payload: [AnyHashable: Any]) -> String {
+            return stringValue(for: ["caller_name", "caller", "from"], in: payload)
+                ?? callerNumber(from: payload)
+        }
+
+        static func callerNumber(from payload: [AnyHashable: Any]) -> String {
+            return stringValue(for: ["caller_number", "caller", "from"], in: payload)
+                ?? "Unknown Caller"
+        }
+
+        static func missedCallNotificationsEnabled() -> Bool {
+            // bool(forKey:) returns false for both "unset" and "false"; default to enabled
+            // unless the app explicitly stores a preference.
+            guard
+                UserDefaults.standard.object(
+                    forKey: TelnyxVoiceUserDefaultsKey.missedCallNotificationsEnabled) != nil
+            else {
+                return true
+            }
+            return UserDefaults.standard.bool(
+                forKey: TelnyxVoiceUserDefaultsKey.missedCallNotificationsEnabled)
+        }
+
+        private static func stringValue(for keys: [String], in payload: [AnyHashable: Any]) -> String? {
+            if let metadata = payload["metadata"] as? [AnyHashable: Any],
+                let value = firstStringValue(for: keys, in: metadata)
+            {
+                return value
+            }
+
+            if let metadata = payload["metadata"] as? [String: Any],
+                let value = firstStringValue(for: keys, in: metadata)
+            {
+                return value
+            }
+
+            return firstStringValue(for: keys, in: payload)
+        }
+
+        private static func firstStringValue(for keys: [String], in dictionary: [AnyHashable: Any])
+            -> String?
+        {
+            for key in keys {
+                if let value = dictionary[key] as? String, !value.isEmpty {
+                    return value
+                }
+            }
+            return nil
+        }
+
+        private static func firstStringValue(for keys: [String], in dictionary: [String: Any])
+            -> String?
+        {
+            for key in keys {
+                if let value = dictionary[key] as? String, !value.isEmpty {
+                    return value
+                }
+            }
+            return nil
+        }
+
+        private static func containsMissedCallMarker(_ value: Any, key: String? = nil) -> Bool {
+            if let key = key, missedCallMarkerKeys.contains(normalizedPayloadKey(key)) {
+                if let boolValue = value as? Bool {
+                    return boolValue
+                }
+
+                if let stringValue = value as? String {
+                    return affirmativeMissedCallValues.contains(normalizedMissedCallValue(stringValue))
+                }
+            }
+
+            if let stringValue = value as? String {
+                let normalized = normalizedMissedCallValue(stringValue)
+                if normalized == "missed call" || normalized == "missed" {
+                    return true
+                }
+            }
+
+            if let dictionary = value as? [AnyHashable: Any] {
+                return dictionary.contains { rawKey, nestedValue in
+                    containsMissedCallMarker(nestedValue, key: String(describing: rawKey))
+                }
+            }
+
+            if let dictionary = value as? [String: Any] {
+                return dictionary.contains { key, nestedValue in
+                    containsMissedCallMarker(nestedValue, key: key)
+                }
+            }
+
+            if let array = value as? [Any] {
+                return array.contains { containsMissedCallMarker($0) }
+            }
+
+            return false
+        }
+
+        private static func normalizedPayloadKey(_ key: String) -> String {
+            return key
+                .lowercased()
+                .replacingOccurrences(of: "-", with: "_")
+                .replacingOccurrences(of: " ", with: "_")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        private static func normalizedMissedCallValue(_ value: String) -> String {
+            return value
+                .lowercased()
+                .replacingOccurrences(of: "_", with: " ")
+                .replacingOccurrences(of: "-", with: " ")
+                .replacingOccurrences(of: "!", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        private static func canonicalString(from value: Any) -> String {
+            if let dictionary = value as? [AnyHashable: Any] {
+                return dictionary
+                    .map { (String(describing: $0.key), $0.value) }
+                    .sorted { $0.0 < $1.0 }
+                    .map { "\($0):\(canonicalString(from: $1))" }
+                    .joined(separator: "|")
+            }
+
+            if let dictionary = value as? [String: Any] {
+                return dictionary
+                    .sorted { $0.key < $1.key }
+                    .map { "\($0):\(canonicalString(from: $1))" }
+                    .joined(separator: "|")
+            }
+
+            if let array = value as? [Any] {
+                return array.map { canonicalString(from: $0) }.joined(separator: ",")
+            }
+
+            return String(describing: value)
+        }
+
+        private static func hashHex(_ value: String) -> String {
+            let prime: UInt64 = 1_099_511_628_211
+            var hash: UInt64 = 14_695_981_039_346_656_037
+
+            for byte in value.utf8 {
+                hash ^= UInt64(byte)
+                hash = hash &* prime
+            }
+
+            return String(format: "%016llx", hash)
+        }
+    }
+
     // MARK: - TelnyxCallKitManager
     /// TelnyxCallKitManager - Automatically handles CallKit integration for Telnyx Voice
     /// This class sets up CallKit and VoIP push notifications automatically when the app starts
@@ -404,6 +609,216 @@ import React
                 setupCallKit()
             }
         }
+
+        @discardableResult
+        public func handleMissedCallPushIfNeeded(
+            _ payload: [AnyHashable: Any],
+            completion: (() -> Void)? = nil
+        ) -> Bool {
+            guard TelnyxMissedCallPush.isMissedCallPayload(payload) else {
+                return false
+            }
+
+            NSLog("TelnyxVoice: Missed call VoIP push received: \(payload)")
+            setupSynchronously()
+
+            let callId = TelnyxMissedCallPush.callId(from: payload)
+            let missedCallId = TelnyxMissedCallPush.stableIdentifier(from: payload)
+            if hasProcessedMissedCall(id: missedCallId) {
+                NSLog("TelnyxVoice: Ignoring duplicate missed call push: \(missedCallId)")
+                completion?()
+                return true
+            }
+
+            let callUUID = TelnyxMissedCallPush.uuid(from: missedCallId)
+            let callerName = TelnyxMissedCallPush.callerName(from: payload)
+            let callerNumber = TelnyxMissedCallPush.callerNumber(from: payload)
+
+            let finishMissedCall = {
+                self.callKitProvider?.reportCall(with: callUUID, endedAt: Date(), reason: .remoteEnded)
+                self.activeCalls.removeValue(forKey: callUUID)
+
+                if self.pendingAnswerAction?.callUUID == callUUID {
+                    self.pendingAnswerAction?.fail()
+                    self.pendingAnswerAction = nil
+                }
+
+                NSLog("TelnyxVoice: Ended stale CallKit call for missed call UUID: \(callUUID)")
+                self.clearPendingPushData(for: callId)
+                self.showMissedCallNotification(
+                    callerName: callerName,
+                    callerNumber: callerNumber,
+                    missedCallId: missedCallId
+                )
+                self.markMissedCallProcessed(id: missedCallId)
+                completion?()
+            }
+
+            if let activeCall = activeCalls[callUUID] {
+                guard activeCall["source"] as? String == "missed_call_push" else {
+                    NSLog("TelnyxVoice: Ignoring missed call push because UUID belongs to an active call: \(callUUID)")
+                    markMissedCallProcessed(id: missedCallId)
+                    completion?()
+                    return true
+                }
+
+                finishMissedCall()
+                return true
+            }
+
+            activeCalls[callUUID] = [
+                "caller": callerName,
+                "handle": callerNumber,
+                "payload": payload,
+                "uuid": callUUID.uuidString,
+                "direction": "incoming",
+                "source": "missed_call_push",
+            ]
+
+            let handle = CXHandle(type: .phoneNumber, value: callerNumber)
+            let callUpdate = CXCallUpdate()
+            callUpdate.remoteHandle = handle
+            callUpdate.hasVideo = false
+            callUpdate.localizedCallerName = callerName
+
+            callKitProvider?.reportNewIncomingCall(with: callUUID, update: callUpdate) { error in
+                if let error = error {
+                    NSLog("TelnyxVoice: Missed call CallKit report failed: \(error.localizedDescription)")
+                    self.activeCalls.removeValue(forKey: callUUID)
+                    self.clearPendingPushData(for: callId)
+                    completion?()
+                    return
+                }
+
+                finishMissedCall()
+            }
+
+            return true
+        }
+
+        private func clearPendingPushData(for callId: String?) {
+            if hasPendingPushData(forDifferentCallThan: callId) {
+                NSLog("TelnyxVoice: Skipping pending push cleanup for missed call; pending data belongs to a different call")
+                return
+            }
+
+            UserDefaults.standard.removeObject(forKey: "pending_push_action")
+            UserDefaults.standard.removeObject(forKey: "pending_push_metadata")
+            UserDefaults.standard.removeObject(forKey: "pending_voip_push")
+            UserDefaults.standard.removeObject(forKey: "pending_voip_action")
+            UserDefaults.standard.removeObject(forKey: "@pending_callkit_uuid")
+            UserDefaults.standard.synchronize()
+        }
+
+        private func hasPendingPushData(forDifferentCallThan missedCallId: String?) -> Bool {
+            guard let missedCallId = missedCallId, !missedCallId.isEmpty else {
+                return false
+            }
+
+            let pendingIds = [
+                pendingCallId(fromJsonForKey: "pending_push_metadata"),
+                pendingCallId(fromJsonForKey: "pending_voip_push"),
+                UserDefaults.standard.string(forKey: "@pending_callkit_uuid"),
+            ].compactMap { $0 }
+
+            return pendingIds.contains { !$0.isEmpty && $0 != missedCallId }
+        }
+
+        private func pendingCallId(fromJsonForKey key: String) -> String? {
+            guard let jsonString = UserDefaults.standard.string(forKey: key),
+                let data = jsonString.data(using: .utf8),
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else {
+                return nil
+            }
+
+            if let directCallId = callId(from: json) {
+                return directCallId
+            }
+
+            if let payload = json["payload"] as? [String: Any] {
+                return callId(from: payload)
+            }
+
+            return nil
+        }
+
+        private func callId(from dictionary: [String: Any]) -> String? {
+            for key in ["call_id", "callId", "telnyx_call_id"] {
+                if let value = dictionary[key] as? String, !value.isEmpty {
+                    return value
+                }
+            }
+
+            if let metadata = dictionary["metadata"] as? [String: Any] {
+                return callId(from: metadata)
+            }
+
+            return nil
+        }
+
+        private func hasProcessedMissedCall(id: String) -> Bool {
+            return processedMissedCallIds().contains(id)
+        }
+
+        private func markMissedCallProcessed(id: String) {
+            var ids = processedMissedCallIds().filter { $0 != id }
+            ids.append(id)
+            UserDefaults.standard.set(Array(ids.suffix(50)), forKey: TelnyxMissedCallPush.processedMissedCallIdsKey)
+            UserDefaults.standard.synchronize()
+        }
+
+        private func processedMissedCallIds() -> [String] {
+            return UserDefaults.standard.stringArray(
+                forKey: TelnyxMissedCallPush.processedMissedCallIdsKey) ?? []
+        }
+
+        private func showMissedCallNotification(
+            callerName: String, callerNumber: String, missedCallId: String
+        ) {
+            guard TelnyxMissedCallPush.missedCallNotificationsEnabled() else {
+                NSLog("TelnyxVoice: Missed call local notification disabled")
+                return
+            }
+
+            let content = UNMutableNotificationContent()
+            content.title = "Missed Call"
+            content.body = "You missed a call from \(callerName)"
+            content.sound = .default
+            content.userInfo = [
+                "call_id": missedCallId,
+                "caller_name": callerName,
+                "caller_number": callerNumber,
+            ]
+
+            let identifier = "telnyx.missed-call.\(missedCallId)"
+            let request = UNNotificationRequest(
+                identifier: identifier,
+                content: content,
+                trigger: nil
+            )
+
+            let notificationCenter = UNUserNotificationCenter.current()
+            notificationCenter.getNotificationSettings { settings in
+                guard settings.authorizationStatus == .authorized
+                    || settings.authorizationStatus == .provisional
+                    || settings.authorizationStatus == .ephemeral
+                else {
+                    NSLog(
+                        "TelnyxVoice: Missed call notification not shown; notification authorization status: \(settings.authorizationStatus.rawValue)"
+                    )
+                    return
+                }
+
+                notificationCenter.add(request) { error in
+                    if let error = error {
+                        NSLog("TelnyxVoice: Failed to show missed call notification: \(error)")
+                    } else {
+                        NSLog("TelnyxVoice: Missed call notification scheduled")
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - PKPushRegistryDelegate
@@ -457,6 +872,10 @@ import React
             for type: PKPushType, completion: @escaping () -> Void
         ) {
             NSLog("TelnyxVoice: Received VoIP push notification: \(payload.dictionaryPayload)")
+
+            if handleMissedCallPushIfNeeded(payload.dictionaryPayload, completion: completion) {
+                return
+            }
 
             // Store the VoIP push data for VoicePnBridge (same format as AppDelegate was using)
             do {
@@ -697,6 +1116,13 @@ import React
         ) {
             NSLog("[TelnyxVoipPushHandler] VoIP push received for type: \(type.rawValue)")
             NSLog("[TelnyxVoipPushHandler] VoIP payload: \(payload.dictionaryPayload)")
+
+            if TelnyxCallKitManager.shared.handleMissedCallPushIfNeeded(
+                payload.dictionaryPayload,
+                completion: completion
+            ) {
+                return
+            }
 
             // Configure audio session early for VoIP call
             let audioSession = AVAudioSession.sharedInstance()

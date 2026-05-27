@@ -55,5 +55,8 @@ export type { Call as TelnyxCall } from '@telnyx/react-native-voice-sdk';
 // Export CallKit functionality
 export * from './callkit';
 
+// Native push notification helpers
+export { VoicePnBridge } from './internal/voice-pn-bridge';
+
 // Export hooks
 export { useAppReadyNotifier } from './hooks/useAppReadyNotifier';

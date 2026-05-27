@@ -28,4 +28,11 @@ RCT_EXTERN_METHOD(getPendingVoipAction:(RCTPromiseResolveBlock)resolve
 RCT_EXTERN_METHOD(clearPendingVoipAction:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(setMissedCallNotificationsEnabled:(BOOL)enabled
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(getMissedCallNotificationsEnabled:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 @end
