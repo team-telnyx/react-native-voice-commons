@@ -1,232 +1,225 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
+  Alert,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
-  StyleSheet,
-  ScrollView,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useTelnyxVoice, TelnyxConnectionState, Call } from '../react-voice-commons-sdk/src';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { History, LogOut, Phone } from 'lucide-react-native';
+import { useTelnyxVoice, TelnyxConnectionState } from '../react-voice-commons-sdk/src';
+import { demoColors, radii, sizes, spacing } from './demoTheme';
 
 interface TelnyxDialerProps {
   debug?: boolean;
 }
 
+type DestinationType = 'sip' | 'phone';
+
 export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => {
   const { voipClient } = useTelnyxVoice();
+  const [destinationType, setDestinationType] = useState<DestinationType>('sip');
   const [destinationNumber, setDestinationNumber] = useState('');
   const [callerIdName, setCallerIdName] = useState('');
   const [callerIdNumber, setCallerIdNumber] = useState('');
   const [connectionState, setConnectionState] = useState(voipClient.currentConnectionState);
-  const [calls, setCalls] = useState<Call[]>([]);
-  const [activeCall, setActiveCall] = useState<Call | null>(null);
   const [inputFocused, setInputFocused] = useState(false);
 
   const log = debug ? console.log : () => {};
+  const isConnected = connectionState === TelnyxConnectionState.CONNECTED;
 
-  // Subscribe to connection and call state changes
   useEffect(() => {
     const connectionSubscription = voipClient.connectionState$.subscribe((state) => {
       log('TelnyxDialer: Connection state changed to:', state);
       setConnectionState(state);
 
-      // Navigate back to login if connection is lost
       if (state === TelnyxConnectionState.DISCONNECTED || state === TelnyxConnectionState.ERROR) {
-        log('TelnyxDialer: Connection lost, navigating to login');
         router.replace('/');
       }
     });
 
-    const callsSubscription = voipClient.calls$.subscribe((calls) => {
-      log('TelnyxDialer: Calls changed:', calls.length);
-      setCalls(calls);
-    });
-
-    const activeCallSubscription = voipClient.activeCall$.subscribe((call) => {
-      log('TelnyxDialer: Active call changed:', call?.currentState);
-      setActiveCall(call);
-
-      // Debug: Check if underlying Telnyx client is available
-      if (debug) {
-        log('TelnyxDialer: Checking underlying client availability:', {
-          voipClientExists: !!voipClient,
-          connectionState: voipClient.currentConnectionState,
-          hasSessionManager: !!(voipClient as any)._sessionManager,
-          telnyxClient: (voipClient as any)._sessionManager?.telnyxClient
-            ? 'available'
-            : 'undefined',
-          telnyxClientType: typeof (voipClient as any)._sessionManager?.telnyxClient,
-        });
-      }
-    });
-
-    return () => {
-      connectionSubscription.unsubscribe();
-      callsSubscription.unsubscribe();
-      activeCallSubscription.unsubscribe();
-    };
+    loadProfile();
+    return () => connectionSubscription.unsubscribe();
   }, [voipClient, log]);
+
+  const loadProfile = async () => {
+    try {
+      const [storedCallerIdName, storedCallerIdNumber] = await Promise.all([
+        AsyncStorage.getItem('@caller_id_name'),
+        AsyncStorage.getItem('@caller_id_number'),
+      ]);
+
+      setCallerIdName(storedCallerIdName || '');
+      setCallerIdNumber(storedCallerIdNumber || '');
+    } catch (error) {
+      log('TelnyxDialer: Failed to load caller ID profile:', error);
+    }
+  };
 
   const handleStartCall = async () => {
     if (!destinationNumber.trim()) {
-      Alert.alert('Error', 'Please enter a destination number');
+      Alert.alert('Error', 'Enter a destination to initiate your call.');
       return;
     }
 
-    if (connectionState !== TelnyxConnectionState.CONNECTED) {
+    if (!isConnected) {
       Alert.alert('Error', 'Not connected to Telnyx service');
       return;
     }
 
     try {
       log('TelnyxDialer: Starting call to:', destinationNumber);
-      log('TelnyxDialer: VoIP client state:', {
-        connectionState: voipClient.currentConnectionState,
-        clientAvailable: !!voipClient,
-      });
-
-      // Debug: Deep check of underlying client state
-      if (debug) {
-        log('TelnyxDialer: Deep client check before call:', {
-          sessionManager: !!(voipClient as any)._sessionManager,
-          telnyxClient: (voipClient as any)._sessionManager?.telnyxClient
-            ? 'available'
-            : 'undefined',
-          telnyxClientConnected:
-            (voipClient as any)._sessionManager?.telnyxClient?.isConnected?.() || 'unknown',
-          telnyxClientState: (voipClient as any)._sessionManager?.currentState,
-        });
-      }
-
-      // Add a small delay to ensure client is fully ready
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const call = await voipClient.newCall(
-        destinationNumber,
-        callerIdName || undefined,
-        callerIdNumber || undefined
+      await voipClient.newCall(
+        destinationNumber.trim(),
+        callerIdName.trim() || undefined,
+        callerIdNumber.trim() || undefined
       );
-      log('TelnyxDialer: Call initiated successfully:', call);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       log('TelnyxDialer: Error starting call:', errorMessage);
-      log('TelnyxDialer: Full error:', error);
       Alert.alert('Call Failed', `Failed to start call: ${errorMessage}`);
-    }
-  };
-
-  const handleAnswerCall = async (call: Call) => {
-    try {
-      log('TelnyxDialer: Answering call');
-      await call.answer();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      log('TelnyxDialer: Error answering call:', errorMessage);
-      Alert.alert('Answer Failed', errorMessage);
-    }
-  };
-
-  const handleEndCall = async (call: Call) => {
-    try {
-      log('TelnyxDialer: Ending call');
-      await call.hangup();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      log('TelnyxDialer: Error ending call:', errorMessage);
-      Alert.alert('End Call Failed', errorMessage);
     }
   };
 
   const handleDisablePushNotifications = () => {
     try {
-      log('TelnyxDialer: Disabling push notifications');
       voipClient.disablePushNotifications();
       Alert.alert('Push Notifications', 'Push notifications disabled for this session');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      log('TelnyxDialer: Error disabling push notifications:', errorMessage);
       Alert.alert('Error', `Failed to disable push notifications: ${errorMessage}`);
     }
   };
 
   const handleDisconnect = async () => {
     try {
-      log('TelnyxDialer: Disconnecting');
       await voipClient.logout();
       router.replace('/');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      log('TelnyxDialer: Error disconnecting:', errorMessage);
       Alert.alert('Disconnect Failed', errorMessage);
     }
   };
 
-  const isConnected = connectionState === TelnyxConnectionState.CONNECTED;
+  const handleCallHistory = () => {
+    Alert.alert('Call History', 'No call history available');
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
         <View style={styles.header}>
-          <TouchableOpacity onLongPress={handleDisablePushNotifications} delayLongPress={2000}>
+          <View>
+            <Text style={styles.title}>Telnyx Mobile WebRTC</Text>
+            <TouchableOpacity onLongPress={handleDisablePushNotifications} delayLongPress={2000}>
+              <Text
+                style={[
+                  styles.socketStatus,
+                  isConnected && styles.socketReady,
+                  connectionState === TelnyxConnectionState.CONNECTING && styles.socketPending,
+                  connectionState === TelnyxConnectionState.DISCONNECTED && styles.socketOffline,
+                ]}
+                testID="socketStatus"
+              >
+                Socket: {isConnected ? 'Client-ready' : connectionState}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={styles.headerIconButton}
+            onPress={handleDisconnect}
+            testID="disconnectButton"
+            accessibilityLabel="Disconnect"
+          >
+            <LogOut size={22} color={demoColors.text} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.profileBar}>
+          <View>
+            <Text style={styles.profileLabel}>Caller name</Text>
+            <Text style={styles.profileValue}>{callerIdName || 'Unknown'}</Text>
+          </View>
+          <View style={styles.profileDivider} />
+          <View>
+            <Text style={styles.profileLabel}>Caller number</Text>
+            <Text style={styles.profileValue}>{callerIdNumber || '-'}</Text>
+          </View>
+        </View>
+
+        <View style={styles.segmentedControl}>
+          <TouchableOpacity
+            style={[styles.segment, destinationType === 'sip' && styles.segmentSelected]}
+            onPress={() => setDestinationType('sip')}
+            disabled={!isConnected}
+            testID="sipAddressToggle"
+            accessibilityLabel="SIP address"
+          >
+            <Text
+              style={[styles.segmentText, destinationType === 'sip' && styles.segmentTextSelected]}
+            >
+              SIP address
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.segment, destinationType === 'phone' && styles.segmentSelected]}
+            onPress={() => setDestinationType('phone')}
+            disabled={!isConnected}
+            testID="phoneNumberToggle"
+            accessibilityLabel="Phone number"
+          >
             <Text
               style={[
-                styles.status,
-                connectionState === TelnyxConnectionState.CONNECTED && styles.statusConnected,
-                connectionState === TelnyxConnectionState.DISCONNECTED && styles.statusDisconnected,
-                connectionState === TelnyxConnectionState.CONNECTING && styles.statusConnecting,
+                styles.segmentText,
+                destinationType === 'phone' && styles.segmentTextSelected,
               ]}
             >
-              Status: {connectionState}
+              Phone number
             </Text>
           </TouchableOpacity>
         </View>
 
-        {isConnected && (
-          <View style={styles.dialerSection}>
-            <Text style={styles.sectionTitle}>Make a Call</Text>
-            <TextInput
-              style={[styles.input, inputFocused && styles.inputFocused]}
-              placeholder="Enter destination (number, SIP URI, etc.)"
-              placeholderTextColor="#999"
-              value={destinationNumber}
-              onChangeText={setDestinationNumber}
-              onFocus={() => setInputFocused(true)}
-              onBlur={() => setInputFocused(false)}
-              keyboardType="default"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <TextInput
-              style={[styles.input]}
-              placeholder="Caller ID Name (optional)"
-              placeholderTextColor="#999"
-              value={callerIdName}
-              onChangeText={setCallerIdName}
-              autoCapitalize="words"
-            />
-            <TextInput
-              style={[styles.input]}
-              placeholder="Caller ID Number (optional)"
-              placeholderTextColor="#999"
-              value={callerIdNumber}
-              onChangeText={setCallerIdNumber}
-              keyboardType="phone-pad"
-            />
-            <TouchableOpacity style={[styles.button, styles.callButton]} onPress={handleStartCall}>
-              <Text style={styles.buttonText}>Call</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.button, styles.disconnectButton]}
-              onPress={handleDisconnect}
-            >
-              <Text style={styles.buttonText}>Disconnect</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        <TextInput
+          style={[styles.callInput, inputFocused && styles.inputFocused]}
+          placeholder={destinationType === 'phone' ? 'Enter phone number' : 'Enter SIP address'}
+          placeholderTextColor="gray"
+          value={destinationNumber}
+          onChangeText={setDestinationNumber}
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
+          keyboardType={destinationType === 'phone' ? 'phone-pad' : 'default'}
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={isConnected}
+          testID="callInput"
+          accessibilityLabel="Call input"
+        />
+
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={[styles.roundButton, styles.historyButton]}
+            onPress={handleCallHistory}
+            testID="callHistoryButton"
+            accessibilityLabel="Call History"
+          >
+            <History size={24} color={demoColors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.callButton, !isConnected && styles.buttonDisabled]}
+            onPress={handleStartCall}
+            disabled={!isConnected}
+            testID="call"
+            accessibilityLabel="Call"
+          >
+            <Phone size={24} color={demoColors.text} />
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -235,164 +228,141 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: demoColors.background,
   },
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: demoColors.background,
   },
   contentContainer: {
     flexGrow: 1,
-    padding: 20,
+    padding: spacing.md,
+    gap: spacing.sm,
   },
   header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 30,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    justifyContent: 'space-between',
+    paddingTop: spacing.sm,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 8,
-    color: '#1a1a1a',
+    color: demoColors.text,
+    fontSize: 24,
+    fontWeight: '500',
   },
-  status: {
+  socketStatus: {
+    color: demoColors.mutedText,
+    fontSize: 14,
+    marginTop: 4,
+  },
+  socketReady: {
+    color: demoColors.selectedGreen,
+  },
+  socketPending: {
+    color: demoColors.ringing,
+  },
+  socketOffline: {
+    color: demoColors.danger,
+  },
+  headerIconButton: {
+    width: sizes.callButton,
+    height: sizes.callButton,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: demoColors.secondary,
+  },
+  profileBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: demoColors.secondary,
+    borderRadius: radii.md,
+    padding: spacing.sm,
+    gap: spacing.sm,
+    backgroundColor: demoColors.secondaryBackground,
+  },
+  profileLabel: {
+    color: demoColors.mutedText,
+    fontSize: 14,
+  },
+  profileValue: {
+    color: demoColors.text,
     fontSize: 16,
-    color: '#666',
-    marginBottom: 16,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  profileDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: demoColors.secondary,
+  },
+  segmentedControl: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: demoColors.outline,
+    borderRadius: radii.sm,
+    overflow: 'hidden',
+  },
+  segment: {
+    flex: 1,
+    minHeight: sizes.toggleHeight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: demoColors.white,
+  },
+  segmentSelected: {
+    backgroundColor: demoColors.selectedGreen,
+  },
+  segmentText: {
+    color: demoColors.text,
+    fontSize: 16,
     fontWeight: '500',
   },
-  statusConnected: {
-    color: '#28a745',
+  segmentTextSelected: {
+    color: demoColors.white,
   },
-  statusDisconnected: {
-    color: '#dc3545',
-  },
-  statusConnecting: {
-    color: '#ffc107',
-  },
-  dialerSection: {
-    marginBottom: 20,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  callsSection: {
-    marginBottom: 20,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  activeCallSection: {
-    marginBottom: 20,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 16,
-    color: '#1a1a1a',
-  },
-  input: {
-    borderWidth: 2,
-    borderColor: '#d1d1d1',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 18,
-    marginBottom: 16,
-    backgroundColor: '#fafafa',
-    color: '#333',
-    fontWeight: '500',
+  callInput: {
+    minHeight: 56,
+    borderWidth: 1,
+    borderColor: demoColors.inputOutline,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.sm,
+    color: demoColors.text,
+    fontSize: 16,
+    backgroundColor: demoColors.background,
   },
   inputFocused: {
-    borderColor: '#007AFF',
-    backgroundColor: '#ffffff',
+    borderColor: demoColors.selectedGreen,
   },
-  button: {
-    borderRadius: 12,
-    padding: 16,
+  actions: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
-    minHeight: 54,
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    gap: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  roundButton: {
+    width: sizes.callButton,
+    height: sizes.callButton,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyButton: {
+    backgroundColor: demoColors.background,
+    borderWidth: 1,
+    borderColor: demoColors.secondary,
   },
   callButton: {
-    backgroundColor: '#28a745',
+    width: sizes.callButton,
+    height: sizes.callButton,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: demoColors.telnyxGreen,
   },
-  answerButton: {
-    backgroundColor: '#007AFF',
-    flex: 1,
-    marginRight: 8,
-  },
-  endButton: {
-    backgroundColor: '#dc3545',
-    flex: 1,
-    marginLeft: 8,
-  },
-  disconnectButton: {
-    backgroundColor: '#6c757d',
-    marginTop: 8,
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  activeCallInfo: {
-    fontSize: 24,
-    fontWeight: '700',
-    textAlign: 'center',
-    color: '#1a1a1a',
-    marginBottom: 8,
-  },
-  activeCallState: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    fontWeight: '500',
+  buttonDisabled: {
+    backgroundColor: demoColors.disabled,
   },
 });
