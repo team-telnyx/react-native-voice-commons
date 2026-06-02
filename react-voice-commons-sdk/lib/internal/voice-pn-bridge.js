@@ -208,6 +208,36 @@ class VoicePnBridge {
     }
   }
   /**
+   * Route call audio through the loudspeaker when enabled, or back to the
+   * platform default voice route when disabled.
+   */
+  static async setSpeakerEnabled(enabled) {
+    try {
+      return await NativeBridge.setSpeakerEnabled(enabled);
+    } catch (error) {
+      console.error('VoicePnBridge: Error setting speaker route:', error);
+      return false;
+    }
+  }
+  /**
+   * Returns whether the current audio route is using the loudspeaker.
+   */
+  static async isSpeakerEnabled() {
+    try {
+      return await NativeBridge.isSpeakerEnabled();
+    } catch (error) {
+      console.error('VoicePnBridge: Error getting speaker route:', error);
+      return false;
+    }
+  }
+  /**
+   * Toggle between loudspeaker and the platform default voice route.
+   */
+  static async toggleSpeaker() {
+    const enabled = await VoicePnBridge.isSpeakerEnabled();
+    return VoicePnBridge.setSpeakerEnabled(!enabled);
+  }
+  /**
    * Android → React Native: Listen for immediate call action events from notification buttons
    * Use this for active calls where immediate response is needed (e.g., ending ongoing calls)
    */

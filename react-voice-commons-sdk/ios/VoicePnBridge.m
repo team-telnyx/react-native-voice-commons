@@ -35,4 +35,11 @@ RCT_EXTERN_METHOD(setMissedCallNotificationsEnabled:(BOOL)enabled
 RCT_EXTERN_METHOD(getMissedCallNotificationsEnabled:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(setSpeakerEnabled:(BOOL)enabled
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(isSpeakerEnabled:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 @end
