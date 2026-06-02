@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Phone, PhoneOff } from 'lucide-react-native';
 import { Call } from '../react-voice-commons-sdk/src';
-import { CallModal } from '~/components/CallModal';
-import { useState, useEffect } from 'react';
+import { demoColors, radii, sizes, spacing } from './demoTheme';
 
 type Props = {
   call: Call;
@@ -8,68 +10,104 @@ type Props = {
 };
 
 export function RingingCall({ call, isPushNotificationCall = false }: Props) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [visible, setVisible] = useState(true);
 
-  console.log('RingingCall: Rendering with call:', {
-    callId: call.callId,
-    destination: call.destination,
-    isIncoming: call.isIncoming,
-    currentState: call.currentState,
-    isPushNotificationCall,
-  });
+  useEffect(() => {
+    setVisible(true);
+  }, [call]);
 
-  // Don't show ringing UI for push notification calls
-  if (isPushNotificationCall) {
-    console.log('RingingCall: Skipping render for push notification call');
+  if (isPushNotificationCall || !visible) {
     return null;
   }
 
-  // Ensure dialog stays open when call is ringing
-  useEffect(() => {
-    if (call) {
-      setIsOpen(true);
-    }
-  }, [call]);
-
-  const handleHangup = () => {
-    console.log('RingingCall: Hanging up call');
-    call.hangup();
-    setIsOpen(false);
+  const handleReject = async () => {
+    await call.hangup();
+    setVisible(false);
   };
 
-  const handleAnswer = () => {
-    console.log('RingingCall: Answering call');
-    call.answer();
-    setIsOpen(false);
+  const handleAnswer = async () => {
+    await call.answer();
+    setVisible(false);
   };
-
-  const buttons: Array<{
-    text: string;
-    onPress: () => void;
-    variant?: 'primary' | 'secondary' | 'danger';
-  }> = [
-    {
-      text: 'Hangup',
-      onPress: handleHangup,
-      variant: 'danger' as const,
-    },
-  ];
-
-  if (call.isIncoming) {
-    buttons.push({
-      text: 'Answer',
-      onPress: handleAnswer,
-      variant: 'primary' as const,
-    });
-  }
 
   return (
-    <CallModal
-      visible={isOpen}
-      title="Call is ringing"
-      description={`${call.isIncoming ? 'Incoming' : 'Outgoing'}: ${call.destination}`}
-      buttons={buttons}
-      onRequestClose={() => {}}
-    />
+    <View style={styles.overlay} testID="incomingCallView">
+      <View style={styles.content}>
+        <Text style={styles.stateLabel}>{call.isIncoming ? 'Incoming Call' : 'Ringing'}</Text>
+        <Text style={styles.callerName}>{call.callerName || call.destination}</Text>
+        <Text style={styles.callerNumber}>{call.callerNumber || call.destination}</Text>
+
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.rejectButton]}
+            onPress={handleReject}
+            testID="callReject"
+            accessibilityLabel="Reject"
+          >
+            <PhoneOff size={24} color={demoColors.text} />
+          </TouchableOpacity>
+
+          {call.isIncoming && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.answerButton]}
+              onPress={handleAnswer}
+              testID="callAnswer"
+              accessibilityLabel="Answer"
+            >
+              <Phone size={24} color={demoColors.text} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+    backgroundColor: demoColors.background,
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  content: {
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  stateLabel: {
+    color: demoColors.mutedText,
+    fontSize: 16,
+  },
+  callerName: {
+    color: demoColors.text,
+    fontSize: 24,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  callerNumber: {
+    color: demoColors.mutedText,
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xxl,
+    marginTop: spacing.xl,
+  },
+  actionButton: {
+    width: sizes.callButton,
+    height: sizes.callButton,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rejectButton: {
+    backgroundColor: demoColors.danger,
+  },
+  answerButton: {
+    backgroundColor: demoColors.telnyxGreen,
+  },
+});
