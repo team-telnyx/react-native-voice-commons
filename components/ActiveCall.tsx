@@ -1,16 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import {
-  Keyboard,
-  Mic,
-  MicOff,
-  Pause,
-  PhoneOff,
-  Play,
-  Volume2,
-  VolumeX,
-  X,
-} from 'lucide-react-native';
+import { Keyboard, Mic, MicOff, Pause, PhoneOff, Play, X } from 'lucide-react-native';
 import { Call, TelnyxCallState } from '../react-voice-commons-sdk/src';
 import { demoColors, radii, sizes, spacing } from './demoTheme';
 
@@ -27,7 +17,6 @@ const DTMF_KEYS = [
 
 export function ActiveCall({ call }: Props) {
   const [isMuted, setIsMuted] = useState(call.currentIsMuted);
-  const [speakerOn, setSpeakerOn] = useState(false);
   const [duration, setDuration] = useState(call.currentDuration);
   const [showDialpad, setShowDialpad] = useState(false);
   const [dtmfDigits, setDtmfDigits] = useState('');
@@ -89,18 +78,6 @@ export function ActiveCall({ call }: Props) {
                 <MicOff size={24} color={demoColors.text} />
               ) : (
                 <Mic size={24} color={demoColors.text} />
-              )
-            }
-          />
-          <CallControl
-            testID="loudSpeaker"
-            label={speakerOn ? 'Speaker off' : 'Speaker'}
-            onPress={() => setSpeakerOn((current) => !current)}
-            icon={
-              speakerOn ? (
-                <Volume2 size={24} color={demoColors.text} />
-              ) : (
-                <VolumeX size={24} color={demoColors.text} />
               )
             }
           />

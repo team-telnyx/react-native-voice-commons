@@ -65,9 +65,15 @@ function profileKey(nextProfile: SavedProfile) {
   return `${nextProfile.loginMode}:${nextProfile.callerIdName}:${nextProfile.loginMode === 'token' ? nextProfile.sipToken : nextProfile.sipUsername}`;
 }
 
-function upsertProfile(currentProfiles: SavedProfile[], nextProfile: SavedProfile) {
+function upsertProfile(
+  currentProfiles: SavedProfile[],
+  nextProfile: SavedProfile,
+  originalProfileKey?: string | null
+) {
   const nextKey = profileKey(nextProfile);
-  const existingIndex = currentProfiles.findIndex((item) => profileKey(item) === nextKey);
+  const existingIndex = currentProfiles.findIndex(
+    (item) => profileKey(item) === (originalProfileKey || nextKey)
+  );
 
   if (existingIndex === -1) {
     return [...currentProfiles, nextProfile];
@@ -125,6 +131,7 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   const [profiles, setProfiles] = useState<SavedProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<SavedProfile | null>(null);
   const [draftProfile, setDraftProfile] = useState<SavedProfile>(emptyProfile);
+  const [editingProfileKey, setEditingProfileKey] = useState<string | null>(null);
   const [showProfileSheet, setShowProfileSheet] = useState(false);
   const [connectionState, setConnectionState] = useState(voipClient.currentConnectionState);
   const [activeCall, setActiveCall] = useState<Call | null>(voipClient.currentActiveCall);
@@ -316,10 +323,11 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
       return false;
     }
 
-    const nextProfiles = upsertProfile(profiles, normalizedProfile);
+    const nextProfiles = upsertProfile(profiles, normalizedProfile, editingProfileKey);
     await persistProfileList(nextProfiles);
     setProfiles(nextProfiles);
     setSelectedProfile(normalizedProfile);
+    setEditingProfileKey(null);
     return true;
   };
 
@@ -469,6 +477,7 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
         setSelectedProfile={setSelectedProfile}
         onEditProfile={(nextProfile) => {
           setDraftProfile(nextProfile ? { ...nextProfile } : emptyProfile);
+          setEditingProfileKey(nextProfile ? profileKey(nextProfile) : null);
         }}
         onDeleteProfile={handleDeleteProfile}
         onSave={handleSaveProfile}
