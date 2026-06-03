@@ -1,3 +1,4 @@
+// Demo palette mirrors the Android Compose demo theme; keep both in sync when either changes.
 export const demoColors = {
   background: '#FEFDF5',
   surface: '#FFFBFE',

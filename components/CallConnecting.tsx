@@ -1,4 +1,4 @@
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { PhoneOff } from 'lucide-react-native';
 import { Call } from '../react-voice-commons-sdk/src';
 import { demoColors, radii, sizes, spacing } from './demoTheme';
@@ -13,7 +13,11 @@ type Props = {
 
 export function CallConnecting({ call, title = 'Connecting', description, loadingText }: Props) {
   const handleHangup = async () => {
-    await call.hangup();
+    try {
+      await call.hangup();
+    } catch (error) {
+      showCallActionError('End Call Failed', error);
+    }
   };
 
   return (
@@ -80,3 +84,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
   },
 });
+
+function showCallActionError(title: string, error: unknown) {
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+  Alert.alert(title, errorMessage);
+}

@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { History, LogOut, Phone } from 'lucide-react-native';
+import { LogOut, Phone } from 'lucide-react-native';
 import { useTelnyxVoice, TelnyxConnectionState } from '../react-voice-commons-sdk/src';
 import { demoColors, radii, sizes, spacing } from './demoTheme';
 
@@ -106,10 +106,6 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
     }
   };
 
-  const handleCallHistory = () => {
-    Alert.alert('Call History', 'No call history available');
-  };
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
@@ -202,15 +198,6 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
 
         <View style={styles.actions}>
           <TouchableOpacity
-            style={[styles.roundButton, styles.historyButton]}
-            onPress={handleCallHistory}
-            testID="callHistoryButton"
-            accessibilityLabel="Call History"
-          >
-            <History size={24} color={demoColors.text} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
             style={[styles.callButton, !isConnected && styles.buttonDisabled]}
             onPress={handleStartCall}
             disabled={!isConnected}
@@ -280,7 +267,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     padding: spacing.sm,
     gap: spacing.sm,
-    backgroundColor: demoColors.secondaryBackground,
+    backgroundColor: demoColors.secondarySurface,
   },
   profileLabel: {
     color: demoColors.mutedText,
@@ -341,18 +328,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.md,
     paddingTop: spacing.xs,
-  },
-  roundButton: {
-    width: sizes.callButton,
-    height: sizes.callButton,
-    borderRadius: radii.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  historyButton: {
-    backgroundColor: demoColors.background,
-    borderWidth: 1,
-    borderColor: demoColors.secondary,
   },
   callButton: {
     width: sizes.callButton,

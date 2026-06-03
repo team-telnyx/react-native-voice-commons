@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Keyboard, Mic, MicOff, Pause, PhoneOff, Play, X } from 'lucide-react-native';
 import { Call, TelnyxCallState } from '../react-voice-commons-sdk/src';
 import { demoColors, radii, sizes, spacing } from './demoTheme';
@@ -39,25 +39,41 @@ export function ActiveCall({ call }: Props) {
   const canDtmf = call.currentState === TelnyxCallState.ACTIVE;
 
   const handleHangup = async () => {
-    await call.hangup();
+    try {
+      await call.hangup();
+    } catch (error) {
+      showCallActionError('End Call Failed', error);
+    }
   };
 
   const handleMute = async () => {
-    await call.toggleMute();
+    try {
+      await call.toggleMute();
+    } catch (error) {
+      showCallActionError('Mute Failed', error);
+    }
   };
 
   const handleHold = async () => {
-    if (isOnHold) {
-      await call.resume();
-    } else {
-      await call.hold();
+    try {
+      if (isOnHold) {
+        await call.resume();
+      } else {
+        await call.hold();
+      }
+    } catch (error) {
+      showCallActionError(isOnHold ? 'Resume Failed' : 'Hold Failed', error);
     }
   };
 
   const handleDtmf = async (digit: string) => {
     if (!canDtmf) return;
     setDtmfDigits((current) => (current + digit).slice(-24));
-    await call.dtmf(digit);
+    try {
+      await call.dtmf(digit);
+    } catch (error) {
+      showCallActionError('DTMF Failed', error);
+    }
   };
 
   return (
@@ -206,6 +222,11 @@ function formatDuration(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function showCallActionError(title: string, error: unknown) {
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+  Alert.alert(title, errorMessage);
 }
 
 const styles = StyleSheet.create({

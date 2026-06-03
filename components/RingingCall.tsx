@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Phone, PhoneOff } from 'lucide-react-native';
 import { Call } from '../react-voice-commons-sdk/src';
 import { demoColors, radii, sizes, spacing } from './demoTheme';
@@ -21,13 +21,21 @@ export function RingingCall({ call, isPushNotificationCall = false }: Props) {
   }
 
   const handleReject = async () => {
-    await call.hangup();
-    setVisible(false);
+    try {
+      await call.hangup();
+      setVisible(false);
+    } catch (error) {
+      showCallActionError('Reject Failed', error);
+    }
   };
 
   const handleAnswer = async () => {
-    await call.answer();
-    setVisible(false);
+    try {
+      await call.answer();
+      setVisible(false);
+    } catch (error) {
+      showCallActionError('Answer Failed', error);
+    }
   };
 
   return (
@@ -111,3 +119,8 @@ const styles = StyleSheet.create({
     backgroundColor: demoColors.telnyxGreen,
   },
 });
+
+function showCallActionError(title: string, error: unknown) {
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+  Alert.alert(title, errorMessage);
+}

@@ -1,23 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react-native';
+import { MoreVertical } from 'lucide-react-native';
 import {
   Call,
   TelnyxConnectionState,
@@ -26,8 +12,19 @@ import {
   createTokenConfig,
   useTelnyxVoice,
 } from '../react-voice-commons-sdk/src';
-import { demoColors, radii, spacing } from './demoTheme';
+import { demoColors, spacing } from './demoTheme';
 import { VoipTokenFetcher } from './VoipTokenFetcher';
+import { CredentialProfileSheet } from './login/CredentialProfileSheet';
+import { InfoRow } from './login/InfoRow';
+import { ProfileSwitcher } from './login/ProfileSwitcher';
+import {
+  SavedProfile,
+  emptyProfile,
+  legacyProfileKey,
+  profileKey,
+  upsertProfile,
+  withProfileId,
+} from './login/profileTypes';
 
 interface TelnyxLoginFormProps {
   onLoginSuccess?: () => void;
@@ -35,52 +32,12 @@ interface TelnyxLoginFormProps {
   debug?: boolean;
 }
 
-type LoginMode = 'credentials' | 'token';
-
-type SavedProfile = {
-  loginMode: LoginMode;
-  sipUsername: string;
-  sipPassword: string;
-  sipToken: string;
-  callerIdName: string;
-  callerIdNumber: string;
-  forceRelayCandidate: boolean;
-};
-
-const emptyProfile: SavedProfile = {
-  loginMode: 'credentials',
-  sipUsername: '',
-  sipPassword: '',
-  sipToken: '',
-  callerIdName: '',
-  callerIdNumber: '',
-  forceRelayCandidate: false,
-};
-
 const PROFILE_STORAGE_KEY = '@telnyx_demo_profile';
 const PROFILE_LIST_STORAGE_KEY = '@telnyx_demo_profiles';
 const telnyxLogo = require('../assets/images/telnyx_logo.png');
-
-function profileKey(nextProfile: SavedProfile) {
-  return `${nextProfile.loginMode}:${nextProfile.callerIdName}:${nextProfile.loginMode === 'token' ? nextProfile.sipToken : nextProfile.sipUsername}`;
-}
-
-function upsertProfile(
-  currentProfiles: SavedProfile[],
-  nextProfile: SavedProfile,
-  originalProfileKey?: string | null
-) {
-  const nextKey = profileKey(nextProfile);
-  const existingIndex = currentProfiles.findIndex(
-    (item) => profileKey(item) === (originalProfileKey || nextKey)
-  );
-
-  if (existingIndex === -1) {
-    return [...currentProfiles, nextProfile];
-  }
-
-  return currentProfiles.map((item, index) => (index === existingIndex ? nextProfile : item));
-}
+const appPackage = require('../package.json');
+const sdkPackage = require('../react-voice-commons-sdk/package.json');
+const versionLabel = `Production TelnyxSDK [v${sdkPackage.version}] - App [v${appPackage.version}]`;
 
 function callStateLabel(callState: TelnyxCallState | null) {
   switch (callState) {
@@ -144,6 +101,7 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   const log = debug ? console.log : () => {};
   const isConnected = connectionState === TelnyxConnectionState.CONNECTED;
   const isConnecting = connectionState === TelnyxConnectionState.CONNECTING || isLoading;
+  const connectButtonLabel = isConnected ? 'Disconnect' : isConnecting ? 'Cancel' : 'Connect';
   const connectionLabel = isConnected ? 'Client-ready' : 'Disconnected';
   const sessionId = isConnected ? voipClient.sessionId || '-' : '-';
 
@@ -204,24 +162,48 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
       const rawProfileList = await AsyncStorage.getItem(PROFILE_LIST_STORAGE_KEY);
       const rawProfile = await AsyncStorage.getItem(PROFILE_STORAGE_KEY);
       if (rawProfileList) {
-        const nextProfiles = (JSON.parse(rawProfileList) as SavedProfile[]).map((item) => ({
-          ...emptyProfile,
-          ...item,
-        }));
-        const currentProfile = rawProfile
+        let nextProfiles = (JSON.parse(rawProfileList) as SavedProfile[]).map((item) =>
+          withProfileId({
+            ...emptyProfile,
+            ...item,
+          })
+        );
+        const storedProfile = rawProfile
           ? ({ ...emptyProfile, ...JSON.parse(rawProfile) } as SavedProfile)
+          : null;
+        const currentProfile = storedProfile
+          ? nextProfiles.find(
+              (item) =>
+                profileKey(item) === profileKey(storedProfile) ||
+                legacyProfileKey(item) === legacyProfileKey(storedProfile)
+            ) || withProfileId(storedProfile)
           : nextProfiles[0] || null;
+        if (
+          currentProfile &&
+          !nextProfiles.some((item) => profileKey(item) === profileKey(currentProfile))
+        ) {
+          nextProfiles = [...nextProfiles, currentProfile];
+        }
         setProfiles(nextProfiles);
         setProfile(currentProfile);
         setSelectedProfile(currentProfile);
+        await persistProfileList(nextProfiles);
+        if (currentProfile) {
+          await persistProfile(currentProfile);
+        }
         return;
       }
 
       if (rawProfile) {
-        const nextProfile = { ...emptyProfile, ...JSON.parse(rawProfile) } as SavedProfile;
+        const nextProfile = withProfileId({
+          ...emptyProfile,
+          ...JSON.parse(rawProfile),
+        } as SavedProfile);
         setProfile(nextProfile);
         setProfiles([nextProfile]);
         setSelectedProfile(nextProfile);
+        await persistProfileList([nextProfile]);
+        await persistProfile(nextProfile);
         return;
       }
 
@@ -242,7 +224,7 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
       ]);
 
       if (storedUsername || storedToken || storedCallerIdName) {
-        const migratedProfile = {
+        const migratedProfile = withProfileId({
           loginMode: storedToken ? 'token' : 'credentials',
           sipUsername: storedUsername || '',
           sipPassword: storedPassword || '',
@@ -250,10 +232,12 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
           callerIdName: storedCallerIdName || '',
           callerIdNumber: storedCallerIdNumber || '',
           forceRelayCandidate: storedForceRelayCandidate === 'true',
-        } as SavedProfile;
+        } as SavedProfile);
         setProfile(migratedProfile);
         setProfiles([migratedProfile]);
         setSelectedProfile(migratedProfile);
+        await persistProfileList([migratedProfile]);
+        await persistProfile(migratedProfile);
       }
     } catch (error) {
       log('TelnyxLoginForm: Error loading profile:', error);
@@ -261,6 +245,7 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   };
 
   const persistProfile = async (nextProfile: SavedProfile) => {
+    // Demo-only persistence. Production apps should store SIP secrets in Keychain/Keystore.
     await AsyncStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(nextProfile));
     await Promise.all([
       AsyncStorage.setItem('@caller_id_name', nextProfile.callerIdName.trim()),
@@ -279,6 +264,7 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   };
 
   const persistProfileList = async (nextProfiles: SavedProfile[]) => {
+    // Demo-only persistence. Production apps should store SIP secrets in Keychain/Keystore.
     await AsyncStorage.setItem(PROFILE_LIST_STORAGE_KEY, JSON.stringify(nextProfiles));
   };
 
@@ -301,13 +287,13 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   };
 
   const handleSaveProfile = async (): Promise<boolean> => {
-    const normalizedProfile = {
+    const normalizedProfile = withProfileId({
       ...draftProfile,
       sipUsername: draftProfile.sipUsername.trim(),
       sipToken: draftProfile.sipToken.trim(),
       callerIdName: draftProfile.callerIdName.trim(),
       callerIdNumber: draftProfile.callerIdNumber.trim(),
-    };
+    });
 
     if (normalizedProfile.loginMode === 'credentials') {
       if (
@@ -344,13 +330,11 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
     setShowProfileSheet(false);
   };
 
-  const handleDeleteProfile = async () => {
-    if (!selectedProfile) return;
+  const deleteProfile = async (targetProfile: SavedProfile) => {
+    const targetKey = profileKey(targetProfile);
 
-    const nextProfiles = profiles.filter(
-      (item) => profileKey(item) !== profileKey(selectedProfile)
-    );
-    const didDeleteCurrent = profile && profileKey(profile) === profileKey(selectedProfile);
+    const nextProfiles = profiles.filter((item) => profileKey(item) !== targetKey);
+    const didDeleteCurrent = !!profile && profileKey(profile) === targetKey;
     const nextCurrentProfile = didDeleteCurrent ? null : profile;
 
     setProfiles(nextProfiles);
@@ -363,7 +347,31 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
     }
   };
 
+  const handleDeleteProfile = (targetProfile: SavedProfile) => {
+    Alert.alert('Delete profile', `Delete ${targetProfile.callerIdName || 'this profile'}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          void deleteProfile(targetProfile);
+        },
+      },
+    ]);
+  };
+
   const handleConnectDisconnect = async () => {
+    if (isConnecting && !isConnected) {
+      setIsLoading(false);
+      try {
+        await voipClient.logout();
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        Alert.alert('Cancel Failed', errorMessage);
+      }
+      return;
+    }
+
     if (isConnected) {
       await voipClient.logout();
       return;
@@ -454,17 +462,12 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
           <TouchableOpacity
             style={styles.connectButton}
             onPress={handleConnectDisconnect}
-            disabled={isConnecting}
             testID="connectDisconnectButton"
-            accessibilityLabel={isConnected ? 'Disconnect' : 'Connect'}
+            accessibilityLabel={connectButtonLabel}
           >
-            {isConnecting ? (
-              <ActivityIndicator color={demoColors.background} />
-            ) : (
-              <Text style={styles.connectButtonText}>{isConnected ? 'Disconnect' : 'Connect'}</Text>
-            )}
+            <Text style={styles.connectButtonText}>{connectButtonLabel}</Text>
           </TouchableOpacity>
-          <Text style={styles.versionText}>Production TelnyxSDK [v-] - App [v1.0.0]</Text>
+          <Text style={styles.versionText}>{versionLabel}</Text>
         </View>
       </View>
 
@@ -487,312 +490,6 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
     </SafeAreaView>
   );
 };
-
-type ProfileSwitcherProps = {
-  profileName: string;
-  onPress: () => void;
-};
-
-function ProfileSwitcher({ profileName, onPress }: ProfileSwitcherProps) {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.infoLabel}>Profile</Text>
-      <View style={styles.profileSwitcherRow}>
-        <Text style={styles.infoValue} testID="profileName">
-          {profileName}
-        </Text>
-        <TouchableOpacity
-          style={styles.smallPillButton}
-          onPress={onPress}
-          testID="switchProfileButton"
-          accessibilityLabel="Switch profile"
-        >
-          <Plus size={16} color={demoColors.text} />
-          <Text style={styles.smallPillText}>Switch profile</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-type InfoRowProps = {
-  label: string;
-  testID?: string;
-  children: React.ReactNode;
-};
-
-function InfoRow({ label, testID, children }: InfoRowProps) {
-  return (
-    <View style={styles.section} testID={testID}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <View style={styles.infoValueRow}>{children}</View>
-    </View>
-  );
-}
-
-type CredentialProfileSheetProps = {
-  visible: boolean;
-  profiles: SavedProfile[];
-  selectedProfile: SavedProfile | null;
-  draftProfile: SavedProfile;
-  setDraftProfile: React.Dispatch<React.SetStateAction<SavedProfile>>;
-  setSelectedProfile: React.Dispatch<React.SetStateAction<SavedProfile | null>>;
-  onEditProfile: (profile: SavedProfile | null) => void;
-  onDeleteProfile: () => void;
-  onSave: () => Promise<boolean>;
-  onConfirm: () => void;
-  onCancel: () => void;
-};
-
-function CredentialProfileSheet({
-  visible,
-  profiles,
-  selectedProfile,
-  draftProfile,
-  setDraftProfile,
-  setSelectedProfile,
-  onEditProfile,
-  onDeleteProfile,
-  onSave,
-  onConfirm,
-  onCancel,
-}: CredentialProfileSheetProps) {
-  const [isAddProfile, setIsAddProfile] = useState(false);
-  const isTokenState = draftProfile.loginMode === 'token';
-
-  useEffect(() => {
-    if (visible) {
-      setIsAddProfile(false);
-    }
-  }, [visible]);
-
-  const handleAddProfile = () => {
-    onEditProfile(null);
-    setIsAddProfile((current) => !current);
-  };
-
-  const handleEditProfile = (nextProfile: SavedProfile) => {
-    onEditProfile(nextProfile);
-    setIsAddProfile(true);
-  };
-
-  const handleSaveProfile = async () => {
-    const didSave = await onSave();
-    if (didSave) {
-      setIsAddProfile(false);
-    }
-  };
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={() => {}}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.sheetScrim}
-      >
-        <View style={styles.sheet}>
-          <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled">
-            <View style={styles.loginSheetContent}>
-              <Text style={styles.sheetTitle}>Existing profiles</Text>
-
-              <TouchableOpacity
-                style={styles.addProfileButton}
-                onPress={handleAddProfile}
-                testID="addNewProfileButton"
-                accessibilityLabel="Add new profile"
-              >
-                <Plus size={16} color={demoColors.text} />
-                <Text style={styles.addProfileText}>Add new profile</Text>
-              </TouchableOpacity>
-
-              <Text style={styles.infoValue}>Production</Text>
-
-              {profiles.length > 0 && (
-                <View style={styles.profileList} testID="profileList">
-                  {profiles.map((nextProfile) => {
-                    const isSelected =
-                      !!selectedProfile && profileKey(selectedProfile) === profileKey(nextProfile);
-
-                    return (
-                      <TouchableOpacity
-                        key={profileKey(nextProfile)}
-                        style={[styles.profileItem, isSelected && styles.profileItemSelected]}
-                        onPress={() => setSelectedProfile(nextProfile)}
-                      >
-                        <Text style={styles.profileItemText}>{nextProfile.callerIdName}</Text>
-                        {isSelected && (
-                          <>
-                            <TouchableOpacity
-                              onPress={() => handleEditProfile(nextProfile)}
-                              accessibilityLabel="Edit profile"
-                            >
-                              <Pencil size={22} color={demoColors.text} />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              onPress={onDeleteProfile}
-                              accessibilityLabel="Delete profile"
-                            >
-                              <Trash2 size={22} color={demoColors.text} />
-                            </TouchableOpacity>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-
-              <View style={styles.sheetActions}>
-                <TouchableOpacity
-                  style={[styles.sheetActionButton, styles.cancelButton]}
-                  onPress={onCancel}
-                  testID="cancelButton"
-                  accessibilityLabel="Cancel"
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.sheetActionButton}
-                  onPress={onConfirm}
-                  testID="confirmButton"
-                  accessibilityLabel="Confirm"
-                >
-                  <Text style={styles.saveButtonText}>Confirm</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {isAddProfile && (
-              <View style={styles.credentialsForm} testID="credentialsForm">
-                <View style={styles.segmentedControl}>
-                  <TouchableOpacity
-                    style={[styles.segment, !isTokenState && styles.segmentSelected]}
-                    onPress={() =>
-                      setDraftProfile((current) => ({ ...current, loginMode: 'credentials' }))
-                    }
-                    testID="credentialLoginToggleButton"
-                    accessibilityLabel="Credential Login"
-                  >
-                    <Text style={[styles.segmentText, !isTokenState && styles.segmentTextSelected]}>
-                      Credential Login
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.segment, isTokenState && styles.segmentSelected]}
-                    onPress={() =>
-                      setDraftProfile((current) => ({ ...current, loginMode: 'token' }))
-                    }
-                    testID="tokenLoginToggleButton"
-                    accessibilityLabel="Token Login"
-                  >
-                    <Text style={[styles.segmentText, isTokenState && styles.segmentTextSelected]}>
-                      Token Login
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {!isTokenState ? (
-                  <>
-                    <LabeledInput
-                      label="Username"
-                      placeholder="Enter username"
-                      value={draftProfile.sipUsername}
-                      onChangeText={(sipUsername) =>
-                        setDraftProfile((current) => ({ ...current, sipUsername }))
-                      }
-                      testID="sipUsername"
-                    />
-                    <LabeledInput
-                      label="Password"
-                      placeholder="Enter password"
-                      value={draftProfile.sipPassword}
-                      onChangeText={(sipPassword) =>
-                        setDraftProfile((current) => ({ ...current, sipPassword }))
-                      }
-                      secureTextEntry
-                      testID="sipPassword"
-                    />
-                  </>
-                ) : (
-                  <LabeledInput
-                    label="Token"
-                    placeholder="Enter token"
-                    value={draftProfile.sipToken}
-                    onChangeText={(sipToken) =>
-                      setDraftProfile((current) => ({ ...current, sipToken }))
-                    }
-                    testID="sipToken"
-                  />
-                )}
-
-                <LabeledInput
-                  label="Caller name"
-                  placeholder="Enter caller name"
-                  value={draftProfile.callerIdName}
-                  onChangeText={(callerIdName) =>
-                    setDraftProfile((current) => ({ ...current, callerIdName }))
-                  }
-                  testID="callerIDName"
-                />
-                <LabeledInput
-                  label="Caller number"
-                  placeholder="Enter caller number"
-                  value={draftProfile.callerIdNumber}
-                  onChangeText={(callerIdNumber) =>
-                    setDraftProfile((current) => ({ ...current, callerIdNumber }))
-                  }
-                  keyboardType="phone-pad"
-                  testID="callerIDNumber"
-                />
-
-                <View style={styles.switchRow}>
-                  <Text style={styles.switchLabel}>Force TURN Relay</Text>
-                  <Switch
-                    value={draftProfile.forceRelayCandidate}
-                    onValueChange={(forceRelayCandidate) =>
-                      setDraftProfile((current) => ({ ...current, forceRelayCandidate }))
-                    }
-                    testID="forceRelayCandidate"
-                    accessibilityLabel="Force TURN Relay"
-                  />
-                </View>
-
-                <View style={styles.sheetActions}>
-                  <TouchableOpacity
-                    style={styles.sheetActionButton}
-                    onPress={handleSaveProfile}
-                    testID="saveButton"
-                    accessibilityLabel="Save"
-                  >
-                    <Text style={styles.saveButtonText}>Save</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-          </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-type LabeledInputProps = React.ComponentProps<typeof TextInput> & {
-  label: string;
-};
-
-function LabeledInput({ label, style, ...props }: LabeledInputProps) {
-  return (
-    <View style={styles.inputGroup}>
-      <Text style={styles.inputLabel}>{label}</Text>
-      <TextInput
-        {...props}
-        style={[styles.input, style]}
-        placeholderTextColor="gray"
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -826,19 +523,6 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     paddingBottom: spacing.lg,
   },
-  section: {
-    gap: 4,
-  },
-  infoLabel: {
-    color: demoColors.text,
-    fontSize: 14,
-  },
-  infoValueRow: {
-    minHeight: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
   infoValue: {
     color: demoColors.text,
     fontSize: 14,
@@ -847,45 +531,6 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-  },
-  profileSwitcherRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  smallPillButton: {
-    minHeight: 30,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: demoColors.text,
-    borderRadius: 20,
-    backgroundColor: demoColors.background,
-  },
-  smallPillText: {
-    color: demoColors.text,
-    fontSize: 14,
-  },
-  profileList: {
-    gap: spacing.xs,
-  },
-  profileItem: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    backgroundColor: demoColors.secondarySurface,
-  },
-  profileItemSelected: {
-    backgroundColor: demoColors.secondarySurface,
-  },
-  profileItemText: {
-    flex: 1,
-    color: demoColors.text,
-    fontSize: 14,
   },
   bottomBar: {
     minHeight: 128,
@@ -910,132 +555,5 @@ const styles = StyleSheet.create({
     color: demoColors.mutedText,
     textAlign: 'center',
     fontSize: 14,
-  },
-  sheetScrim: {
-    flex: 1,
-    justifyContent: 'flex-start',
-    backgroundColor: demoColors.white,
-  },
-  sheet: {
-    flex: 1,
-    width: '100%',
-    backgroundColor: demoColors.white,
-    padding: spacing.lg,
-  },
-  sheetScroll: {
-    flex: 1,
-  },
-  loginSheetContent: {
-    gap: spacing.lg,
-    backgroundColor: demoColors.white,
-  },
-  sheetTitle: {
-    color: demoColors.text,
-    fontSize: 16,
-  },
-  addProfileButton: {
-    alignSelf: 'flex-start',
-    minHeight: 32,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: demoColors.secondarySurface,
-    borderRadius: 20,
-    backgroundColor: demoColors.secondarySurface,
-  },
-  addProfileText: {
-    color: demoColors.text,
-    fontSize: 12,
-  },
-  credentialsForm: {
-    gap: spacing.sm,
-    backgroundColor: demoColors.white,
-    marginTop: spacing.lg,
-  },
-  segmentedControl: {
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: demoColors.outline,
-    borderRadius: radii.sm,
-    overflow: 'hidden',
-    marginTop: 6,
-  },
-  segment: {
-    flex: 1,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: demoColors.white,
-  },
-  segmentSelected: {
-    backgroundColor: demoColors.selectedGreen,
-  },
-  segmentText: {
-    color: demoColors.text,
-    fontSize: 16,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  segmentTextSelected: {
-    color: demoColors.white,
-  },
-  inputGroup: {
-    gap: 4,
-  },
-  inputLabel: {
-    color: demoColors.mutedText,
-    fontSize: 14,
-  },
-  input: {
-    minHeight: 56,
-    borderWidth: 1,
-    borderColor: demoColors.inputOutline,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.sm,
-    color: demoColors.text,
-    fontSize: 16,
-    backgroundColor: demoColors.white,
-  },
-  switchRow: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  switchLabel: {
-    color: demoColors.text,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  sheetActions: {
-    flexDirection: 'row',
-    alignSelf: 'flex-start',
-    gap: spacing.xs,
-    marginTop: spacing.xs,
-  },
-  sheetActionButton: {
-    minWidth: 86,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: demoColors.background,
-    borderRadius: 20,
-    backgroundColor: demoColors.text,
-    paddingHorizontal: spacing.sm,
-  },
-  cancelButton: {
-    borderColor: demoColors.text,
-    backgroundColor: demoColors.white,
-  },
-  cancelButtonText: {
-    color: demoColors.text,
-    fontSize: 16,
-  },
-  saveButtonText: {
-    color: demoColors.background,
-    fontSize: 16,
   },
 });
