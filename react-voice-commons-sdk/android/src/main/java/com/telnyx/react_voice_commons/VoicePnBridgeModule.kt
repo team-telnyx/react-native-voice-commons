@@ -1,6 +1,8 @@
 package com.telnyx.react_voice_commons
 
 import android.content.Intent
+import android.content.Context
+import android.media.AudioManager
 import android.os.Build
 import android.util.Log
 import com.facebook.react.bridge.ReactApplicationContext
@@ -244,6 +246,34 @@ class VoicePnBridgeModule(reactContext: ReactApplicationContext) : ReactContextB
         } catch (e: Exception) {
             Log.e(TAG, "Error getting missed call notifications", e)
             promise.reject("GET_MISSED_CALL_NOTIFICATIONS_ERROR", e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun setSpeakerEnabled(enabled: Boolean, promise: Promise) {
+        try {
+            val audioManager = reactApplicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            // The active call flow owns AudioManager.mode. This bridge only requests the speaker route.
+            // Connected Bluetooth or wired accessories may still take precedence over speakerphone.
+            audioManager.isSpeakerphoneOn = enabled
+            val actualEnabled = audioManager.isSpeakerphoneOn
+
+            Log.d(TAG, "setSpeakerEnabled called from React Native: requested=$enabled actual=$actualEnabled")
+            promise.resolve(actualEnabled)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting speaker route", e)
+            promise.reject("SET_SPEAKER_ENABLED_ERROR", e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun isSpeakerEnabled(promise: Promise) {
+        try {
+            val audioManager = reactApplicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            promise.resolve(audioManager.isSpeakerphoneOn)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting speaker route", e)
+            promise.reject("GET_SPEAKER_ENABLED_ERROR", e.message, e)
         }
     }
     

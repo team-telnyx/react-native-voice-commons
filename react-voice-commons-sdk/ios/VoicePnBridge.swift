@@ -1,5 +1,6 @@
 import Foundation
 import React
+import AVFoundation
 
 @objc(VoicePnBridge)
 class VoicePnBridge: NSObject {
@@ -101,5 +102,32 @@ class VoicePnBridge: NSObject {
         }
 
         resolve(UserDefaults.standard.bool(forKey: TelnyxVoiceUserDefaultsKey.missedCallNotificationsEnabled))
+    }
+
+    @objc
+    func setSpeakerEnabled(_ enabled: Bool, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            // The Telnyx/WebRTC call setup is expected to configure a .playAndRecord-compatible
+            // session. Passing .none clears only the speaker override; accessories/session options
+            // can still decide the resulting output route.
+            try audioSession.overrideOutputAudioPort(enabled ? .speaker : .none)
+            let actualEnabled = audioSession.currentRoute.outputs.contains { output in
+                output.portType == .builtInSpeaker
+            }
+            NSLog("[VoicePnBridge] setSpeakerEnabled called. requested=\(enabled), actual=\(actualEnabled)")
+            resolve(actualEnabled)
+        } catch {
+            NSLog("[VoicePnBridge] setSpeakerEnabled failed. enabled=\(enabled), error=\(error)")
+            reject("SET_SPEAKER_ENABLED_ERROR", error.localizedDescription, error)
+        }
+    }
+
+    @objc
+    func isSpeakerEnabled(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        let isEnabled = AVAudioSession.sharedInstance().currentRoute.outputs.contains { output in
+            output.portType == .builtInSpeaker
+        }
+        resolve(isEnabled)
     }
 }

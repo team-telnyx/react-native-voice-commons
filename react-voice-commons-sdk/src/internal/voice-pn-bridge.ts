@@ -40,6 +40,8 @@ export interface VoicePnBridgeInterface {
   clearPendingVoipAction(): Promise<boolean>;
   setMissedCallNotificationsEnabled(enabled: boolean): Promise<boolean>;
   getMissedCallNotificationsEnabled(): Promise<boolean>;
+  setSpeakerEnabled(enabled: boolean): Promise<boolean>;
+  isSpeakerEnabled(): Promise<boolean>;
 }
 
 const NativeBridge: VoicePnBridgeInterface = NativeModules.VoicePnBridge;
@@ -269,6 +271,41 @@ export class VoicePnBridge {
       console.error('VoicePnBridge: Error getting missed call notifications setting:', error);
       return true;
     }
+  }
+
+  /**
+   * Route call audio through the loudspeaker when enabled, or back to the
+   * platform default voice route when disabled.
+   */
+  static async setSpeakerEnabled(enabled: boolean): Promise<boolean> {
+    try {
+      return await NativeBridge.setSpeakerEnabled(enabled);
+    } catch (error) {
+      console.error('VoicePnBridge: Error setting speaker route:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Returns whether the current audio route is using the loudspeaker.
+   */
+  static async isSpeakerEnabled(): Promise<boolean> {
+    try {
+      return await NativeBridge.isSpeakerEnabled();
+    } catch (error) {
+      console.error('VoicePnBridge: Error getting speaker route:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Toggle between loudspeaker and the platform default voice route.
+   */
+  static async toggleSpeaker(): Promise<boolean> {
+    // This is intentionally read-then-write because route changes can also come from
+    // the OS, Bluetooth, wired accessories, or the active call session.
+    const enabled = await VoicePnBridge.isSpeakerEnabled();
+    return VoicePnBridge.setSpeakerEnabled(!enabled);
   }
 
   /**

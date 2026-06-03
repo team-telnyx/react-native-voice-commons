@@ -32,6 +32,8 @@ export interface VoicePnBridgeInterface {
   clearPendingVoipAction(): Promise<boolean>;
   setMissedCallNotificationsEnabled(enabled: boolean): Promise<boolean>;
   getMissedCallNotificationsEnabled(): Promise<boolean>;
+  setSpeakerEnabled(enabled: boolean): Promise<boolean>;
+  isSpeakerEnabled(): Promise<boolean>;
 }
 declare const NativeBridge: VoicePnBridgeInterface;
 /**
@@ -118,6 +120,19 @@ export declare class VoicePnBridge {
    * Returns true by default, matching the sample-app behavior for missed calls.
    */
   static getMissedCallNotificationsEnabled(): Promise<boolean>;
+  /**
+   * Route call audio through the loudspeaker when enabled, or back to the
+   * platform default voice route when disabled.
+   */
+  static setSpeakerEnabled(enabled: boolean): Promise<boolean>;
+  /**
+   * Returns whether the current audio route is using the loudspeaker.
+   */
+  static isSpeakerEnabled(): Promise<boolean>;
+  /**
+   * Toggle between loudspeaker and the platform default voice route.
+   */
+  static toggleSpeaker(): Promise<boolean>;
   /**
    * Android → React Native: Listen for immediate call action events from notification buttons
    * Use this for active calls where immediate response is needed (e.g., ending ongoing calls)
