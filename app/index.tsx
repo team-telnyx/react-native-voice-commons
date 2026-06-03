@@ -1,14 +1,12 @@
 import { Stack } from 'expo-router';
 import * as React from 'react';
-import { View, Text } from 'react-native';
+import { View } from 'react-native';
+import { demoColors } from '~/components/demoTheme';
 import { TelnyxLoginForm } from '~/components/TelnyxLoginForm';
 
 export default function Screen() {
   return (
-    <View
-      className="flex-1 justify-center items-center gap-5 p-6 bg-secondary/30"
-      style={{ backgroundColor: '#f0f0f0', flex: 1 }}
-    >
+    <View style={{ backgroundColor: demoColors.background, flex: 1 }}>
       <Stack.Screen
         name="index"
         options={{

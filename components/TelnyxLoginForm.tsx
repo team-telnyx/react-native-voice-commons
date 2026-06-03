@@ -1,35 +1,82 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  StyleSheet,
-  KeyboardAvoidingView,
-  ScrollView,
-  Platform,
-} from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MoreVertical } from 'lucide-react-native';
 import {
-  TelnyxVoipClient,
+  Call,
   TelnyxConnectionState,
+  TelnyxCallState,
   createCredentialConfig,
   createTokenConfig,
   useTelnyxVoice,
 } from '../react-voice-commons-sdk/src';
+import { demoColors, spacing } from './demoTheme';
 import { VoipTokenFetcher } from './VoipTokenFetcher';
+import { CredentialProfileSheet } from './login/CredentialProfileSheet';
+import { InfoRow } from './login/InfoRow';
+import { ProfileSwitcher } from './login/ProfileSwitcher';
+import {
+  SavedProfile,
+  emptyProfile,
+  legacyProfileKey,
+  profileKey,
+  upsertProfile,
+  withProfileId,
+} from './login/profileTypes';
 
 interface TelnyxLoginFormProps {
   onLoginSuccess?: () => void;
-  onLoginError?: (error: any) => void;
+  onLoginError?: (error: unknown) => void;
   debug?: boolean;
 }
 
-type LoginMode = 'credentials' | 'token';
+const PROFILE_STORAGE_KEY = '@telnyx_demo_profile';
+const PROFILE_LIST_STORAGE_KEY = '@telnyx_demo_profiles';
+const telnyxLogo = require('../assets/images/telnyx_logo.png');
+const appPackage = require('../package.json');
+const sdkPackage = require('../react-voice-commons-sdk/package.json');
+const versionLabel = `Production TelnyxSDK [v${sdkPackage.version}] - App [v${appPackage.version}]`;
+
+function callStateLabel(callState: TelnyxCallState | null) {
+  switch (callState) {
+    case TelnyxCallState.RINGING:
+      return 'Ringing';
+    case TelnyxCallState.CONNECTING:
+      return 'Connecting';
+    case TelnyxCallState.ACTIVE:
+      return 'Active';
+    case TelnyxCallState.HELD:
+      return 'Held';
+    case TelnyxCallState.DROPPED:
+      return 'Dropped';
+    case TelnyxCallState.FAILED:
+      return 'Error';
+    case TelnyxCallState.ENDED:
+      return 'Done';
+    default:
+      return 'Done';
+  }
+}
+
+function callStateColor(callState: TelnyxCallState | null) {
+  switch (callState) {
+    case TelnyxCallState.RINGING:
+    case TelnyxCallState.CONNECTING:
+      return demoColors.ringing;
+    case TelnyxCallState.ACTIVE:
+    case TelnyxCallState.HELD:
+      return demoColors.selectedGreen;
+    case TelnyxCallState.DROPPED:
+      return demoColors.disabled;
+    case TelnyxCallState.FAILED:
+      return demoColors.danger;
+    case TelnyxCallState.ENDED:
+    default:
+      return demoColors.mutedText;
+  }
+}
 
 export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   onLoginSuccess,
@@ -37,253 +84,409 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   debug = false,
 }) => {
   const { voipClient } = useTelnyxVoice();
-  const [loginMode, setLoginMode] = useState<LoginMode>('credentials');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [token, setToken] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [profile, setProfile] = useState<SavedProfile | null>(null);
+  const [profiles, setProfiles] = useState<SavedProfile[]>([]);
+  const [selectedProfile, setSelectedProfile] = useState<SavedProfile | null>(null);
+  const [draftProfile, setDraftProfile] = useState<SavedProfile>(emptyProfile);
+  const [editingProfileKey, setEditingProfileKey] = useState<string | null>(null);
+  const [showProfileSheet, setShowProfileSheet] = useState(false);
   const [connectionState, setConnectionState] = useState(voipClient.currentConnectionState);
-  const [focusedInput, setFocusedInput] = useState<string | null>(null);
+  const [activeCall, setActiveCall] = useState<Call | null>(voipClient.currentActiveCall);
+  const [activeCallState, setActiveCallState] = useState<TelnyxCallState | null>(
+    voipClient.currentActiveCall?.currentState || null
+  );
+  const [isLoading, setIsLoading] = useState(false);
   const [pushToken, setPushToken] = useState<string | null>(null);
 
   const log = debug ? console.log : () => {};
+  const isConnected = connectionState === TelnyxConnectionState.CONNECTED;
+  const isConnecting = connectionState === TelnyxConnectionState.CONNECTING || isLoading;
+  const connectButtonLabel = isConnected ? 'Disconnect' : isConnecting ? 'Cancel' : 'Connect';
+  const connectionLabel = isConnected ? 'Client-ready' : 'Disconnected';
+  const sessionId = isConnected ? voipClient.sessionId || '-' : '-';
 
-  // Handle VoIP/Push token reception
-  const handleTokenReceived = (token: string) => {
-    log('TelnyxLoginForm: Push token received:', token);
-    setPushToken(token);
-    // Store the token for use in push notification logins
-    AsyncStorage.setItem('@push_token', token);
-  };
-
-  // Subscribe to connection state changes
   useEffect(() => {
     const subscription = voipClient.connectionState$.subscribe((state) => {
-      log('TelnyxLoginForm: Connection state changed to:', state);
       setConnectionState(state);
 
       if (state === TelnyxConnectionState.CONNECTED) {
         setIsLoading(false);
         onLoginSuccess?.();
-        log('TelnyxLoginForm: Login successful, navigating to dialer');
         router.push('/dialer');
-      } else if (state === TelnyxConnectionState.ERROR) {
+      }
+
+      if (state === TelnyxConnectionState.ERROR || state === TelnyxConnectionState.DISCONNECTED) {
         setIsLoading(false);
-        log('TelnyxLoginForm: Connection error');
       }
     });
 
+    loadProfile();
     return () => subscription.unsubscribe();
-  }, [voipClient, onLoginSuccess, log]);
+  }, [voipClient, onLoginSuccess]);
 
-  // Load stored credentials on mount
   useEffect(() => {
-    loadStoredCredentials();
-  }, []);
+    const subscription = voipClient.activeCall$.subscribe((call) => {
+      setActiveCall(call);
+      setActiveCallState(call?.currentState || null);
+    });
 
-  const loadStoredCredentials = async () => {
+    return () => subscription.unsubscribe();
+  }, [voipClient]);
+
+  useEffect(() => {
+    if (!activeCall) {
+      setActiveCallState(null);
+      return;
+    }
+
+    const subscription = activeCall.callState$.subscribe(setActiveCallState);
+    return () => subscription.unsubscribe();
+  }, [activeCall]);
+
+  const hasProfile = useMemo(() => {
+    if (!profile) return false;
+    if (!profile.callerIdName.trim()) return false;
+    return profile.loginMode === 'token'
+      ? !!profile.sipToken.trim()
+      : !!profile.sipUsername.trim() && !!profile.sipPassword.trim();
+  }, [profile]);
+
+  const handleTokenReceived = (nextToken: string) => {
+    log('TelnyxLoginForm: Push token received:', nextToken);
+    setPushToken(nextToken);
+    AsyncStorage.setItem('@push_token', nextToken);
+  };
+
+  const loadProfile = async () => {
     try {
-      const storedUsername = await AsyncStorage.getItem('@telnyx_username');
-      const storedPassword = await AsyncStorage.getItem('@telnyx_password');
-      const storedToken = await AsyncStorage.getItem('@credential_token');
-
-      if (storedUsername) setUsername(storedUsername);
-      if (storedPassword) setPassword(storedPassword);
-      if (storedToken) {
-        setToken(storedToken);
-        setLoginMode('token'); // Switch to token mode if token exists
+      const rawProfileList = await AsyncStorage.getItem(PROFILE_LIST_STORAGE_KEY);
+      const rawProfile = await AsyncStorage.getItem(PROFILE_STORAGE_KEY);
+      if (rawProfileList) {
+        let nextProfiles = (JSON.parse(rawProfileList) as SavedProfile[]).map((item) =>
+          withProfileId({
+            ...emptyProfile,
+            ...item,
+          })
+        );
+        const storedProfile = rawProfile
+          ? ({ ...emptyProfile, ...JSON.parse(rawProfile) } as SavedProfile)
+          : null;
+        const currentProfile = storedProfile
+          ? nextProfiles.find(
+              (item) =>
+                profileKey(item) === profileKey(storedProfile) ||
+                legacyProfileKey(item) === legacyProfileKey(storedProfile)
+            ) || withProfileId(storedProfile)
+          : nextProfiles[0] || null;
+        if (
+          currentProfile &&
+          !nextProfiles.some((item) => profileKey(item) === profileKey(currentProfile))
+        ) {
+          nextProfiles = [...nextProfiles, currentProfile];
+        }
+        setProfiles(nextProfiles);
+        setProfile(currentProfile);
+        setSelectedProfile(currentProfile);
+        await persistProfileList(nextProfiles);
+        if (currentProfile) {
+          await persistProfile(currentProfile);
+        }
+        return;
       }
 
-      log('TelnyxLoginForm: Loaded stored credentials and token');
+      if (rawProfile) {
+        const nextProfile = withProfileId({
+          ...emptyProfile,
+          ...JSON.parse(rawProfile),
+        } as SavedProfile);
+        setProfile(nextProfile);
+        setProfiles([nextProfile]);
+        setSelectedProfile(nextProfile);
+        await persistProfileList([nextProfile]);
+        await persistProfile(nextProfile);
+        return;
+      }
+
+      const [
+        storedUsername,
+        storedPassword,
+        storedToken,
+        storedCallerIdName,
+        storedCallerIdNumber,
+        storedForceRelayCandidate,
+      ] = await Promise.all([
+        AsyncStorage.getItem('@telnyx_username'),
+        AsyncStorage.getItem('@telnyx_password'),
+        AsyncStorage.getItem('@credential_token'),
+        AsyncStorage.getItem('@caller_id_name'),
+        AsyncStorage.getItem('@caller_id_number'),
+        AsyncStorage.getItem('@force_relay_candidate'),
+      ]);
+
+      if (storedUsername || storedToken || storedCallerIdName) {
+        const migratedProfile = withProfileId({
+          loginMode: storedToken ? 'token' : 'credentials',
+          sipUsername: storedUsername || '',
+          sipPassword: storedPassword || '',
+          sipToken: storedToken || '',
+          callerIdName: storedCallerIdName || '',
+          callerIdNumber: storedCallerIdNumber || '',
+          forceRelayCandidate: storedForceRelayCandidate === 'true',
+        } as SavedProfile);
+        setProfile(migratedProfile);
+        setProfiles([migratedProfile]);
+        setSelectedProfile(migratedProfile);
+        await persistProfileList([migratedProfile]);
+        await persistProfile(migratedProfile);
+      }
     } catch (error) {
-      log('TelnyxLoginForm: Error loading stored credentials:', error);
+      log('TelnyxLoginForm: Error loading profile:', error);
     }
   };
 
-  const saveCredentials = async () => {
-    try {
-      if (loginMode === 'credentials') {
-        await AsyncStorage.setItem('@telnyx_username', username);
-        await AsyncStorage.setItem('@telnyx_password', password);
-        // Clear token when using credentials
-        await AsyncStorage.removeItem('@credential_token');
-      } else {
-        await AsyncStorage.setItem('@credential_token', token);
-        // Clear credentials when using token
-        await AsyncStorage.removeItem('@telnyx_username');
-        await AsyncStorage.removeItem('@telnyx_password');
-      }
+  const persistProfile = async (nextProfile: SavedProfile) => {
+    // Demo-only persistence. Production apps should store SIP secrets in Keychain/Keystore.
+    await AsyncStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(nextProfile));
+    await Promise.all([
+      AsyncStorage.setItem('@caller_id_name', nextProfile.callerIdName.trim()),
+      AsyncStorage.setItem('@caller_id_number', nextProfile.callerIdNumber.trim()),
+      AsyncStorage.setItem('@force_relay_candidate', String(nextProfile.forceRelayCandidate)),
+      nextProfile.loginMode === 'credentials'
+        ? AsyncStorage.setItem('@telnyx_username', nextProfile.sipUsername.trim())
+        : AsyncStorage.removeItem('@telnyx_username'),
+      nextProfile.loginMode === 'credentials'
+        ? AsyncStorage.setItem('@telnyx_password', nextProfile.sipPassword)
+        : AsyncStorage.removeItem('@telnyx_password'),
+      nextProfile.loginMode === 'token'
+        ? AsyncStorage.setItem('@credential_token', nextProfile.sipToken.trim())
+        : AsyncStorage.removeItem('@credential_token'),
+    ]);
+  };
 
-      if (pushToken) {
-        await AsyncStorage.setItem('@push_token', pushToken);
-        log(`TelnyxLoginForm: ${loginMode} and push token saved`);
-      } else {
-        log(`TelnyxLoginForm: ${loginMode} saved (no push token yet)`);
+  const persistProfileList = async (nextProfiles: SavedProfile[]) => {
+    // Demo-only persistence. Production apps should store SIP secrets in Keychain/Keystore.
+    await AsyncStorage.setItem(PROFILE_LIST_STORAGE_KEY, JSON.stringify(nextProfiles));
+  };
+
+  const removeCurrentProfilePersistence = async () => {
+    await AsyncStorage.removeItem(PROFILE_STORAGE_KEY);
+    await Promise.all([
+      AsyncStorage.removeItem('@telnyx_username'),
+      AsyncStorage.removeItem('@telnyx_password'),
+      AsyncStorage.removeItem('@credential_token'),
+      AsyncStorage.removeItem('@caller_id_name'),
+      AsyncStorage.removeItem('@caller_id_number'),
+      AsyncStorage.removeItem('@force_relay_candidate'),
+    ]);
+  };
+
+  const openProfileSheet = (editableProfile: SavedProfile | null = profile) => {
+    setDraftProfile(editableProfile ? { ...editableProfile } : emptyProfile);
+    setSelectedProfile(profile);
+    setShowProfileSheet(true);
+  };
+
+  const handleSaveProfile = async (): Promise<boolean> => {
+    const normalizedProfile = withProfileId({
+      ...draftProfile,
+      sipUsername: draftProfile.sipUsername.trim(),
+      sipToken: draftProfile.sipToken.trim(),
+      callerIdName: draftProfile.callerIdName.trim(),
+      callerIdNumber: draftProfile.callerIdNumber.trim(),
+    });
+
+    if (normalizedProfile.loginMode === 'credentials') {
+      if (
+        !normalizedProfile.sipUsername ||
+        !normalizedProfile.sipPassword ||
+        !normalizedProfile.callerIdName
+      ) {
+        Alert.alert('Error', 'Please fill all fields');
+        return false;
       }
-    } catch (error) {
-      log('TelnyxLoginForm: Error saving credentials:', error);
+    } else if (!normalizedProfile.sipToken || !normalizedProfile.callerIdName) {
+      Alert.alert('Error', 'Please fill all fields');
+      return false;
+    }
+
+    const nextProfiles = upsertProfile(profiles, normalizedProfile, editingProfileKey);
+    await persistProfileList(nextProfiles);
+    setProfiles(nextProfiles);
+    setSelectedProfile(normalizedProfile);
+    setEditingProfileKey(null);
+    return true;
+  };
+
+  const handleConfirmProfile = async () => {
+    if (selectedProfile) {
+      setProfile(selectedProfile);
+      await persistProfile(selectedProfile);
+    }
+    setShowProfileSheet(false);
+  };
+
+  const handleCancelProfileSelection = () => {
+    setSelectedProfile(profile);
+    setShowProfileSheet(false);
+  };
+
+  const deleteProfile = async (targetProfile: SavedProfile) => {
+    const targetKey = profileKey(targetProfile);
+
+    const nextProfiles = profiles.filter((item) => profileKey(item) !== targetKey);
+    const didDeleteCurrent = !!profile && profileKey(profile) === targetKey;
+    const nextCurrentProfile = didDeleteCurrent ? null : profile;
+
+    setProfiles(nextProfiles);
+    setProfile(nextCurrentProfile);
+    setSelectedProfile(nextCurrentProfile || nextProfiles[0] || null);
+    await persistProfileList(nextProfiles);
+
+    if (didDeleteCurrent) {
+      await removeCurrentProfilePersistence();
     }
   };
 
-  const handleLogin = async () => {
-    if (loginMode === 'credentials') {
-      if (!username.trim() || !password.trim()) {
-        Alert.alert('Error', 'Username and password are required');
-        return;
+  const handleDeleteProfile = (targetProfile: SavedProfile) => {
+    Alert.alert('Delete profile', `Delete ${targetProfile.callerIdName || 'this profile'}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          void deleteProfile(targetProfile);
+        },
+      },
+    ]);
+  };
+
+  const handleConnectDisconnect = async () => {
+    if (isConnecting && !isConnected) {
+      setIsLoading(false);
+      try {
+        await voipClient.logout();
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        Alert.alert('Cancel Failed', errorMessage);
       }
-    } else {
-      if (!token.trim()) {
-        Alert.alert('Error', 'Token is required');
-        return;
-      }
+      return;
+    }
+
+    if (isConnected) {
+      await voipClient.logout();
+      return;
+    }
+
+    if (!profile || !hasProfile) {
+      Alert.alert('Profile', 'Please select a profile');
+      return;
     }
 
     setIsLoading(true);
-    log(`TelnyxLoginForm: Starting ${loginMode} login process`);
 
     try {
-      // Save credentials/token first
-      await saveCredentials();
-
-      if (loginMode === 'credentials') {
-        // Create credential config with push token
-        const config = createCredentialConfig(username, password, {
-          debug: true,
-          pushNotificationDeviceToken: pushToken || undefined,
-        });
-
-        log('TelnyxLoginForm: Connecting with credentials and push token:', pushToken);
-        await voipClient.login(config);
+      if (profile.loginMode === 'token') {
+        await voipClient.loginWithToken(
+          createTokenConfig(profile.sipToken, {
+            debug: true,
+            pushNotificationDeviceToken: pushToken || undefined,
+          })
+        );
       } else {
-        // Create token config with push token
-        const config = createTokenConfig(token, {
-          debug: true,
-          pushNotificationDeviceToken: pushToken || undefined,
-        });
-
-        log('TelnyxLoginForm: Connecting with token and push token:', pushToken);
-        await voipClient.loginWithToken(config);
+        await voipClient.login(
+          createCredentialConfig(profile.sipUsername, profile.sipPassword, {
+            debug: true,
+            pushNotificationDeviceToken: pushToken || undefined,
+          })
+        );
       }
     } catch (error) {
       setIsLoading(false);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      log('TelnyxLoginForm: Login error:', errorMessage);
       Alert.alert('Login Failed', errorMessage);
       onLoginError?.(error);
     }
   };
 
-  const isConnecting = connectionState === TelnyxConnectionState.CONNECTING;
-  const isConnected = connectionState === TelnyxConnectionState.CONNECTED;
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <VoipTokenFetcher onTokenReceived={handleTokenReceived} debug={debug} />
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoidingView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContainer}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.container}>
-            <View style={styles.card}>
-              <Text style={styles.title}>Telnyx Login</Text>
-              <Text style={styles.description}>Enter your SIP credentials to connect</Text>
+      <View style={styles.root} testID="homeScreenRoot">
+        <View style={styles.topBar}>
+          <View style={styles.topSpacer} />
+          <Image
+            source={telnyxLogo}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityLabel="Telnyx WebRTC"
+          />
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={() => Alert.alert('Menu', 'Websocket Messages')}
+            testID="menuButton"
+            accessibilityLabel="Menu"
+          >
+            <MoreVertical size={24} color={demoColors.text} />
+          </TouchableOpacity>
+        </View>
 
-              {/* Tab Interface */}
-              <View style={styles.tabContainer}>
-                <TouchableOpacity
-                  style={[styles.tab, loginMode === 'credentials' && styles.activeTab]}
-                  onPress={() => setLoginMode('credentials')}
-                  disabled={isLoading || isConnected}
-                >
-                  <Text
-                    style={[styles.tabText, loginMode === 'credentials' && styles.activeTabText]}
-                  >
-                    Credentials
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.tab, loginMode === 'token' && styles.activeTab]}
-                  onPress={() => setLoginMode('token')}
-                  disabled={isLoading || isConnected}
-                >
-                  <Text style={[styles.tabText, loginMode === 'token' && styles.activeTabText]}>
-                    Token
-                  </Text>
-                </TouchableOpacity>
-              </View>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <ProfileSwitcher
+            profileName={profile?.callerIdName || 'No Profile'}
+            onPress={() => openProfileSheet(profile)}
+          />
 
-              <View style={styles.form}>
-                {loginMode === 'credentials' ? (
-                  <>
-                    <TextInput
-                      style={[styles.input, focusedInput === 'username' && styles.inputFocused]}
-                      placeholder="SIP Username"
-                      placeholderTextColor="#999"
-                      value={username}
-                      onChangeText={setUsername}
-                      onFocus={() => setFocusedInput('username')}
-                      onBlur={() => setFocusedInput(null)}
-                      editable={!isLoading && !isConnected}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
+          <InfoRow label="Socket" testID="socketStatus">
+            <View
+              style={[
+                styles.stateDot,
+                {
+                  backgroundColor: isConnected ? demoColors.selectedGreen : demoColors.danger,
+                },
+              ]}
+            />
+            <Text style={styles.infoValue}>{connectionLabel}</Text>
+          </InfoRow>
 
-                    <TextInput
-                      style={[styles.input, focusedInput === 'password' && styles.inputFocused]}
-                      placeholder="SIP Password"
-                      placeholderTextColor="#999"
-                      value={password}
-                      onChangeText={setPassword}
-                      onFocus={() => setFocusedInput('password')}
-                      onBlur={() => setFocusedInput(null)}
-                      secureTextEntry
-                      editable={!isLoading && !isConnected}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                  </>
-                ) : (
-                  <TextInput
-                    style={[styles.input, focusedInput === 'token' && styles.inputFocused]}
-                    placeholder="Authentication Token"
-                    placeholderTextColor="#999"
-                    value={token}
-                    onChangeText={setToken}
-                    onFocus={() => setFocusedInput('token')}
-                    onBlur={() => setFocusedInput(null)}
-                    editable={!isLoading && !isConnected}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    multiline
-                    numberOfLines={3}
-                    textAlignVertical="top"
-                  />
-                )}
+          <InfoRow label="Session ID">
+            <Text style={styles.infoValue}>{sessionId}</Text>
+          </InfoRow>
 
-                <TouchableOpacity
-                  style={[styles.button, (isLoading || isConnected) && styles.buttonDisabled]}
-                  onPress={handleLogin}
-                  disabled={isLoading || isConnected}
-                >
-                  {isLoading || isConnecting ? (
-                    <ActivityIndicator color="#ffffff" />
-                  ) : (
-                    <Text style={styles.buttonText}>{isConnected ? 'Connected' : 'Connect'}</Text>
-                  )}
-                </TouchableOpacity>
-
-                <Text style={styles.status}>Status: {connectionState}</Text>
-              </View>
-            </View>
-          </View>
+          <InfoRow label="Call State">
+            <View style={[styles.stateDot, { backgroundColor: callStateColor(activeCallState) }]} />
+            <Text style={styles.infoValue}>{callStateLabel(activeCallState)}</Text>
+          </InfoRow>
         </ScrollView>
-      </KeyboardAvoidingView>
+
+        <View style={styles.bottomBar}>
+          <TouchableOpacity
+            style={styles.connectButton}
+            onPress={handleConnectDisconnect}
+            testID="connectDisconnectButton"
+            accessibilityLabel={connectButtonLabel}
+          >
+            <Text style={styles.connectButtonText}>{connectButtonLabel}</Text>
+          </TouchableOpacity>
+          <Text style={styles.versionText}>{versionLabel}</Text>
+        </View>
+      </View>
+
+      <CredentialProfileSheet
+        visible={showProfileSheet}
+        profiles={profiles}
+        selectedProfile={selectedProfile}
+        draftProfile={draftProfile}
+        setDraftProfile={setDraftProfile}
+        setSelectedProfile={setSelectedProfile}
+        onEditProfile={(nextProfile) => {
+          setDraftProfile(nextProfile ? { ...nextProfile } : emptyProfile);
+          setEditingProfileKey(nextProfile ? profileKey(nextProfile) : null);
+        }}
+        onDeleteProfile={handleDeleteProfile}
+        onSave={handleSaveProfile}
+        onConfirm={handleConfirmProfile}
+        onCancel={handleCancelProfileSelection}
+      />
     </SafeAreaView>
   );
 };
@@ -291,124 +494,66 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+    backgroundColor: demoColors.background,
   },
-  keyboardAvoidingView: {
+  root: {
     flex: 1,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: demoColors.background,
   },
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  container: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: '100%',
-    paddingHorizontal: 20,
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 32,
-    width: '100%',
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: '#f0f0f0',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  description: {
-    fontSize: 16,
-    textAlign: 'center',
-    color: '#666',
-    marginBottom: 24,
-  },
-  form: {
-    gap: 16,
-  },
-  input: {
-    borderWidth: 2,
-    borderColor: '#d1d1d1',
-    borderRadius: 8,
-    padding: 16,
-    fontSize: 16,
-    backgroundColor: '#fafafa',
-    color: '#333',
-  },
-  inputFocused: {
-    borderColor: '#007AFF',
-    backgroundColor: '#ffffff',
-  },
-  button: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-    shadowColor: '#007AFF',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  buttonDisabled: {
-    backgroundColor: '#ccc',
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  status: {
-    textAlign: 'center',
-    color: '#666',
-    fontSize: 14,
-  },
-  tabContainer: {
+  topBar: {
+    minHeight: 148,
     flexDirection: 'row',
-    marginBottom: 24,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    padding: 4,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 6,
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xl,
   },
-  activeTab: {
-    backgroundColor: '#007AFF',
-    shadowColor: '#007AFF',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
+  topSpacer: {
+    width: 48,
   },
-  tabText: {
+  logo: {
+    width: 200,
+    height: 100,
+  },
+  menuButton: {
+    width: 48,
+    alignItems: 'flex-end',
+  },
+  content: {
+    gap: spacing.lg,
+    paddingBottom: spacing.lg,
+  },
+  infoValue: {
+    color: demoColors.text,
     fontSize: 14,
-    fontWeight: '500',
-    color: '#666',
   },
-  activeTabText: {
-    color: '#ffffff',
-    fontWeight: '600',
+  stateDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  bottomBar: {
+    minHeight: 128,
+    justifyContent: 'center',
+    gap: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  connectButton: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: demoColors.background,
+    borderRadius: 20,
+    backgroundColor: demoColors.text,
+  },
+  connectButtonText: {
+    color: demoColors.background,
+    fontSize: 16,
+  },
+  versionText: {
+    color: demoColors.mutedText,
+    textAlign: 'center',
+    fontSize: 14,
   },
 });
