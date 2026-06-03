@@ -155,6 +155,9 @@ export class CallStateController {
         callerIdName: callerName,
         callerIdNumber: callerNumber,
         customHeaders,
+        peerConnectionOptions: {
+          useTrickleIce: this._sessionManager.useTrickleIce,
+        },
       };
       const telnyxCall = await this._sessionManager.telnyxClient.newCall(callOptions);
 

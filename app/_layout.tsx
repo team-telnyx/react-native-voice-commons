@@ -50,6 +50,7 @@ const usePlatformSpecificSetup = Platform.select({
 const voipClient = createTelnyxVoipClient({
   enableAppStateManagement: true,
   debug: true,
+  useTrickleIce: true,
 });
 
 export default function RootLayout() {

@@ -16,6 +16,9 @@ export interface TelnyxVoipClientOptions {
 
   /** Enable debug logging */
   debug?: boolean;
+
+  /** Enable Trickle ICE for calls created by this client */
+  useTrickleIce?: boolean;
 }
 
 /**
@@ -67,6 +70,7 @@ export class TelnyxVoipClient {
     this._options = {
       enableAppStateManagement: true,
       debug: false,
+      useTrickleIce: false,
       ...options,
     };
 
@@ -218,10 +222,15 @@ export class TelnyxVoipClient {
       console.log('TelnyxVoipClient: Logging in with credentials for user:', config.sipUser);
     }
 
-    // Store credentials for future reconnection
-    await this._storeCredentials(config);
+    const loginConfig = {
+      ...config,
+      useTrickleIce: config.useTrickleIce ?? this._options.useTrickleIce,
+    };
 
-    await this._sessionManager.connectWithCredential(config);
+    // Store credentials for future reconnection
+    await this._storeCredentials(loginConfig);
+
+    await this._sessionManager.connectWithCredential(loginConfig);
   }
 
   /**
@@ -245,10 +254,15 @@ export class TelnyxVoipClient {
       console.log('TelnyxVoipClient: Logging in with token');
     }
 
-    // Store token for future reconnection
-    await this._storeToken(config);
+    const loginConfig = {
+      ...config,
+      useTrickleIce: config.useTrickleIce ?? this._options.useTrickleIce,
+    };
 
-    await this._sessionManager.connectWithToken(config);
+    // Store token for future reconnection
+    await this._storeToken(loginConfig);
+
+    await this._sessionManager.connectWithToken(loginConfig);
   }
 
   /**
