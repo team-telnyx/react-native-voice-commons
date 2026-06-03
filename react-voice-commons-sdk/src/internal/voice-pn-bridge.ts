@@ -282,7 +282,7 @@ export class VoicePnBridge {
       return await NativeBridge.setSpeakerEnabled(enabled);
     } catch (error) {
       console.error('VoicePnBridge: Error setting speaker route:', error);
-      return false;
+      throw error;
     }
   }
 
@@ -294,7 +294,7 @@ export class VoicePnBridge {
       return await NativeBridge.isSpeakerEnabled();
     } catch (error) {
       console.error('VoicePnBridge: Error getting speaker route:', error);
-      return false;
+      throw error;
     }
   }
 
@@ -302,6 +302,8 @@ export class VoicePnBridge {
    * Toggle between loudspeaker and the platform default voice route.
    */
   static async toggleSpeaker(): Promise<boolean> {
+    // This is intentionally read-then-write because route changes can also come from
+    // the OS, Bluetooth, wired accessories, or the active call session.
     const enabled = await VoicePnBridge.isSpeakerEnabled();
     return VoicePnBridge.setSpeakerEnabled(!enabled);
   }

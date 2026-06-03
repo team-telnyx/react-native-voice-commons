@@ -253,11 +253,13 @@ class VoicePnBridgeModule(reactContext: ReactApplicationContext) : ReactContextB
     fun setSpeakerEnabled(enabled: Boolean, promise: Promise) {
         try {
             val audioManager = reactApplicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+            // The active call flow owns AudioManager.mode. This bridge only requests the speaker route.
+            // Connected Bluetooth or wired accessories may still take precedence over speakerphone.
             audioManager.isSpeakerphoneOn = enabled
+            val actualEnabled = audioManager.isSpeakerphoneOn
 
-            Log.d(TAG, "setSpeakerEnabled called from React Native: enabled=$enabled")
-            promise.resolve(true)
+            Log.d(TAG, "setSpeakerEnabled called from React Native: requested=$enabled actual=$actualEnabled")
+            promise.resolve(actualEnabled)
         } catch (e: Exception) {
             Log.e(TAG, "Error setting speaker route", e)
             promise.reject("SET_SPEAKER_ENABLED_ERROR", e.message, e)

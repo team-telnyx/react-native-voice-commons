@@ -108,9 +108,15 @@ class VoicePnBridge: NSObject {
     func setSpeakerEnabled(_ enabled: Bool, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         do {
             let audioSession = AVAudioSession.sharedInstance()
+            // The Telnyx/WebRTC call setup is expected to configure a .playAndRecord-compatible
+            // session. Passing .none clears only the speaker override; accessories/session options
+            // can still decide the resulting output route.
             try audioSession.overrideOutputAudioPort(enabled ? .speaker : .none)
-            NSLog("[VoicePnBridge] setSpeakerEnabled called. enabled=\(enabled)")
-            resolve(true)
+            let actualEnabled = audioSession.currentRoute.outputs.contains { output in
+                output.portType == .builtInSpeaker
+            }
+            NSLog("[VoicePnBridge] setSpeakerEnabled called. requested=\(enabled), actual=\(actualEnabled)")
+            resolve(actualEnabled)
         } catch {
             NSLog("[VoicePnBridge] setSpeakerEnabled failed. enabled=\(enabled), error=\(error)")
             reject("SET_SPEAKER_ENABLED_ERROR", error.localizedDescription, error)
