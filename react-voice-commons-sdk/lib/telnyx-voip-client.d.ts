@@ -10,6 +10,8 @@ export interface TelnyxVoipClientOptions {
   enableAppStateManagement?: boolean;
   /** Enable debug logging */
   debug?: boolean;
+  /** Enable Trickle ICE for calls created by this client */
+  useTrickleIce?: boolean;
 }
 /**
  * The main public interface for the react-voice-commons module.

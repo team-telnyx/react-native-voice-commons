@@ -52,6 +52,7 @@ class TelnyxVoipClient {
     this._options = {
       enableAppStateManagement: true,
       debug: false,
+      useTrickleIce: false,
       ...options,
     };
     // Initialize core components
@@ -185,9 +186,13 @@ class TelnyxVoipClient {
     if (this._options.debug) {
       console.log('TelnyxVoipClient: Logging in with credentials for user:', config.sipUser);
     }
+    const loginConfig = {
+      ...config,
+      useTrickleIce: config.useTrickleIce ?? this._options.useTrickleIce,
+    };
     // Store credentials for future reconnection
-    await this._storeCredentials(config);
-    await this._sessionManager.connectWithCredential(config);
+    await this._storeCredentials(loginConfig);
+    await this._sessionManager.connectWithCredential(loginConfig);
   }
   /**
    * Connects to the Telnyx platform using token authentication.
@@ -207,9 +212,13 @@ class TelnyxVoipClient {
     if (this._options.debug) {
       console.log('TelnyxVoipClient: Logging in with token');
     }
+    const loginConfig = {
+      ...config,
+      useTrickleIce: config.useTrickleIce ?? this._options.useTrickleIce,
+    };
     // Store token for future reconnection
-    await this._storeToken(config);
-    await this._sessionManager.connectWithToken(config);
+    await this._storeToken(loginConfig);
+    await this._sessionManager.connectWithToken(loginConfig);
   }
   /**
    * Disconnects from the Telnyx platform.

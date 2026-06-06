@@ -15,7 +15,6 @@ import {
   TelnyxVoipClient,
   createTelnyxVoipClient,
 } from '../react-voice-commons-sdk/src';
-import { CallManager } from '~/components/CallManager';
 import log from 'loglevel';
 
 // Enable debug logging for the Telnyx SDK
@@ -100,7 +99,6 @@ export default function RootLayout() {
             headerShown: false,
           }}
         />
-        <CallManager debug={true} />
         <PortalHost />
       </ThemeProvider>
     </TelnyxVoiceApp>

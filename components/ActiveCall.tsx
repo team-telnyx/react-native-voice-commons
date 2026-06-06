@@ -1,7 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Keyboard, Mic, MicOff, Pause, PhoneOff, Play, X } from 'lucide-react-native';
-import { Call, TelnyxCallState } from '../react-voice-commons-sdk/src';
+import {
+  Keyboard,
+  Mic,
+  MicOff,
+  Pause,
+  PhoneOff,
+  Play,
+  Volume2,
+  VolumeX,
+  X,
+} from 'lucide-react-native';
+import { Call, TelnyxCallState, VoicePnBridge } from '../react-voice-commons-sdk/src';
 import { demoColors, radii, sizes, spacing } from './demoTheme';
 
 type Props = {
@@ -17,6 +27,7 @@ const DTMF_KEYS = [
 
 export function ActiveCall({ call }: Props) {
   const [isMuted, setIsMuted] = useState(call.currentIsMuted);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
   const [duration, setDuration] = useState(call.currentDuration);
   const [showDialpad, setShowDialpad] = useState(false);
   const [dtmfDigits, setDtmfDigits] = useState('');
@@ -29,6 +40,12 @@ export function ActiveCall({ call }: Props) {
       muteSubscription.unsubscribe();
       durationSubscription.unsubscribe();
     };
+  }, [call]);
+
+  useEffect(() => {
+    VoicePnBridge.isSpeakerEnabled()
+      .then(setIsSpeakerOn)
+      .catch(() => setIsSpeakerOn(false));
   }, [call]);
 
   if (call.currentState !== TelnyxCallState.ACTIVE && call.currentState !== TelnyxCallState.HELD) {
@@ -66,6 +83,15 @@ export function ActiveCall({ call }: Props) {
     }
   };
 
+  const handleSpeaker = async () => {
+    try {
+      const enabled = await VoicePnBridge.toggleSpeaker();
+      setIsSpeakerOn(enabled);
+    } catch (error) {
+      showCallActionError('Speaker Failed', error);
+    }
+  };
+
   const handleDtmf = async (digit: string) => {
     if (!canDtmf) return;
     setDtmfDigits((current) => (current + digit).slice(-24));
@@ -94,6 +120,18 @@ export function ActiveCall({ call }: Props) {
                 <MicOff size={24} color={demoColors.text} />
               ) : (
                 <Mic size={24} color={demoColors.text} />
+              )
+            }
+          />
+          <CallControl
+            testID="speaker"
+            label={isSpeakerOn ? 'Speaker Off' : 'Speaker'}
+            onPress={handleSpeaker}
+            icon={
+              isSpeakerOn ? (
+                <Volume2 size={24} color={demoColors.text} />
+              ) : (
+                <VolumeX size={24} color={demoColors.text} />
               )
             }
           />

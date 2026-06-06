@@ -110,6 +110,9 @@ class SessionManager {
   get telnyxClient() {
     return this._telnyxClient;
   }
+  get useTrickleIce() {
+    return Boolean(this._currentConfig?.useTrickleIce);
+  }
   /**
    * Connect using credential authentication
    */
@@ -237,6 +240,7 @@ class SessionManager {
           const { createCredentialConfig } = require('../../models/config');
           this._currentConfig = createCredentialConfig(storedUsername, storedPassword, {
             pushNotificationDeviceToken: storedPushToken,
+            useTrickleIce: true,
           });
         }
         // Check if we have token-based authentication data
@@ -245,6 +249,7 @@ class SessionManager {
           const { createTokenConfig } = require('../../models/config');
           this._currentConfig = createTokenConfig(storedCredentialToken, {
             pushNotificationDeviceToken: storedPushToken,
+            useTrickleIce: true,
           });
         }
         if (this._currentConfig) {
@@ -358,6 +363,7 @@ class SessionManager {
           logLevel: this._currentConfig.debug ? 'debug' : 'warn',
           debug: this._currentConfig.debug ?? false,
           pushNotificationDeviceToken: this._currentConfig.pushNotificationDeviceToken,
+          useTrickleIce: this._currentConfig.useTrickleIce,
           enableCallReports: this._currentConfig.enableCallReports,
           callReportInterval: this._currentConfig.callReportInterval,
           callReportLogLevel: this._currentConfig.callReportLogLevel,
@@ -376,6 +382,7 @@ class SessionManager {
           logLevel: this._currentConfig.debug ? 'debug' : 'warn',
           debug: this._currentConfig.debug ?? false,
           pushNotificationDeviceToken: this._currentConfig.pushNotificationDeviceToken,
+          useTrickleIce: this._currentConfig.useTrickleIce,
           enableCallReports: this._currentConfig.enableCallReports,
           callReportInterval: this._currentConfig.callReportInterval,
           callReportLogLevel: this._currentConfig.callReportLogLevel,
