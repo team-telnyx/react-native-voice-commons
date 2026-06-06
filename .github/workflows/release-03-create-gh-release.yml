@@ -1,0 +1,153 @@
+name: release-03-create-gh-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to release'
+        required: true
+        default: 'commons-sdk'
+        type: choice
+        options:
+          - voice-sdk
+          - commons-sdk
+          - both
+      version:
+        description: 'Release version without prefix, for example 0.4.6'
+        required: true
+
+permissions:
+  contents: write
+  id-token: write
+  pull-requests: read
+
+concurrency:
+  group: release-publish-${{ github.event.inputs.package }}-${{ github.event.inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  create-release:
+    name: Create GitHub release
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.release.outputs.tag }}
+
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        id: release
+        run: |
+          PACKAGE="${{ github.event.inputs.package }}"
+          VERSION="${{ github.event.inputs.version }}"
+
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Version must be semver without a leading v, for example 0.4.6"
+            exit 1
+          fi
+
+          case "$PACKAGE" in
+            voice-sdk)
+              TAG="voice-sdk-v$VERSION"
+              PACKAGE_DIR="package"
+              PATTERN='^voice-sdk-v[0-9]+\.[0-9]+\.[0-9]+'
+              ;;
+            commons-sdk)
+              TAG="commons-sdk-v$VERSION"
+              PACKAGE_DIR="react-voice-commons-sdk"
+              PATTERN='^commons-sdk-v[0-9]+\.[0-9]+\.[0-9]+'
+              ;;
+            both)
+              TAG="v$VERSION"
+              PACKAGE_DIR="package react-voice-commons-sdk"
+              PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+'
+              ;;
+            *)
+              echo "::error::Unsupported package: $PACKAGE"
+              exit 1
+              ;;
+          esac
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "package_dirs=$PACKAGE_DIR" >> "$GITHUB_OUTPUT"
+          echo "pattern=$PATTERN" >> "$GITHUB_OUTPUT"
+
+      - name: Verify package version matches release version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          for dir in ${{ steps.release.outputs.package_dirs }}; do
+            PACKAGE_VERSION="$(node -p "require('./$dir/package.json').version")"
+            if [ "$PACKAGE_VERSION" != "$VERSION" ]; then
+              echo "::error::$dir package version ($PACKAGE_VERSION) does not match release version ($VERSION)"
+              exit 1
+            fi
+          done
+
+      - name: Find previous release tag
+        id: previous_tag
+        run: |
+          PREVIOUS_TAG="$(git tag --sort=-v:refname | grep -E "${{ steps.release.outputs.pattern }}" | head -n 1 || true)"
+          echo "previous_tag=$PREVIOUS_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog from merged pull requests
+        id: changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PREVIOUS_TAG="${{ steps.previous_tag.outputs.previous_tag }}"
+          if [ -n "$PREVIOUS_TAG" ]; then
+            git log --pretty=format:"%H" "$PREVIOUS_TAG..HEAD" > commits.txt
+          else
+            git log --pretty=format:"%H" > commits.txt
+          fi
+
+          gh pr list --state merged --base main --limit 200 --json title,number,mergeCommit \
+            --jq ".[] | [.title, .number, .mergeCommit.oid] | @tsv" > pr_data.tsv
+
+          > changelog.txt
+          while IFS=$'\t' read -r title number commit; do
+            if [ -n "$commit" ] && grep -q "$commit" commits.txt; then
+              echo "- PR #$number: $title" >> changelog.txt
+            fi
+          done < pr_data.tsv
+
+          if [ ! -s changelog.txt ]; then
+            echo "- No merged pull requests found in this range." > changelog.txt
+          fi
+
+          {
+            echo "body<<EOF"
+            cat changelog.txt
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: Release ${{ steps.release.outputs.tag }}
+          body: |
+            Package scope: `${{ github.event.inputs.package }}`
+            Previous tag: `${{ steps.previous_tag.outputs.previous_tag || 'none' }}`
+
+            Changes since previous release:
+            ${{ steps.changelog.outputs.body }}
+          draft: false
+          prerelease: ${{ contains(github.event.inputs.version, '-') }}
+
+  publish:
+    name: Publish to npm
+    needs: create-release
+    # The GitHub release is created with GITHUB_TOKEN, which does not trigger
+    # release:published workflows. Call publish.yml directly so npm publishing
+    # still uses OIDC trusted publishing without a PAT.
+    uses: ./.github/workflows/publish.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      tag_name: ${{ needs.create-release.outputs.tag_name }}

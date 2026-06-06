@@ -1,0 +1,59 @@
+name: release-02-generate-docs
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_branch:
+        description: 'Base branch for the documentation PR'
+        required: true
+        default: 'main'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-docs-${{ github.event.inputs.base_branch }}
+  cancel-in-progress: false
+
+jobs:
+  generate-docs:
+    name: Generate documentation pull request
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout base branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.base_branch }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        working-directory: react-voice-commons-sdk
+        run: npm install --legacy-peer-deps
+
+      - name: Generate documentation
+        working-directory: react-voice-commons-sdk
+        run: npm run docs:all
+
+      - name: Create documentation pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ github.token }}
+          branch: docs/${{ github.event.inputs.base_branch }}-${{ github.run_id }}
+          base: ${{ github.event.inputs.base_branch }}
+          delete-branch: true
+          commit-message: "docs: regenerate API documentation"
+          title: "Update generated API documentation"
+          body: |
+            This pull request updates generated API documentation.
+
+            Base branch: `${{ github.event.inputs.base_branch }}`
+          add-paths: |
+            docs/
+            docs-markdown/
+          labels: "documentation, auto-generated"
