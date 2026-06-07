@@ -7,6 +7,8 @@ import { SessionManager } from './internal/session/session-manager';
 import { CallStateController } from './internal/calls/call-state-controller';
 import { VoicePnBridge } from './internal/voice-pn-bridge';
 
+const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
+
 /**
  * Configuration options for TelnyxVoipClient
  */
@@ -306,6 +308,9 @@ export class TelnyxVoipClient {
       const storedPassword = await AsyncStorage.getItem('@telnyx_password');
       const storedCredentialToken = await AsyncStorage.getItem('@credential_token');
       const storedPushToken = await AsyncStorage.getItem('@push_token');
+      const storedUseTrickleIce = await AsyncStorage.getItem(USE_TRICKLE_ICE_STORAGE_KEY);
+      const useTrickleIce =
+        storedUseTrickleIce === null ? this._options.useTrickleIce : storedUseTrickleIce === 'true';
 
       // Check if we have credential-based authentication data
       if (storedUsername && storedPassword) {
@@ -313,6 +318,7 @@ export class TelnyxVoipClient {
         const { createCredentialConfig } = require('./models/config');
         const config = createCredentialConfig(storedUsername, storedPassword, {
           pushNotificationDeviceToken: storedPushToken,
+          useTrickleIce,
         });
 
         if (this._options.debug) {
@@ -332,6 +338,7 @@ export class TelnyxVoipClient {
         const { createTokenConfig } = require('./models/config');
         const config = createTokenConfig(storedCredentialToken, {
           pushNotificationDeviceToken: storedPushToken,
+          useTrickleIce,
         });
 
         if (this._options.debug) {
@@ -542,6 +549,10 @@ export class TelnyxVoipClient {
 
       await AsyncStorage.setItem('@telnyx_username', config.sipUser);
       await AsyncStorage.setItem('@telnyx_password', config.sipPassword);
+      await AsyncStorage.setItem(
+        USE_TRICKLE_ICE_STORAGE_KEY,
+        String(config.useTrickleIce ?? false)
+      );
 
       if (config.pushNotificationDeviceToken) {
         await AsyncStorage.setItem('@push_token', config.pushNotificationDeviceToken);
@@ -569,6 +580,10 @@ export class TelnyxVoipClient {
       const AsyncStorage = require('@react-native-async-storage/async-storage').default;
 
       await AsyncStorage.setItem('@credential_token', config.token);
+      await AsyncStorage.setItem(
+        USE_TRICKLE_ICE_STORAGE_KEY,
+        String(config.useTrickleIce ?? false)
+      );
 
       if (config.pushNotificationDeviceToken) {
         await AsyncStorage.setItem('@push_token', config.pushNotificationDeviceToken);

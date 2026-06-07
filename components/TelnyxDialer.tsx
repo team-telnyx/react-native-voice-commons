@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MoreVertical, Phone, PhoneOff } from 'lucide-react-native';
+import { MoreVertical, Phone } from 'lucide-react-native';
 import {
   Call,
   useTelnyxVoice,
@@ -20,6 +20,7 @@ import {
   TelnyxCallState,
 } from '../react-voice-commons-sdk/src';
 import { demoColors, radii, sizes, spacing } from './demoTheme';
+import { InlineCallControls } from './InlineCallControls';
 
 interface TelnyxDialerProps {
   debug?: boolean;
@@ -63,7 +64,6 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
   useEffect(() => {
     const activeCallSubscription = voipClient.activeCall$.subscribe((call) => {
       setActiveCall(call);
-      setActiveCallState(call?.currentState || null);
     });
 
     return () => activeCallSubscription.unsubscribe();
@@ -266,54 +266,14 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
 
         <View style={styles.actions}>
           {isStartingCall || activeCall ? (
-            <View style={styles.inlineCallState} testID="callConnectingView">
-              <View style={styles.inlineCallText}>
-                <Text style={styles.inlineCallLabel}>
-                  {isStartingCall ? 'Connecting' : callStateLabel(activeCallState)}
-                </Text>
-                <Text style={styles.inlineCallDestination} numberOfLines={1}>
-                  {activeCall?.callerName || activeCall?.callerNumber || destinationNumber.trim()}
-                </Text>
-              </View>
-              {activeCall?.isIncoming && activeCallState === TelnyxCallState.RINGING ? (
-                <View style={styles.inlineCallActions}>
-                  <TouchableOpacity
-                    style={styles.inlineEndButton}
-                    onPress={handleEndCall}
-                    testID="callReject"
-                    accessibilityRole="button"
-                    accessibilityLabel="Reject"
-                    activeOpacity={0.75}
-                  >
-                    <PhoneOff size={20} color={demoColors.white} pointerEvents="none" />
-                    <Text style={styles.callActionText}>Reject</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.inlineAnswerButton}
-                    onPress={handleAnswerCall}
-                    testID="callAnswer"
-                    accessibilityRole="button"
-                    accessibilityLabel="Answer"
-                    activeOpacity={0.75}
-                  >
-                    <Phone size={20} color={demoColors.text} pointerEvents="none" />
-                    <Text style={styles.answerActionText}>Answer</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.inlineEndButton}
-                  onPress={handleEndCall}
-                  testID="hangupButton"
-                  accessibilityRole="button"
-                  accessibilityLabel="End"
-                  activeOpacity={0.75}
-                >
-                  <PhoneOff size={20} color={demoColors.white} pointerEvents="none" />
-                  <Text style={styles.callActionText}>Hangup</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            <InlineCallControls
+              activeCall={activeCall}
+              activeCallState={activeCallState}
+              destination={destinationNumber}
+              isStartingCall={isStartingCall}
+              onAnswer={handleAnswerCall}
+              onEnd={handleEndCall}
+            />
           ) : (
             <TouchableOpacity
               style={[styles.callButton, !isConnected && styles.buttonDisabled]}
@@ -531,69 +491,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-end',
     paddingTop: spacing.xl,
-  },
-  inlineCallState: {
-    minHeight: 64,
-    borderWidth: 1,
-    borderColor: demoColors.outline,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: demoColors.white,
-  },
-  inlineCallText: {
-    flex: 1,
-    marginRight: spacing.md,
-  },
-  inlineCallLabel: {
-    color: demoColors.mutedText,
-    fontSize: 14,
-    marginBottom: 2,
-  },
-  inlineCallDestination: {
-    color: demoColors.text,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  inlineCallActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  inlineEndButton: {
-    minWidth: 104,
-    height: 48,
-    borderRadius: radii.pill,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    backgroundColor: demoColors.danger,
-  },
-  inlineAnswerButton: {
-    minWidth: 104,
-    height: 48,
-    borderRadius: radii.pill,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    backgroundColor: demoColors.telnyxGreen,
-  },
-  callActionText: {
-    color: demoColors.white,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  answerActionText: {
-    color: demoColors.text,
-    fontSize: 15,
-    fontWeight: '700',
   },
   disconnectButton: {
     alignSelf: 'center',

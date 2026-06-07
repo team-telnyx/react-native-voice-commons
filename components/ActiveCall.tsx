@@ -88,6 +88,7 @@ export function ActiveCall({ call }: Props) {
       const enabled = await VoicePnBridge.toggleSpeaker();
       setIsSpeakerOn(enabled);
     } catch (error) {
+      setIsSpeakerOn(false);
       showCallActionError('Speaker Failed', error);
     }
   };

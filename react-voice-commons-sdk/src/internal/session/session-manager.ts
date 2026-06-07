@@ -11,6 +11,8 @@ import {
   isTokenConfig,
 } from '../../models/config';
 
+const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
+
 /**
  * Manages the connection lifecycle to the Telnyx platform.
  *
@@ -214,6 +216,8 @@ export class SessionManager {
         const storedPassword = await AsyncStorage.getItem('@telnyx_password');
         const storedCredentialToken = await AsyncStorage.getItem('@credential_token');
         const storedPushToken = await AsyncStorage.getItem('@push_token');
+        const storedUseTrickleIce = await AsyncStorage.getItem(USE_TRICKLE_ICE_STORAGE_KEY);
+        const useTrickleIce = storedUseTrickleIce === 'true';
 
         // Check if we have credential-based authentication data
         if (storedUsername && storedPassword) {
@@ -221,7 +225,7 @@ export class SessionManager {
           const { createCredentialConfig } = require('../../models/config');
           this._currentConfig = createCredentialConfig(storedUsername, storedPassword, {
             pushNotificationDeviceToken: storedPushToken,
-            useTrickleIce: true,
+            useTrickleIce,
           });
         }
         // Check if we have token-based authentication data
@@ -230,7 +234,7 @@ export class SessionManager {
           const { createTokenConfig } = require('../../models/config');
           this._currentConfig = createTokenConfig(storedCredentialToken, {
             pushNotificationDeviceToken: storedPushToken,
-            useTrickleIce: true,
+            useTrickleIce,
           });
         }
 

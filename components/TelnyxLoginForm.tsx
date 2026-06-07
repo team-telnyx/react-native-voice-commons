@@ -11,16 +11,19 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MoreVertical, Phone, PhoneOff } from 'lucide-react-native';
+import { MoreVertical, Phone } from 'lucide-react-native';
 import {
   Call,
+  CredentialConfig,
   TelnyxConnectionState,
   TelnyxCallState,
+  TokenConfig,
   createCredentialConfig,
   createTokenConfig,
   useTelnyxVoice,
 } from '../react-voice-commons-sdk/src';
 import { demoColors, radii, sizes, spacing } from './demoTheme';
+import { InlineCallControls } from './InlineCallControls';
 import { VoipTokenFetcher } from './VoipTokenFetcher';
 import { CredentialProfileSheet } from './login/CredentialProfileSheet';
 import { InfoRow } from './login/InfoRow';
@@ -46,6 +49,25 @@ const telnyxLogo = require('../assets/images/telnyx_logo.png');
 const appPackage = require('../package.json');
 const sdkPackage = require('../react-voice-commons-sdk/package.json');
 const versionLabel = `Production TelnyxSDK [v${sdkPackage.version}] - App [v${appPackage.version}]`;
+const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
+const DEMO_USE_TRICKLE_ICE = true;
+
+async function buildProfileConnectionConfig(
+  nextProfile: SavedProfile,
+  pushToken: string | null
+): Promise<CredentialConfig | TokenConfig> {
+  await AsyncStorage.setItem(USE_TRICKLE_ICE_STORAGE_KEY, String(DEMO_USE_TRICKLE_ICE));
+
+  const options = {
+    debug: true,
+    pushNotificationDeviceToken: pushToken || undefined,
+    useTrickleIce: DEMO_USE_TRICKLE_ICE,
+  };
+
+  return nextProfile.loginMode === 'token'
+    ? createTokenConfig(nextProfile.sipToken, options)
+    : createCredentialConfig(nextProfile.sipUsername, nextProfile.sipPassword, options);
+}
 
 function callStateLabel(callState: TelnyxCallState | null) {
   switch (callState) {
@@ -139,7 +161,6 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   useEffect(() => {
     const subscription = voipClient.activeCall$.subscribe((call) => {
       setActiveCall(call);
-      setActiveCallState(call?.currentState || null);
     });
 
     return () => subscription.unsubscribe();
@@ -380,22 +401,11 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
     setIsLoading(true);
 
     try {
-      if (nextProfile.loginMode === 'token') {
-        await voipClient.loginWithToken(
-          createTokenConfig(nextProfile.sipToken, {
-            debug: true,
-            pushNotificationDeviceToken: pushToken || undefined,
-            useTrickleIce: true,
-          })
-        );
+      const config = await buildProfileConnectionConfig(nextProfile, pushToken);
+      if (config.type === 'token') {
+        await voipClient.loginWithToken(config);
       } else {
-        await voipClient.login(
-          createCredentialConfig(nextProfile.sipUsername, nextProfile.sipPassword, {
-            debug: true,
-            pushNotificationDeviceToken: pushToken || undefined,
-            useTrickleIce: true,
-          })
-        );
+        await voipClient.login(config);
       }
     } catch (error) {
       setIsLoading(false);
@@ -601,56 +611,14 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
               />
 
               {isStartingCall || activeCall ? (
-                <View style={styles.inlineCallState} testID="callConnectingView">
-                  <View style={styles.inlineCallText}>
-                    <Text style={styles.inlineCallLabel}>
-                      {isStartingCall ? 'Connecting' : callStateLabel(activeCallState)}
-                    </Text>
-                    <Text style={styles.inlineCallDestination} numberOfLines={1}>
-                      {activeCall?.callerName ||
-                        activeCall?.callerNumber ||
-                        destinationNumber.trim()}
-                    </Text>
-                  </View>
-                  {activeCall?.isIncoming && activeCallState === TelnyxCallState.RINGING ? (
-                    <View style={styles.inlineCallActions}>
-                      <TouchableOpacity
-                        style={styles.inlineEndButton}
-                        onPress={handleEndCall}
-                        testID="callReject"
-                        accessibilityRole="button"
-                        accessibilityLabel="Reject"
-                        activeOpacity={0.75}
-                      >
-                        <PhoneOff size={20} color={demoColors.white} pointerEvents="none" />
-                        <Text style={styles.callActionText}>Reject</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.inlineAnswerButton}
-                        onPress={handleAnswerCall}
-                        testID="callAnswer"
-                        accessibilityRole="button"
-                        accessibilityLabel="Answer"
-                        activeOpacity={0.75}
-                      >
-                        <Phone size={20} color={demoColors.text} pointerEvents="none" />
-                        <Text style={styles.answerActionText}>Answer</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.inlineEndButton}
-                      onPress={handleEndCall}
-                      testID="hangupButton"
-                      accessibilityRole="button"
-                      accessibilityLabel="End"
-                      activeOpacity={0.75}
-                    >
-                      <PhoneOff size={20} color={demoColors.white} pointerEvents="none" />
-                      <Text style={styles.callActionText}>Hangup</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+                <InlineCallControls
+                  activeCall={activeCall}
+                  activeCallState={activeCallState}
+                  destination={destinationNumber}
+                  isStartingCall={isStartingCall}
+                  onAnswer={handleAnswerCall}
+                  onEnd={handleEndCall}
+                />
               ) : (
                 <TouchableOpacity
                   style={styles.callButton}
@@ -807,70 +775,6 @@ const styles = StyleSheet.create({
   callButtonText: {
     color: demoColors.text,
     fontSize: 16,
-    fontWeight: '700',
-  },
-  inlineCallState: {
-    width: '100%',
-    minHeight: 64,
-    borderWidth: 1,
-    borderColor: demoColors.outline,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: demoColors.white,
-  },
-  inlineCallText: {
-    flex: 1,
-    marginRight: spacing.md,
-  },
-  inlineCallLabel: {
-    color: demoColors.mutedText,
-    fontSize: 14,
-    marginBottom: 2,
-  },
-  inlineCallDestination: {
-    color: demoColors.text,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  inlineCallActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  inlineEndButton: {
-    minWidth: 104,
-    height: 48,
-    borderRadius: radii.pill,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    backgroundColor: demoColors.danger,
-  },
-  inlineAnswerButton: {
-    minWidth: 104,
-    height: 48,
-    borderRadius: radii.pill,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    backgroundColor: demoColors.telnyxGreen,
-  },
-  callActionText: {
-    color: demoColors.white,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  answerActionText: {
-    color: demoColors.text,
-    fontSize: 15,
     fontWeight: '700',
   },
   bottomBar: {
