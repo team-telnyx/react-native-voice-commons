@@ -41,6 +41,8 @@ export interface AudioOutboundStats {
   bytesSent: number;
   audioLevelAvg: number | null;
   bitrateAvg: number | null;
+  localTrack?: LocalAudioTrackSnapshot;
+  mediaSource?: LocalAudioSourceStats;
 }
 
 export interface AudioInboundStats {
@@ -66,6 +68,63 @@ export interface ConnectionStats {
   bytesReceived: number;
 }
 
+export interface LocalAudioTrackSnapshot {
+  id?: string;
+  label?: string;
+  enabled?: boolean;
+  muted?: boolean;
+  readyState?: string;
+  contentHint?: string;
+  settings?: {
+    deviceId?: string;
+    groupId?: string;
+    channelCount?: number;
+    sampleRate?: number;
+    sampleSize?: number;
+    latency?: number;
+    echoCancellation?: boolean;
+    noiseSuppression?: boolean;
+    autoGainControl?: boolean;
+  };
+}
+
+export interface LocalAudioSourceStats {
+  id?: string;
+  trackIdentifier?: string;
+  audioLevel?: number;
+  totalAudioEnergy?: number;
+  totalSamplesDuration?: number;
+  echoReturnLoss?: number;
+  echoReturnLossEnhancement?: number;
+}
+
+export interface IceCandidateInfo {
+  address?: string;
+  port?: number;
+  candidateType?: string;
+  protocol?: string;
+  networkType?: string;
+}
+
+export interface IceCandidatePairStats {
+  id?: string;
+  state?: string;
+  nominated?: boolean;
+  writable?: boolean;
+  local?: IceCandidateInfo;
+  remote?: IceCandidateInfo;
+  requestsSent?: number;
+  responsesReceived?: number;
+}
+
+export interface TransportStats {
+  iceState?: string;
+  dtlsState?: string;
+  srtpCipher?: string;
+  tlsVersion?: string;
+  selectedCandidatePairChanges?: number;
+}
+
 export interface StatsInterval {
   intervalStartUtc: string;
   intervalEndUtc: string;
@@ -74,6 +133,8 @@ export interface StatsInterval {
     inbound: AudioInboundStats | null;
   };
   connection: ConnectionStats | null;
+  ice?: IceCandidatePairStats;
+  transport?: TransportStats;
 }
 
 export interface CallReportLog {
@@ -88,4 +149,16 @@ export interface CallReportPayload {
   stats: StatsInterval[];
   logs: CallReportLog[];
   segment?: number;
+  flushReason?: CallReportFlushReason;
+}
+
+export interface CallReportFlushReason {
+  type: 'buffer-limit' | 'manual' | 'socket-close' | 'socket-error' | 'safety-interval';
+  socketClose?: {
+    code?: number;
+    codeName?: string;
+    reason?: string;
+    wasClean?: boolean;
+    error?: string;
+  };
 }

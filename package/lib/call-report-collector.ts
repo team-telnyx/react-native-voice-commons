@@ -10,6 +10,12 @@ import type {
   AudioInboundStats,
   AudioOutboundStats,
   ConnectionStats,
+  IceCandidateInfo,
+  IceCandidatePairStats,
+  LocalAudioSourceStats,
+  LocalAudioTrackSnapshot,
+  TransportStats,
+  CallReportFlushReason,
 } from './call-report-models';
 
 const MAX_STATS_BUFFER = 360; // ~30 min at 5s intervals
@@ -17,6 +23,9 @@ const STATS_FLUSH_THRESHOLD = 300; // ~25 min
 const LOGS_FLUSH_THRESHOLD = 800;
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 1000;
+const INITIAL_COLLECTION_INTERVAL_SECONDS = 1;
+const INITIAL_COLLECTION_DURATION_MS = 10_000;
+const DEFAULT_INTERMEDIATE_REPORT_INTERVAL_MS = 180_000;
 
 function round4(val: number | null | undefined): number | null {
   if (val == null || isNaN(val)) return null;
@@ -28,17 +37,26 @@ export class CallReportCollector {
   private peerConnection: RTCPeerConnectionType | null = null;
   private logCollector: LogCollector;
   private statsBuffer: StatsInterval[] = [];
-  private statsTimer: ReturnType<typeof setInterval> | null = null;
+  private statsTimer: ReturnType<typeof setTimeout> | null = null;
   private intervalStart: Date | null = null;
+  private callStartTime: Date = new Date();
+  private callEndTime: Date | null = null;
   private segmentIndex = 0;
   private isFlushing = false;
   private started = false;
+  private stopped = false;
+  private lastIntermediateFlushTime: Date = this.callStartTime;
+  private lastLocalAudioTrackSnapshotJson: string | null = null;
 
   // Previous values for delta calculations
   private prevOutboundBytes = 0;
   private prevOutboundTimestamp = 0;
   private prevInboundBytes = 0;
   private prevInboundTimestamp = 0;
+  private prevInboundAudioEnergy: number | undefined;
+  private prevInboundSamplesDuration: number | undefined;
+  private prevOutboundAudioEnergy: number | undefined;
+  private prevOutboundSamplesDuration: number | undefined;
 
   // Sample accumulators for interval averages
   private outboundAudioLevels: number[] = [];
@@ -60,7 +78,11 @@ export class CallReportCollector {
   }
 
   /** Log a structured event */
-  log(level: 'debug' | 'info' | 'warn' | 'error', message: string, context?: Record<string, unknown>): void {
+  log(
+    level: 'debug' | 'info' | 'warn' | 'error',
+    message: string,
+    context?: Record<string, unknown>
+  ): void {
     this.logCollector.add(level, message, context);
   }
 
@@ -74,21 +96,29 @@ export class CallReportCollector {
 
     this.peerConnection = peerConnection;
     this.started = true;
+    this.stopped = false;
+    this.callStartTime = new Date();
     this.intervalStart = new Date();
+    this.lastIntermediateFlushTime = this.intervalStart;
 
     log.debug('[CallReportCollector] Starting stats collection');
 
-    this.statsTimer = setInterval(() => {
-      this.collectInterval();
-    }, this.config.callReportInterval * 1000);
+    this.scheduleNextCollection();
   }
 
   /** Stop collection and return final payload */
-  stop(): void {
+  async stop(): Promise<void> {
+    this.stopped = true;
     if (this.statsTimer) {
-      clearInterval(this.statsTimer);
+      clearTimeout(this.statsTimer);
       this.statsTimer = null;
     }
+
+    this.callEndTime = new Date();
+    if (this.peerConnection && this.intervalStart) {
+      await this.collectInterval(true);
+    }
+
     this.started = false;
   }
 
@@ -105,8 +135,11 @@ export class CallReportCollector {
     return payload;
   }
 
-  /** Build an intermediate flush payload (destructively drains buffers) */
-  flush(summary: CallReportSummary): CallReportPayload {
+  /**
+   * Build an intermediate flush payload and destructively drain buffers.
+   * Intermediate summaries are bounded to the flushed segment window.
+   */
+  flush(summary: CallReportSummary, flushReason?: CallReportFlushReason): CallReportPayload {
     const currentSegment = this.segmentIndex;
     this.segmentIndex++;
 
@@ -115,11 +148,20 @@ export class CallReportCollector {
 
     const logs = this.logCollector.drain();
 
+    const now = new Date();
+    this.lastIntermediateFlushTime = now;
+
     return {
-      summary,
+      summary: {
+        ...summary,
+        durationSeconds: (now.getTime() - this.callStartTime.getTime()) / 1000,
+        startTimestamp: this.callStartTime.toISOString(),
+        endTimestamp: now.toISOString(),
+      },
       stats,
       logs,
       segment: currentSegment,
+      ...(flushReason ? { flushReason } : {}),
     };
   }
 
@@ -167,7 +209,34 @@ export class CallReportCollector {
 
   // --- Private ---
 
-  private async collectInterval(): Promise<void> {
+  private scheduleNextCollection(): void {
+    if (this.stopped || !this.peerConnection || !this.intervalStart || this.statsTimer) {
+      return;
+    }
+
+    const intervalSeconds = this.collectionIntervalFor(this.intervalStart);
+    this.statsTimer = setTimeout(() => {
+      this.statsTimer = null;
+      this.collectInterval().finally(() => {
+        this.scheduleNextCollection();
+      });
+    }, intervalSeconds * 1000);
+  }
+
+  private collectionIntervalFor(intervalStart: Date): number {
+    const defaultInterval =
+      typeof this.config.callReportInterval === 'number' && this.config.callReportInterval > 0
+        ? this.config.callReportInterval
+        : 5;
+
+    if (intervalStart.getTime() - this.callStartTime.getTime() < INITIAL_COLLECTION_DURATION_MS) {
+      return Math.min(INITIAL_COLLECTION_INTERVAL_SECONDS, defaultInterval);
+    }
+
+    return defaultInterval;
+  }
+
+  private async collectInterval(isFinal: boolean = false): Promise<void> {
     if (!this.peerConnection) return;
 
     const intervalEnd = new Date();
@@ -177,6 +246,11 @@ export class CallReportCollector {
     try {
       const stats = await (this.peerConnection as any).getStats();
       const interval = this.processStats(stats, intervalStart, intervalEnd);
+
+      const elapsedMs = intervalEnd.getTime() - intervalStart.getTime();
+      if (!isFinal && elapsedMs < this.collectionIntervalFor(intervalStart) * 1000) {
+        return;
+      }
 
       if (this.statsBuffer.length >= MAX_STATS_BUFFER) {
         this.statsBuffer.shift();
@@ -193,6 +267,10 @@ export class CallReportCollector {
     let outbound: AudioOutboundStats | null = null;
     let inbound: AudioInboundStats | null = null;
     let connection: ConnectionStats | null = null;
+    let ice: IceCandidatePairStats | undefined;
+    let transport: TransportStats | undefined;
+    let selectedCandidatePair: any = null;
+    let outboundReport: any = null;
 
     // Accumulate samples during this interval
     const outAudioLevels = this.outboundAudioLevels;
@@ -204,6 +282,7 @@ export class CallReportCollector {
       switch (report.type) {
         case 'outbound-rtp':
           if (report.kind === 'audio') {
+            outboundReport = report;
             const now = report.timestamp;
             const bytes = report.bytesSent ?? 0;
             let bitrateAvg: number | null = null;
@@ -216,11 +295,22 @@ export class CallReportCollector {
             this.prevOutboundBytes = bytes;
             this.prevOutboundTimestamp = now;
 
+            const outboundAudioLevel = this.getOutboundAudioLevel(stats, report);
+            if (outboundAudioLevel != null) {
+              outAudioLevels.push(outboundAudioLevel);
+            }
+
+            const localTrack = this.getLocalAudioTrackSnapshot();
+            const mediaSource = this.getOutboundAudioSourceStats(stats, report);
+            this.logLocalAudioTrackSnapshot(localTrack, mediaSource);
+
             outbound = {
               packetsSent: report.packetsSent ?? 0,
               bytesSent: bytes,
               audioLevelAvg: round4(avg(outAudioLevels)),
               bitrateAvg: round4(bitrateAvg),
+              ...(localTrack ? { localTrack } : {}),
+              ...(mediaSource ? { mediaSource } : {}),
             };
           }
           break;
@@ -240,7 +330,8 @@ export class CallReportCollector {
             this.prevInboundTimestamp = now;
 
             if (report.jitter != null) inJitters.push(report.jitter * 1000); // sec → ms
-            if (report.audioLevel != null) inAudioLevels.push(report.audioLevel);
+            const inboundAudioLevel = this.getInboundAudioLevel(stats, report);
+            if (inboundAudioLevel != null) inAudioLevels.push(inboundAudioLevel);
 
             inbound = {
               packetsReceived: report.packetsReceived ?? 0,
@@ -261,6 +352,7 @@ export class CallReportCollector {
 
         case 'candidate-pair':
           if (report.nominated || report.state === 'succeeded') {
+            selectedCandidatePair = report;
             if (report.currentRoundTripTime != null) {
               rtts.push(report.currentRoundTripTime);
             }
@@ -274,13 +366,34 @@ export class CallReportCollector {
           }
           break;
 
+        case 'transport':
+          transport = this.buildTransportStats(report);
+          break;
+
         case 'media-source':
-          if (report.kind === 'audio' && report.audioLevel != null) {
+          if (!outboundReport && report.kind === 'audio' && report.audioLevel != null) {
             outAudioLevels.push(report.audioLevel);
           }
           break;
       }
     });
+
+    if (selectedCandidatePair) {
+      ice = {
+        id: selectedCandidatePair.id,
+        state: selectedCandidatePair.state,
+        nominated: selectedCandidatePair.nominated,
+        writable: selectedCandidatePair.writable,
+        requestsSent: selectedCandidatePair.requestsSent,
+        responsesReceived: selectedCandidatePair.responsesReceived,
+        ...(this.resolveCandidate(stats, selectedCandidatePair.localCandidateId)
+          ? { local: this.resolveCandidate(stats, selectedCandidatePair.localCandidateId) }
+          : {}),
+        ...(this.resolveCandidate(stats, selectedCandidatePair.remoteCandidateId)
+          ? { remote: this.resolveCandidate(stats, selectedCandidatePair.remoteCandidateId) }
+          : {}),
+      };
+    }
 
     // Clear accumulators for next interval
     this.outboundAudioLevels = [];
@@ -293,18 +406,24 @@ export class CallReportCollector {
       intervalEndUtc: intervalEnd.toISOString(),
       audio: { outbound, inbound },
       connection,
+      ...(ice ? { ice } : {}),
+      ...(transport ? { transport } : {}),
     };
   }
 
   private checkFlushThresholds(): void {
     if (this.isFlushing) return;
+    const now = new Date();
+    const msSinceLastFlush = now.getTime() - this.lastIntermediateFlushTime.getTime();
     if (
       this.statsBuffer.length >= STATS_FLUSH_THRESHOLD ||
-      this.logCollector.count >= LOGS_FLUSH_THRESHOLD
+      this.logCollector.count >= LOGS_FLUSH_THRESHOLD ||
+      msSinceLastFlush >= DEFAULT_INTERMEDIATE_REPORT_INTERVAL_MS
     ) {
       log.debug(
-        `[CallReportCollector] Flush threshold reached (stats: ${this.statsBuffer.length}/${STATS_FLUSH_THRESHOLD}, logs: ${this.logCollector.count}/${LOGS_FLUSH_THRESHOLD})`
+        `[CallReportCollector] Flush threshold reached (stats: ${this.statsBuffer.length}/${STATS_FLUSH_THRESHOLD}, logs: ${this.logCollector.count}/${LOGS_FLUSH_THRESHOLD}, msSinceLastFlush: ${msSinceLastFlush})`
       );
+      this.lastIntermediateFlushTime = now;
       this.isFlushing = true;
       try {
         this.onFlushNeeded?.();
@@ -314,12 +433,220 @@ export class CallReportCollector {
     }
   }
 
+  private resolveCandidate(stats: any, candidateId?: string): IceCandidateInfo | undefined {
+    if (!candidateId) return undefined;
+    const report = typeof stats.get === 'function' ? stats.get(candidateId) : undefined;
+    if (!report) return undefined;
+
+    const info = this.withoutUndefined({
+      address: report.address ?? report.ip,
+      port: report.port,
+      candidateType: report.candidateType,
+      protocol: report.protocol,
+      networkType: report.networkType,
+    });
+
+    return Object.keys(info).length > 0 ? info : undefined;
+  }
+
+  private buildTransportStats(report: any): TransportStats | undefined {
+    const transport = this.withoutUndefined({
+      iceState: report.iceState,
+      dtlsState: report.dtlsState,
+      srtpCipher: report.srtpCipher,
+      tlsVersion: report.tlsVersion,
+      selectedCandidatePairChanges: report.selectedCandidatePairChanges,
+    });
+
+    return Object.keys(transport).length > 0 ? transport : undefined;
+  }
+
+  private getOutboundMediaSource(stats: any, outboundAudio: any): any | undefined {
+    if (outboundAudio.mediaSourceId && typeof stats.get === 'function') {
+      const mediaSource = stats.get(outboundAudio.mediaSourceId);
+      if (mediaSource) return mediaSource;
+    }
+
+    let mediaSource: any | undefined;
+    stats.forEach((report: any) => {
+      if (!mediaSource && report.type === 'media-source' && report.kind === 'audio') {
+        mediaSource = report;
+      }
+    });
+    return mediaSource;
+  }
+
+  private getOutboundAudioSourceStats(
+    stats: any,
+    outboundAudio: any
+  ): LocalAudioSourceStats | undefined {
+    const mediaSource = this.getOutboundMediaSource(stats, outboundAudio);
+    if (!mediaSource) return undefined;
+
+    const snapshot = this.withoutUndefined({
+      id: mediaSource.id,
+      trackIdentifier: mediaSource.trackIdentifier,
+      audioLevel: mediaSource.audioLevel,
+      totalAudioEnergy: mediaSource.totalAudioEnergy,
+      totalSamplesDuration: mediaSource.totalSamplesDuration,
+      echoReturnLoss: mediaSource.echoReturnLoss,
+      echoReturnLossEnhancement: mediaSource.echoReturnLossEnhancement,
+    });
+
+    return Object.keys(snapshot).length > 0 ? snapshot : undefined;
+  }
+
+  private getLocalAudioTrackSnapshot(): LocalAudioTrackSnapshot | undefined {
+    try {
+      const sender = (this.peerConnection as any)
+        ?.getSenders?.()
+        ?.find((item: any) => item.track?.kind === 'audio');
+      const track = sender?.track;
+      if (!track) return undefined;
+
+      const settings = track.getSettings?.();
+      const settingsSnapshot = this.withoutUndefined({
+        deviceId: settings?.deviceId,
+        groupId: settings?.groupId,
+        channelCount: settings?.channelCount,
+        sampleRate: settings?.sampleRate,
+        sampleSize: settings?.sampleSize,
+        latency: settings?.latency,
+        echoCancellation: settings?.echoCancellation,
+        noiseSuppression: settings?.noiseSuppression,
+        autoGainControl: settings?.autoGainControl,
+      });
+
+      const snapshot = this.withoutUndefined({
+        id: track.id,
+        label: track.label,
+        enabled: track.enabled,
+        muted: track.muted,
+        readyState: track.readyState,
+        contentHint: track.contentHint,
+        ...(Object.keys(settingsSnapshot).length > 0 ? { settings: settingsSnapshot } : {}),
+      });
+
+      return Object.keys(snapshot).length > 0 ? snapshot : undefined;
+    } catch (error) {
+      log.debug('[CallReportCollector] Unable to snapshot local audio track:', error);
+      return undefined;
+    }
+  }
+
+  private getOutboundAudioLevel(stats: any, outboundAudio: any): number | null {
+    const mediaSource = this.getOutboundMediaSource(stats, outboundAudio);
+    if (mediaSource?.audioLevel != null) {
+      return mediaSource.audioLevel;
+    }
+
+    if (mediaSource) {
+      const level = this.computeAudioLevelFromEnergy(
+        mediaSource.totalAudioEnergy,
+        mediaSource.totalSamplesDuration,
+        'outbound'
+      );
+      if (level != null) return level;
+    }
+
+    return this.getTrackAudioLevel(stats, outboundAudio.trackId);
+  }
+
+  private getInboundAudioLevel(stats: any, inboundAudio: any): number | null {
+    if (inboundAudio.audioLevel != null) {
+      return inboundAudio.audioLevel;
+    }
+
+    const level = this.computeAudioLevelFromEnergy(
+      inboundAudio.totalAudioEnergy,
+      inboundAudio.totalSamplesDuration,
+      'inbound'
+    );
+    if (level != null) return level;
+
+    return this.getTrackAudioLevel(stats, inboundAudio.trackId);
+  }
+
+  private computeAudioLevelFromEnergy(
+    currentEnergy: number | undefined,
+    currentDuration: number | undefined,
+    direction: 'inbound' | 'outbound'
+  ): number | null {
+    if (currentEnergy == null || currentDuration == null) return null;
+
+    const prevEnergy =
+      direction === 'inbound' ? this.prevInboundAudioEnergy : this.prevOutboundAudioEnergy;
+    const prevDuration =
+      direction === 'inbound' ? this.prevInboundSamplesDuration : this.prevOutboundSamplesDuration;
+
+    if (direction === 'inbound') {
+      this.prevInboundAudioEnergy = currentEnergy;
+      this.prevInboundSamplesDuration = currentDuration;
+    } else {
+      this.prevOutboundAudioEnergy = currentEnergy;
+      this.prevOutboundSamplesDuration = currentDuration;
+    }
+
+    if (prevEnergy == null || prevDuration == null) return null;
+
+    const deltaEnergy = currentEnergy - prevEnergy;
+    const deltaDuration = currentDuration - prevDuration;
+    if (deltaDuration <= 0) return null;
+
+    return Math.min(1, Math.max(0, Math.sqrt(deltaEnergy / deltaDuration)));
+  }
+
+  private getTrackAudioLevel(stats: any, trackId?: string): number | null {
+    if (!trackId || typeof stats.get !== 'function') return null;
+    return stats.get(trackId)?.audioLevel ?? null;
+  }
+
+  private logLocalAudioTrackSnapshot(
+    localAudioTrack?: LocalAudioTrackSnapshot,
+    localAudioSource?: LocalAudioSourceStats
+  ): void {
+    if (!localAudioTrack || Object.keys(localAudioTrack).length === 0) return;
+    const snapshotJson = JSON.stringify(this.sortObjectKeys(localAudioTrack));
+    if (snapshotJson === this.lastLocalAudioTrackSnapshotJson) return;
+
+    this.lastLocalAudioTrackSnapshotJson = snapshotJson;
+    log.debug('[CallReportCollector] Local audio track snapshot', {
+      localTrack: localAudioTrack,
+      mediaSource: localAudioSource,
+    });
+  }
+
+  private withoutUndefined<T extends Record<string, unknown>>(obj: T): T {
+    return Object.keys(obj).reduce<Record<string, unknown>>((clean, key) => {
+      const value = obj[key];
+      if (value !== undefined) {
+        clean[key] = value;
+      }
+      return clean;
+    }, {}) as T;
+  }
+
+  private sortObjectKeys(value: unknown): unknown {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.sortObjectKeys(item));
+    }
+
+    if (value && typeof value === 'object') {
+      return Object.keys(value as Record<string, unknown>)
+        .sort()
+        .reduce<Record<string, unknown>>((sorted, key) => {
+          sorted[key] = this.sortObjectKeys((value as Record<string, unknown>)[key]);
+          return sorted;
+        }, {});
+    }
+
+    return value;
+  }
+
   private buildEndpoint(host: string): string | null {
     try {
       // Convert ws(s) URL to http(s)
-      let httpHost = host
-        .replace(/^wss:\/\//, 'https://')
-        .replace(/^ws:\/\//, 'http://');
+      let httpHost = host.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://');
 
       // If no protocol, default to https
       if (!httpHost.startsWith('http')) {
@@ -389,7 +716,9 @@ export class CallReportCollector {
     }
 
     const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
-    log.debug(`[CallReportCollector] Retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS})`);
+    log.debug(
+      `[CallReportCollector] Retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS})`
+    );
 
     await new Promise((resolve) => setTimeout(resolve, delay));
     await this.executeUpload(endpoint, headers, body, attempt + 1);

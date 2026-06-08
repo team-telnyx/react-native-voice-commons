@@ -34,7 +34,7 @@ describe('Custom Headers Integration Tests', () => {
       expect(message.params.dialogParams.custom_headers).toEqual(customHeaders);
 
       // Verify User-Agent is set
-      expect(message.params['User-Agent']).toMatch(/react-native-/);
+      expect(message.params['User-Agent']).toMatch(/ReactNative-/);
     });
 
     it('should handle empty custom headers', () => {
