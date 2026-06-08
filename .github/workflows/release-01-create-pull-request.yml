@@ -84,11 +84,11 @@ jobs:
               PATTERN='^commons-sdk-v[0-9]+\.[0-9]+\.[0-9]+'
               ;;
             both)
-              PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+'
+              PATTERN='^(v|voice-sdk-v|commons-sdk-v)[0-9]+\.[0-9]+\.[0-9]+'
               ;;
           esac
 
-          PREVIOUS_TAG="$(git tag --sort=-v:refname | grep -E "$PATTERN" | head -n 1 || true)"
+          PREVIOUS_TAG="$(git for-each-ref --sort=-creatordate --format='%(refname:short)' refs/tags | grep -E "$PATTERN" | head -n 1 || true)"
           echo "previous_tag=$PREVIOUS_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Generate changelog from merged pull requests

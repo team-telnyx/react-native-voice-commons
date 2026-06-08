@@ -64,7 +64,7 @@ jobs:
             both)
               TAG="v$VERSION"
               PACKAGE_DIR="package react-voice-commons-sdk"
-              PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+'
+              PATTERN='^(v|voice-sdk-v|commons-sdk-v)[0-9]+\.[0-9]+\.[0-9]+'
               ;;
             *)
               echo "::error::Unsupported package: $PACKAGE"
@@ -90,7 +90,7 @@ jobs:
       - name: Find previous release tag
         id: previous_tag
         run: |
-          PREVIOUS_TAG="$(git tag --sort=-v:refname | grep -E "${{ steps.release.outputs.pattern }}" | head -n 1 || true)"
+          PREVIOUS_TAG="$(git for-each-ref --sort=-creatordate --format='%(refname:short)' refs/tags | grep -E "${{ steps.release.outputs.pattern }}" | head -n 1 || true)"
           echo "previous_tag=$PREVIOUS_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Generate changelog from merged pull requests
