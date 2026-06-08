@@ -1,0 +1,157 @@
+name: release-01-create-pull-request
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to release'
+        required: true
+        default: 'commons-sdk'
+        type: choice
+        options:
+          - voice-sdk
+          - commons-sdk
+          - both
+      version:
+        description: 'Release version without prefix, for example 0.4.6'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-pr-${{ github.event.inputs.package }}-${{ github.event.inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  create-release-pr:
+    name: Create release pull request
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository with full history
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Validate version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Version must be semver without a leading v, for example 0.4.6"
+            exit 1
+          fi
+
+      - name: Resolve release metadata
+        id: release
+        run: |
+          PACKAGE="${{ github.event.inputs.package }}"
+          VERSION="${{ github.event.inputs.version }}"
+
+          case "$PACKAGE" in
+            voice-sdk)
+              TAG="voice-sdk-v$VERSION"
+              PACKAGE_DIRS="package"
+              ;;
+            commons-sdk)
+              TAG="commons-sdk-v$VERSION"
+              PACKAGE_DIRS="react-voice-commons-sdk"
+              ;;
+            both)
+              TAG="v$VERSION"
+              PACKAGE_DIRS="package react-voice-commons-sdk"
+              ;;
+            *)
+              echo "::error::Unsupported package: $PACKAGE"
+              exit 1
+              ;;
+          esac
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "package_dirs=$PACKAGE_DIRS" >> "$GITHUB_OUTPUT"
+          echo "branch=release/$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Find previous release tag
+        id: previous_tag
+        run: |
+          PACKAGE="${{ github.event.inputs.package }}"
+          case "$PACKAGE" in
+            voice-sdk)
+              PATTERN='^voice-sdk-v[0-9]+\.[0-9]+\.[0-9]+'
+              ;;
+            commons-sdk)
+              PATTERN='^commons-sdk-v[0-9]+\.[0-9]+\.[0-9]+'
+              ;;
+            both)
+              PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+'
+              ;;
+          esac
+
+          PREVIOUS_TAG="$(git tag --sort=-v:refname | grep -E "$PATTERN" | head -n 1 || true)"
+          echo "previous_tag=$PREVIOUS_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog from merged pull requests
+        id: changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PREVIOUS_TAG="${{ steps.previous_tag.outputs.previous_tag }}"
+          if [ -n "$PREVIOUS_TAG" ]; then
+            RANGE="$PREVIOUS_TAG..HEAD"
+            git log --pretty=format:"%H" "$RANGE" > commits.txt
+          else
+            git log --pretty=format:"%H" > commits.txt
+          fi
+
+          gh pr list --state merged --base main --limit 200 --json title,number,mergeCommit \
+            --jq ".[] | [.title, .number, .mergeCommit.oid] | @tsv" > pr_data.tsv
+
+          > changelog.txt
+          while IFS=$'\t' read -r title number commit; do
+            if [ -n "$commit" ] && grep -q "$commit" commits.txt; then
+              echo "- PR #$number: $title" >> changelog.txt
+            fi
+          done < pr_data.tsv
+
+          if [ ! -s changelog.txt ]; then
+            echo "- No merged pull requests found in this range." > changelog.txt
+          fi
+
+          {
+            echo "body<<EOF"
+            cat changelog.txt
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Update package versions
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          for dir in ${{ steps.release.outputs.package_dirs }}; do
+            npm --prefix "$dir" version "$VERSION" --no-git-tag-version --allow-same-version
+          done
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ github.token }}
+          branch: ${{ steps.release.outputs.branch }}
+          base: main
+          delete-branch: true
+          commit-message: "chore: release ${{ steps.release.outputs.tag }}"
+          title: "Release ${{ steps.release.outputs.tag }}"
+          body: |
+            Auto-created release pull request for `${{ steps.release.outputs.tag }}`.
+
+            Package scope: `${{ github.event.inputs.package }}`
+            Previous tag: `${{ steps.previous_tag.outputs.previous_tag || 'none' }}`
+
+            Note: this PR is created with `GITHUB_TOKEN`, so GitHub will not automatically
+            trigger `pull_request` workflows for it. Run any required checks manually before merge.
+
+            Changes since previous release:
+            ${{ steps.changelog.outputs.body }}
+          add-paths: |
+            package/package.json
+            react-voice-commons-sdk/package.json
+          labels: auto-generated
