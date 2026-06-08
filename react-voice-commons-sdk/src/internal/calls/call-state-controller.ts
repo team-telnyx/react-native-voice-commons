@@ -17,6 +17,7 @@ export class CallStateController {
   private readonly _calls = new BehaviorSubject<Call[]>([]);
   private readonly _callMap = new Map<string, Call>();
   private _disposed = false;
+  private _listenerClient?: TelnyxRTC;
 
   // Callbacks for waiting for invite logic (used for push notifications)
   private _isWaitingForInvite?: () => boolean;
@@ -155,6 +156,9 @@ export class CallStateController {
         callerIdName: callerName,
         callerIdNumber: callerNumber,
         customHeaders,
+        peerConnectionOptions: {
+          useTrickleIce: this._sessionManager.useTrickleIce,
+        },
       };
       const telnyxCall = await this._sessionManager.telnyxClient.newCall(callOptions);
 
@@ -225,6 +229,7 @@ export class CallStateController {
     }
 
     this._disposed = true;
+    this._removeClientListeners();
 
     // Dispose of all calls
     this.currentCalls.forEach((call) => call.dispose());
@@ -241,40 +246,28 @@ export class CallStateController {
   private _setupClientListeners(): void {
     console.log('CallStateController: Setting up client listeners...');
 
-    if (!this._sessionManager.telnyxClient) {
+    const telnyxClient = this._sessionManager.telnyxClient;
+
+    if (!telnyxClient) {
       console.log('CallStateController: No telnyxClient available yet, skipping listener setup');
       return;
     }
 
+    this._removeClientListeners();
+    this._listenerClient = telnyxClient;
+
     console.log('CallStateController: TelnyxClient found, setting up incoming call listener');
-    console.log(
-      'CallStateController: Client instance:',
-      this._sessionManager.telnyxClient.constructor.name
-    );
+    console.log('CallStateController: Client instance:', telnyxClient.constructor.name);
 
     // Listen for incoming calls
-    this._sessionManager.telnyxClient.on(
-      'telnyx.call.incoming',
-      (telnyxCall: TelnyxCall, msg: any) => {
-        console.log('CallStateController: Incoming call received:', telnyxCall.callId);
-        this._handleIncomingCall(telnyxCall, msg, false);
-      }
-    );
+    telnyxClient.on('telnyx.call.incoming', this._handleTelnyxIncomingCall);
 
     // Listen for reattached calls (after network reconnection)
-    this._sessionManager.telnyxClient.on(
-      'telnyx.call.reattached',
-      (telnyxCall: TelnyxCall, msg: any) => {
-        console.log('CallStateController: Reattached call received:', telnyxCall.callId);
-        this._handleIncomingCall(telnyxCall, msg, true);
-      }
-    );
+    telnyxClient.on('telnyx.call.reattached', this._handleTelnyxReattachedCall);
 
     // Verify listeners are set up
-    const incomingListeners =
-      this._sessionManager.telnyxClient.listenerCount('telnyx.call.incoming');
-    const reattachedListeners =
-      this._sessionManager.telnyxClient.listenerCount('telnyx.call.reattached');
+    const incomingListeners = telnyxClient.listenerCount('telnyx.call.incoming');
+    const reattachedListeners = telnyxClient.listenerCount('telnyx.call.reattached');
     console.log(
       'CallStateController: Listeners registered - incoming:',
       incomingListeners,
@@ -283,33 +276,56 @@ export class CallStateController {
     );
 
     // Listen for call state changes from the TelnyxRTC client (multi-call support)
-    this._sessionManager.telnyxClient.on(
-      'telnyx.call.stateChanged',
-      (telnyxCall: TelnyxCall, state: string) => {
-        console.log(
-          'CallStateController: Call state changed from TelnyxRTC:',
-          telnyxCall.callId,
-          state
-        );
-        // Find our wrapper call and update if needed
-        const call = this.findCallByTelnyxCall(telnyxCall);
-        if (call) {
-          console.log(
-            'CallStateController: Found wrapper call, state sync handled by Call subscription'
-          );
-        }
-      }
-    );
+    telnyxClient.on('telnyx.call.stateChanged', this._handleTelnyxCallStateChanged);
 
     // Listen for call removal events from TelnyxRTC (multi-call support)
-    this._sessionManager.telnyxClient.on('telnyx.call.removed', (callId: string) => {
-      console.log('CallStateController: Call removed from TelnyxRTC:', callId);
-      // The call cleanup is already handled by our call state subscription
-      // This event is informational for logging/debugging
-    });
+    telnyxClient.on('telnyx.call.removed', this._handleTelnyxCallRemoved);
 
     console.log('CallStateController: Client listeners set up successfully');
   }
+
+  private _removeClientListeners(): void {
+    if (!this._listenerClient) {
+      return;
+    }
+
+    this._listenerClient.off('telnyx.call.incoming', this._handleTelnyxIncomingCall);
+    this._listenerClient.off('telnyx.call.reattached', this._handleTelnyxReattachedCall);
+    this._listenerClient.off('telnyx.call.stateChanged', this._handleTelnyxCallStateChanged);
+    this._listenerClient.off('telnyx.call.removed', this._handleTelnyxCallRemoved);
+    this._listenerClient = undefined;
+  }
+
+  private _handleTelnyxIncomingCall = (telnyxCall: TelnyxCall, msg: any): void => {
+    console.log('CallStateController: Incoming call received:', telnyxCall.callId);
+    this._handleIncomingCall(telnyxCall, msg, false);
+  };
+
+  private _handleTelnyxReattachedCall = (telnyxCall: TelnyxCall, msg: any): void => {
+    console.log('CallStateController: Reattached call received:', telnyxCall.callId);
+    this._handleIncomingCall(telnyxCall, msg, true);
+  };
+
+  private _handleTelnyxCallStateChanged = (telnyxCall: TelnyxCall, state: string): void => {
+    console.log(
+      'CallStateController: Call state changed from TelnyxRTC:',
+      telnyxCall.callId,
+      state
+    );
+    // Find our wrapper call and update if needed
+    const call = this.findCallByTelnyxCall(telnyxCall);
+    if (call) {
+      console.log(
+        'CallStateController: Found wrapper call, state sync handled by Call subscription'
+      );
+    }
+  };
+
+  private _handleTelnyxCallRemoved = (callId: string): void => {
+    console.log('CallStateController: Call removed from TelnyxRTC:', callId);
+    // The call cleanup is already handled by our call state subscription.
+    // This event is informational for logging/debugging.
+  };
 
   /**
    * Handle incoming call or reattached call

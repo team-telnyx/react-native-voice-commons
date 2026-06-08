@@ -59,6 +59,7 @@ const TelnyxSDK = __importStar(require('@telnyx/react-native-voice-sdk'));
 const pkg = __importStar(require('../../../package.json'));
 const connection_state_1 = require('../../models/connection-state');
 const config_1 = require('../../models/config');
+const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
 /**
  * Manages the connection lifecycle to the Telnyx platform.
  *
@@ -109,6 +110,9 @@ class SessionManager {
    */
   get telnyxClient() {
     return this._telnyxClient;
+  }
+  get useTrickleIce() {
+    return Boolean(this._currentConfig?.useTrickleIce);
   }
   /**
    * Connect using credential authentication
@@ -231,12 +235,15 @@ class SessionManager {
         const storedPassword = await AsyncStorage.getItem('@telnyx_password');
         const storedCredentialToken = await AsyncStorage.getItem('@credential_token');
         const storedPushToken = await AsyncStorage.getItem('@push_token');
+        const storedUseTrickleIce = await AsyncStorage.getItem(USE_TRICKLE_ICE_STORAGE_KEY);
+        const useTrickleIce = storedUseTrickleIce === 'true';
         // Check if we have credential-based authentication data
         if (storedUsername && storedPassword) {
           console.log('SessionManager: RELEASE DEBUG - Found stored credentials, creating config');
           const { createCredentialConfig } = require('../../models/config');
           this._currentConfig = createCredentialConfig(storedUsername, storedPassword, {
             pushNotificationDeviceToken: storedPushToken,
+            useTrickleIce,
           });
         }
         // Check if we have token-based authentication data
@@ -245,6 +252,7 @@ class SessionManager {
           const { createTokenConfig } = require('../../models/config');
           this._currentConfig = createTokenConfig(storedCredentialToken, {
             pushNotificationDeviceToken: storedPushToken,
+            useTrickleIce,
           });
         }
         if (this._currentConfig) {
@@ -358,6 +366,7 @@ class SessionManager {
           logLevel: this._currentConfig.debug ? 'debug' : 'warn',
           debug: this._currentConfig.debug ?? false,
           pushNotificationDeviceToken: this._currentConfig.pushNotificationDeviceToken,
+          useTrickleIce: this._currentConfig.useTrickleIce,
           enableCallReports: this._currentConfig.enableCallReports,
           callReportInterval: this._currentConfig.callReportInterval,
           callReportLogLevel: this._currentConfig.callReportLogLevel,
@@ -376,6 +385,7 @@ class SessionManager {
           logLevel: this._currentConfig.debug ? 'debug' : 'warn',
           debug: this._currentConfig.debug ?? false,
           pushNotificationDeviceToken: this._currentConfig.pushNotificationDeviceToken,
+          useTrickleIce: this._currentConfig.useTrickleIce,
           enableCallReports: this._currentConfig.enableCallReports,
           callReportInterval: this._currentConfig.callReportInterval,
           callReportLogLevel: this._currentConfig.callReportLogLevel,

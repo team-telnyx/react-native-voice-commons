@@ -14,6 +14,14 @@ declare module '@telnyx/react-native-voice-sdk' {
     destinationNumber?: string;
     audio?: boolean;
     video?: boolean;
+    peerConnectionOptions?: {
+      prefetchIceCandidates?: boolean;
+      useTrickleIce?: boolean;
+      iceServers?: any[];
+      iceTransportPolicy?: string;
+      bundlePolicy?: string;
+      rtcpMuxPolicy?: string;
+    };
   }
 
   export interface ClientOptions {
@@ -26,6 +34,7 @@ declare module '@telnyx/react-native-voice-sdk' {
     debug?: boolean;
     logLevel?: string;
     pushNotificationDeviceToken?: string;
+    useTrickleIce?: boolean;
     enableCallReports?: boolean;
     callReportInterval?: number;
     callReportLogLevel?: string;

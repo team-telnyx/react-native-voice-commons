@@ -1,18 +1,29 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MoreVertical } from 'lucide-react-native';
+import { MoreVertical, Phone } from 'lucide-react-native';
 import {
   Call,
+  CredentialConfig,
   TelnyxConnectionState,
   TelnyxCallState,
+  TokenConfig,
   createCredentialConfig,
   createTokenConfig,
   useTelnyxVoice,
 } from '../react-voice-commons-sdk/src';
-import { demoColors, spacing } from './demoTheme';
+import { demoColors, radii, sizes, spacing } from './demoTheme';
+import { InlineCallControls } from './InlineCallControls';
 import { VoipTokenFetcher } from './VoipTokenFetcher';
 import { CredentialProfileSheet } from './login/CredentialProfileSheet';
 import { InfoRow } from './login/InfoRow';
@@ -38,6 +49,25 @@ const telnyxLogo = require('../assets/images/telnyx_logo.png');
 const appPackage = require('../package.json');
 const sdkPackage = require('../react-voice-commons-sdk/package.json');
 const versionLabel = `Production TelnyxSDK [v${sdkPackage.version}] - App [v${appPackage.version}]`;
+const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
+const DEMO_USE_TRICKLE_ICE = true;
+
+async function buildProfileConnectionConfig(
+  nextProfile: SavedProfile,
+  pushToken: string | null
+): Promise<CredentialConfig | TokenConfig> {
+  await AsyncStorage.setItem(USE_TRICKLE_ICE_STORAGE_KEY, String(DEMO_USE_TRICKLE_ICE));
+
+  const options = {
+    debug: true,
+    pushNotificationDeviceToken: pushToken || undefined,
+    useTrickleIce: DEMO_USE_TRICKLE_ICE,
+  };
+
+  return nextProfile.loginMode === 'token'
+    ? createTokenConfig(nextProfile.sipToken, options)
+    : createCredentialConfig(nextProfile.sipUsername, nextProfile.sipPassword, options);
+}
 
 function callStateLabel(callState: TelnyxCallState | null) {
   switch (callState) {
@@ -96,6 +126,10 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
     voipClient.currentActiveCall?.currentState || null
   );
   const [isLoading, setIsLoading] = useState(false);
+  const [destinationType, setDestinationType] = useState<'sip' | 'phone'>('sip');
+  const [destinationNumber, setDestinationNumber] = useState('');
+  const [inputFocused, setInputFocused] = useState(false);
+  const [isStartingCall, setIsStartingCall] = useState(false);
   const [pushToken, setPushToken] = useState<string | null>(null);
 
   const log = debug ? console.log : () => {};
@@ -112,11 +146,11 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
       if (state === TelnyxConnectionState.CONNECTED) {
         setIsLoading(false);
         onLoginSuccess?.();
-        router.push('/dialer');
       }
 
       if (state === TelnyxConnectionState.ERROR || state === TelnyxConnectionState.DISCONNECTED) {
         setIsLoading(false);
+        setIsStartingCall(false);
       }
     });
 
@@ -127,7 +161,6 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   useEffect(() => {
     const subscription = voipClient.activeCall$.subscribe((call) => {
       setActiveCall(call);
-      setActiveCallState(call?.currentState || null);
     });
 
     return () => subscription.unsubscribe();
@@ -311,9 +344,13 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
 
     const nextProfiles = upsertProfile(profiles, normalizedProfile, editingProfileKey);
     await persistProfileList(nextProfiles);
+    await persistProfile(normalizedProfile);
     setProfiles(nextProfiles);
+    setProfile(normalizedProfile);
     setSelectedProfile(normalizedProfile);
     setEditingProfileKey(null);
+    setShowProfileSheet(false);
+    await loginWithProfile(normalizedProfile);
     return true;
   };
 
@@ -360,6 +397,24 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
     ]);
   };
 
+  const loginWithProfile = async (nextProfile: SavedProfile) => {
+    setIsLoading(true);
+
+    try {
+      const config = await buildProfileConnectionConfig(nextProfile, pushToken);
+      if (config.type === 'token') {
+        await voipClient.loginWithToken(config);
+      } else {
+        await voipClient.login(config);
+      }
+    } catch (error) {
+      setIsLoading(false);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      Alert.alert('Login Failed', errorMessage);
+      onLoginError?.(error);
+    }
+  };
+
   const handleConnectDisconnect = async () => {
     if (isConnecting && !isConnected) {
       setIsLoading(false);
@@ -382,29 +437,63 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
       return;
     }
 
-    setIsLoading(true);
+    await loginWithProfile(profile);
+  };
+
+  const handleStartCall = async () => {
+    if (!destinationNumber.trim()) {
+      Alert.alert('Error', 'Enter a destination to initiate your call.');
+      return;
+    }
+
+    if (!isConnected) {
+      Alert.alert('Error', 'Not connected to Telnyx service');
+      return;
+    }
 
     try {
-      if (profile.loginMode === 'token') {
-        await voipClient.loginWithToken(
-          createTokenConfig(profile.sipToken, {
-            debug: true,
-            pushNotificationDeviceToken: pushToken || undefined,
-          })
-        );
-      } else {
-        await voipClient.login(
-          createCredentialConfig(profile.sipUsername, profile.sipPassword, {
-            debug: true,
-            pushNotificationDeviceToken: pushToken || undefined,
-          })
-        );
-      }
+      setIsStartingCall(true);
+      log('TelnyxLoginForm: Starting call to:', destinationNumber);
+      await voipClient.newCall(
+        destinationNumber.trim(),
+        profile?.callerIdName.trim() || undefined,
+        profile?.callerIdNumber.trim() || undefined
+      );
+      setIsStartingCall(false);
     } catch (error) {
-      setIsLoading(false);
+      setIsStartingCall(false);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      Alert.alert('Login Failed', errorMessage);
-      onLoginError?.(error);
+      log('TelnyxLoginForm: Error starting call:', errorMessage);
+      Alert.alert('Call Failed', `Failed to start call: ${errorMessage}`);
+    }
+  };
+
+  const handleEndCall = async () => {
+    if (!activeCall) {
+      setIsStartingCall(false);
+      return;
+    }
+
+    try {
+      await activeCall.hangup();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      log('TelnyxLoginForm: Error ending call:', errorMessage);
+      Alert.alert('End Call Failed', errorMessage);
+    } finally {
+      setIsStartingCall(false);
+    }
+  };
+
+  const handleAnswerCall = async () => {
+    if (!activeCall) return;
+
+    try {
+      await activeCall.answer();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      log('TelnyxLoginForm: Error answering call:', errorMessage);
+      Alert.alert('Answer Call Failed', errorMessage);
     }
   };
 
@@ -431,10 +520,18 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
         </View>
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <ProfileSwitcher
-            profileName={profile?.callerIdName || 'No Profile'}
-            onPress={() => openProfileSheet(profile)}
-          />
+          <Text style={styles.instructions}>
+            {isConnected
+              ? 'Enter a destination (phone number or SIP user) to initiate your call.'
+              : 'Please confirm details below and click Connect to make a call.'}
+          </Text>
+
+          {!isConnected && (
+            <ProfileSwitcher
+              profileName={profile?.callerIdName || 'No Profile'}
+              onPress={() => openProfileSheet(profile)}
+            />
+          )}
 
           <InfoRow label="Socket" testID="socketStatus">
             <View
@@ -452,17 +549,98 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
             <Text style={styles.infoValue}>{sessionId}</Text>
           </InfoRow>
 
-          <InfoRow label="Call State">
-            <View style={[styles.stateDot, { backgroundColor: callStateColor(activeCallState) }]} />
-            <Text style={styles.infoValue}>{callStateLabel(activeCallState)}</Text>
-          </InfoRow>
+          {!isConnected && (
+            <InfoRow label="Call State">
+              <View
+                style={[styles.stateDot, { backgroundColor: callStateColor(activeCallState) }]}
+              />
+              <Text style={styles.infoValue}>{callStateLabel(activeCallState)}</Text>
+            </InfoRow>
+          )}
+
+          {isConnected && (
+            <View style={styles.callSection}>
+              <View style={styles.segmentedControl}>
+                <TouchableOpacity
+                  style={[styles.segment, destinationType === 'sip' && styles.segmentSelected]}
+                  onPress={() => setDestinationType('sip')}
+                  testID="sipAddressToggle"
+                  accessibilityLabel="SIP address"
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      destinationType === 'sip' && styles.segmentTextSelected,
+                    ]}
+                  >
+                    SIP address
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.segment, destinationType === 'phone' && styles.segmentSelected]}
+                  onPress={() => setDestinationType('phone')}
+                  testID="phoneNumberToggle"
+                  accessibilityLabel="Phone number"
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      destinationType === 'phone' && styles.segmentTextSelected,
+                    ]}
+                  >
+                    Phone number
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <TextInput
+                style={[styles.callInput, inputFocused && styles.inputFocused]}
+                placeholder={
+                  destinationType === 'phone' ? 'Enter phone number' : 'Enter SIP address'
+                }
+                placeholderTextColor="gray"
+                value={destinationNumber}
+                onChangeText={setDestinationNumber}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setInputFocused(false)}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType={destinationType === 'phone' ? 'phone-pad' : 'default'}
+                testID="numberToCallTextField"
+                accessibilityLabel="Call input"
+              />
+
+              {isStartingCall || activeCall ? (
+                <InlineCallControls
+                  activeCall={activeCall}
+                  activeCallState={activeCallState}
+                  destination={destinationNumber}
+                  isStartingCall={isStartingCall}
+                  onAnswer={handleAnswerCall}
+                  onEnd={handleEndCall}
+                />
+              ) : (
+                <TouchableOpacity
+                  style={styles.callButton}
+                  onPress={handleStartCall}
+                  testID="callButton"
+                  accessibilityRole="button"
+                  accessibilityLabel="Call"
+                  activeOpacity={0.75}
+                >
+                  <Phone size={20} color={demoColors.text} pointerEvents="none" />
+                  <Text style={styles.callButtonText}>Call</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </ScrollView>
 
         <View style={styles.bottomBar}>
           <TouchableOpacity
             style={styles.connectButton}
             onPress={handleConnectDisconnect}
-            testID="connectDisconnectButton"
+            testID={isConnected ? 'disconnectButton' : 'connectDisconnectButton'}
             accessibilityLabel={connectButtonLabel}
           >
             <Text style={styles.connectButtonText}>{connectButtonLabel}</Text>
@@ -523,6 +701,13 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     paddingBottom: spacing.lg,
   },
+  instructions: {
+    color: demoColors.text,
+    fontSize: 18,
+    lineHeight: 24,
+    textAlign: 'center',
+    paddingHorizontal: spacing.sm,
+  },
   infoValue: {
     color: demoColors.text,
     fontSize: 14,
@@ -531,6 +716,66 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
+  },
+  callSection: {
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  segmentedControl: {
+    width: '100%',
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: demoColors.outline,
+    borderRadius: radii.sm,
+    overflow: 'hidden',
+  },
+  segment: {
+    flex: 1,
+    minHeight: sizes.toggleHeight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: demoColors.white,
+  },
+  segmentSelected: {
+    backgroundColor: demoColors.selectedGreen,
+  },
+  segmentText: {
+    color: demoColors.text,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  segmentTextSelected: {
+    color: demoColors.white,
+  },
+  callInput: {
+    width: '100%',
+    minHeight: 56,
+    borderWidth: 1,
+    borderColor: demoColors.inputOutline,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.sm,
+    color: demoColors.text,
+    fontSize: 16,
+    backgroundColor: demoColors.background,
+  },
+  inputFocused: {
+    borderColor: demoColors.selectedGreen,
+  },
+  callButton: {
+    minWidth: 112,
+    height: sizes.callButton,
+    borderRadius: radii.pill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    backgroundColor: demoColors.telnyxGreen,
+  },
+  callButtonText: {
+    color: demoColors.text,
+    fontSize: 16,
+    fontWeight: '700',
   },
   bottomBar: {
     minHeight: 128,

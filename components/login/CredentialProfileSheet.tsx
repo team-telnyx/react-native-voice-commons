@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { Pencil, Plus, Trash2 } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { demoColors, radii, spacing } from '../demoTheme';
 import { LabeledInput } from './LabeledInput';
 import { SavedProfile, profileKey } from './profileTypes';
@@ -43,6 +44,7 @@ export function CredentialProfileSheet({
   onCancel,
 }: CredentialProfileSheetProps) {
   const [isAddProfile, setIsAddProfile] = useState(false);
+  const insets = useSafeAreaInsets();
   const isTokenState = draftProfile.loginMode === 'token';
 
   useEffect(() => {
@@ -74,8 +76,20 @@ export function CredentialProfileSheet({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.sheetScrim}
       >
-        <View style={styles.sheet}>
-          <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled">
+        <View
+          style={[
+            styles.sheet,
+            {
+              paddingTop: Math.max(insets.top + spacing.md, spacing.xl),
+              paddingBottom: Math.max(insets.bottom + spacing.lg, spacing.lg),
+            },
+          ]}
+        >
+          <ScrollView
+            style={styles.sheetScroll}
+            contentContainerStyle={styles.sheetScrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
             <View style={styles.loginSheetContent}>
               <Text style={styles.sheetTitle}>Existing profiles</Text>
 
@@ -240,20 +254,22 @@ export function CredentialProfileSheet({
                     accessibilityLabel="Force TURN Relay"
                   />
                 </View>
-
-                <View style={styles.sheetActions}>
-                  <TouchableOpacity
-                    style={styles.sheetActionButton}
-                    onPress={handleSaveProfile}
-                    testID="saveButton"
-                    accessibilityLabel="Save"
-                  >
-                    <Text style={styles.saveButtonText}>Save</Text>
-                  </TouchableOpacity>
-                </View>
               </View>
             )}
           </ScrollView>
+
+          {isAddProfile && (
+            <View style={styles.stickyActions}>
+              <TouchableOpacity
+                style={styles.sheetActionButton}
+                onPress={handleSaveProfile}
+                testID="saveButton"
+                accessibilityLabel="Save"
+              >
+                <Text style={styles.saveButtonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -274,6 +290,9 @@ const styles = StyleSheet.create({
   },
   sheetScroll: {
     flex: 1,
+  },
+  sheetScrollContent: {
+    paddingBottom: spacing.xxl,
   },
   loginSheetContent: {
     gap: spacing.lg,
@@ -370,6 +389,12 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: spacing.xs,
     marginTop: spacing.xs,
+  },
+  stickyActions: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    paddingTop: spacing.sm,
+    backgroundColor: demoColors.white,
   },
   sheetActionButton: {
     minWidth: 86,

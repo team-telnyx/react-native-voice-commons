@@ -42,6 +42,7 @@ export declare class SessionManager {
    * Get the underlying Telnyx client instance
    */
   get telnyxClient(): TelnyxSDK.TelnyxRTC | undefined;
+  get useTrickleIce(): boolean;
   /**
    * Connect using credential authentication
    */

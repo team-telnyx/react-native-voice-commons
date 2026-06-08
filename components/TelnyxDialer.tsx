@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,15 +12,22 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { LogOut, Phone } from 'lucide-react-native';
-import { useTelnyxVoice, TelnyxConnectionState } from '../react-voice-commons-sdk/src';
+import { MoreVertical, Phone } from 'lucide-react-native';
+import {
+  Call,
+  useTelnyxVoice,
+  TelnyxConnectionState,
+  TelnyxCallState,
+} from '../react-voice-commons-sdk/src';
 import { demoColors, radii, sizes, spacing } from './demoTheme';
+import { InlineCallControls } from './InlineCallControls';
 
 interface TelnyxDialerProps {
   debug?: boolean;
 }
 
 type DestinationType = 'sip' | 'phone';
+const telnyxLogo = require('../assets/images/telnyx_logo.png');
 
 export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => {
   const { voipClient } = useTelnyxVoice();
@@ -28,10 +36,16 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
   const [callerIdName, setCallerIdName] = useState('');
   const [callerIdNumber, setCallerIdNumber] = useState('');
   const [connectionState, setConnectionState] = useState(voipClient.currentConnectionState);
+  const [activeCall, setActiveCall] = useState<Call | null>(voipClient.currentActiveCall);
+  const [activeCallState, setActiveCallState] = useState<TelnyxCallState | null>(
+    voipClient.currentActiveCall?.currentState || null
+  );
   const [inputFocused, setInputFocused] = useState(false);
+  const [isStartingCall, setIsStartingCall] = useState(false);
 
   const log = debug ? console.log : () => {};
   const isConnected = connectionState === TelnyxConnectionState.CONNECTED;
+  const sessionId = isConnected ? voipClient.sessionId || '-' : '-';
 
   useEffect(() => {
     const connectionSubscription = voipClient.connectionState$.subscribe((state) => {
@@ -46,6 +60,24 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
     loadProfile();
     return () => connectionSubscription.unsubscribe();
   }, [voipClient, log]);
+
+  useEffect(() => {
+    const activeCallSubscription = voipClient.activeCall$.subscribe((call) => {
+      setActiveCall(call);
+    });
+
+    return () => activeCallSubscription.unsubscribe();
+  }, [voipClient]);
+
+  useEffect(() => {
+    if (!activeCall) {
+      setActiveCallState(null);
+      return;
+    }
+
+    const callStateSubscription = activeCall.callState$.subscribe(setActiveCallState);
+    return () => callStateSubscription.unsubscribe();
+  }, [activeCall]);
 
   const loadProfile = async () => {
     try {
@@ -73,16 +105,48 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
     }
 
     try {
+      setIsStartingCall(true);
       log('TelnyxDialer: Starting call to:', destinationNumber);
       await voipClient.newCall(
         destinationNumber.trim(),
         callerIdName.trim() || undefined,
         callerIdNumber.trim() || undefined
       );
+      setIsStartingCall(false);
     } catch (error) {
+      setIsStartingCall(false);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       log('TelnyxDialer: Error starting call:', errorMessage);
       Alert.alert('Call Failed', `Failed to start call: ${errorMessage}`);
+    }
+  };
+
+  const handleEndCall = async () => {
+    if (!activeCall) {
+      setIsStartingCall(false);
+      return;
+    }
+
+    try {
+      await activeCall.hangup();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      log('TelnyxDialer: Error ending call:', errorMessage);
+      Alert.alert('End Call Failed', errorMessage);
+    } finally {
+      setIsStartingCall(false);
+    }
+  };
+
+  const handleAnswerCall = async () => {
+    if (!activeCall) return;
+
+    try {
+      await activeCall.answer();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      log('TelnyxDialer: Error answering call:', errorMessage);
+      Alert.alert('Answer Call Failed', errorMessage);
     }
   };
 
@@ -110,41 +174,45 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
         <View style={styles.header}>
-          <View>
-            <Text style={styles.title}>Telnyx Mobile WebRTC</Text>
-            <TouchableOpacity onLongPress={handleDisablePushNotifications} delayLongPress={2000}>
-              <Text
-                style={[
-                  styles.socketStatus,
-                  isConnected && styles.socketReady,
-                  connectionState === TelnyxConnectionState.CONNECTING && styles.socketPending,
-                  connectionState === TelnyxConnectionState.DISCONNECTED && styles.socketOffline,
-                ]}
-                testID="socketStatus"
-              >
-                Socket: {isConnected ? 'Client-ready' : connectionState}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <View style={styles.topSpacer} />
           <TouchableOpacity
             style={styles.headerIconButton}
-            onPress={handleDisconnect}
-            testID="disconnectButton"
-            accessibilityLabel="Disconnect"
+            onPress={() => Alert.alert('Menu', 'Websocket Messages')}
+            onLongPress={handleDisablePushNotifications}
+            delayLongPress={2000}
+            testID="menuButton"
+            accessibilityLabel="Menu"
           >
-            <LogOut size={22} color={demoColors.text} />
+            <MoreVertical size={22} color={demoColors.text} />
           </TouchableOpacity>
         </View>
 
-        <View style={styles.profileBar}>
-          <View>
-            <Text style={styles.profileLabel}>Caller name</Text>
-            <Text style={styles.profileValue}>{callerIdName || 'Unknown'}</Text>
-          </View>
-          <View style={styles.profileDivider} />
-          <View>
-            <Text style={styles.profileLabel}>Caller number</Text>
-            <Text style={styles.profileValue}>{callerIdNumber || '-'}</Text>
+        <Image
+          source={telnyxLogo}
+          style={styles.logo}
+          resizeMode="contain"
+          accessibilityLabel="Telnyx WebRTC"
+        />
+
+        <Text style={styles.instructions}>
+          Enter a destination (phone number or SIP user) to initiate your call.
+        </Text>
+
+        <View style={styles.stateStack}>
+          <StateRow
+            label="Socket"
+            value={isConnected ? 'Client-ready' : connectionState}
+            dotColor={socketStateColor(connectionState)}
+            testID="socketStatus"
+          />
+          <StateRow
+            label="Call State"
+            value={callStateLabel(activeCallState)}
+            dotColor={callStateColor(activeCallState)}
+          />
+          <View style={styles.stateSection}>
+            <Text style={styles.stateLabel}>Session ID</Text>
+            <Text style={styles.stateValue}>{sessionId}</Text>
           </View>
         </View>
 
@@ -192,25 +260,112 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
           autoCapitalize="none"
           autoCorrect={false}
           editable={isConnected}
-          testID="callInput"
+          testID="numberToCallTextField"
           accessibilityLabel="Call input"
         />
 
         <View style={styles.actions}>
+          {isStartingCall || activeCall ? (
+            <InlineCallControls
+              activeCall={activeCall}
+              activeCallState={activeCallState}
+              destination={destinationNumber}
+              isStartingCall={isStartingCall}
+              onAnswer={handleAnswerCall}
+              onEnd={handleEndCall}
+            />
+          ) : (
+            <TouchableOpacity
+              style={[styles.callButton, !isConnected && styles.buttonDisabled]}
+              onPress={handleStartCall}
+              disabled={!isConnected}
+              testID="callButton"
+              accessibilityRole="button"
+              accessibilityLabel="Call"
+              activeOpacity={0.75}
+            >
+              <Phone size={20} color={demoColors.text} pointerEvents="none" />
+              <Text style={styles.callButtonText}>Call</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.bottomBar}>
           <TouchableOpacity
-            style={[styles.callButton, !isConnected && styles.buttonDisabled]}
-            onPress={handleStartCall}
-            disabled={!isConnected}
-            testID="call"
-            accessibilityLabel="Call"
+            style={styles.disconnectButton}
+            onPress={handleDisconnect}
+            testID="disconnectButton"
+            accessibilityLabel="Disconnect"
           >
-            <Phone size={24} color={demoColors.text} />
+            <Text style={styles.disconnectButtonText}>Disconnect</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 };
+
+type StateRowProps = {
+  label: string;
+  value: string;
+  dotColor: string;
+  testID?: string;
+};
+
+function StateRow({ label, value, dotColor, testID }: StateRowProps) {
+  return (
+    <View style={styles.stateSection} testID={testID}>
+      <Text style={styles.stateLabel}>{label}</Text>
+      <View style={styles.stateValueRow}>
+        <View style={[styles.stateDot, { backgroundColor: dotColor }]} />
+        <Text style={styles.stateValue}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
+function socketStateColor(connectionState: TelnyxConnectionState) {
+  if (connectionState === TelnyxConnectionState.CONNECTED) return demoColors.telnyxGreen;
+  if (connectionState === TelnyxConnectionState.CONNECTING) return demoColors.ringing;
+  return demoColors.danger;
+}
+
+function callStateLabel(callState: TelnyxCallState | null) {
+  switch (callState) {
+    case TelnyxCallState.RINGING:
+      return 'Ringing';
+    case TelnyxCallState.CONNECTING:
+      return 'Connecting';
+    case TelnyxCallState.ACTIVE:
+      return 'Active';
+    case TelnyxCallState.HELD:
+      return 'Held';
+    case TelnyxCallState.DROPPED:
+      return 'Dropped';
+    case TelnyxCallState.FAILED:
+      return 'Error';
+    case TelnyxCallState.ENDED:
+    default:
+      return 'Done';
+  }
+}
+
+function callStateColor(callState: TelnyxCallState | null) {
+  switch (callState) {
+    case TelnyxCallState.RINGING:
+      return demoColors.ringing;
+    case TelnyxCallState.CONNECTING:
+    case TelnyxCallState.ACTIVE:
+    case TelnyxCallState.HELD:
+      return demoColors.selectedGreen;
+    case TelnyxCallState.DROPPED:
+    case TelnyxCallState.FAILED:
+      return demoColors.danger;
+    case TelnyxCallState.ENDED:
+    default:
+      return demoColors.disabled;
+  }
+}
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -223,66 +378,69 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flexGrow: 1,
-    padding: spacing.md,
-    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+    gap: spacing.md,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: spacing.sm,
+    justifyContent: 'flex-end',
+    minHeight: 64,
+    paddingTop: spacing.xs,
   },
-  title: {
-    color: demoColors.text,
-    fontSize: 24,
-    fontWeight: '500',
-  },
-  socketStatus: {
-    color: demoColors.mutedText,
-    fontSize: 14,
-    marginTop: 4,
-  },
-  socketReady: {
-    color: demoColors.selectedGreen,
-  },
-  socketPending: {
-    color: demoColors.ringing,
-  },
-  socketOffline: {
-    color: demoColors.danger,
+  topSpacer: {
+    flex: 1,
   },
   headerIconButton: {
-    width: sizes.callButton,
-    height: sizes.callButton,
+    width: 44,
+    height: 44,
     borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: demoColors.secondary,
+    backgroundColor: demoColors.white,
+    shadowColor: demoColors.text,
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
   },
-  profileBar: {
+  logo: {
+    width: 200,
+    height: 92,
+    alignSelf: 'center',
+  },
+  instructions: {
+    color: demoColors.text,
+    fontSize: 18,
+    lineHeight: 24,
+    textAlign: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  stateStack: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  stateSection: {
+    gap: 5,
+  },
+  stateLabel: {
+    color: demoColors.mutedText,
+    fontSize: 18,
+  },
+  stateValueRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: demoColors.secondary,
-    borderRadius: radii.md,
-    padding: spacing.sm,
-    gap: spacing.sm,
-    backgroundColor: demoColors.secondarySurface,
+    gap: spacing.xs,
   },
-  profileLabel: {
-    color: demoColors.mutedText,
-    fontSize: 14,
+  stateDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  profileValue: {
+  stateValue: {
     color: demoColors.text,
-    fontSize: 16,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  profileDivider: {
-    width: 1,
-    alignSelf: 'stretch',
-    backgroundColor: demoColors.secondary,
+    fontSize: 15,
   },
   segmentedControl: {
     flexDirection: 'row',
@@ -329,13 +487,41 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingTop: spacing.xs,
   },
-  callButton: {
-    width: sizes.callButton,
-    height: sizes.callButton,
-    borderRadius: radii.pill,
+  bottomBar: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingTop: spacing.xl,
+  },
+  disconnectButton: {
+    alignSelf: 'center',
+    minWidth: 220,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: radii.pill,
+    backgroundColor: demoColors.text,
+    paddingHorizontal: spacing.lg,
+  },
+  disconnectButtonText: {
+    color: demoColors.white,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  callButton: {
+    minWidth: 112,
+    height: sizes.callButton,
+    borderRadius: radii.pill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
     backgroundColor: demoColors.telnyxGreen,
+  },
+  callButtonText: {
+    color: demoColors.text,
+    fontSize: 16,
+    fontWeight: '700',
   },
   buttonDisabled: {
     backgroundColor: demoColors.disabled,

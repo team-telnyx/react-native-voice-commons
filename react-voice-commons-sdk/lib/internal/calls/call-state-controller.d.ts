@@ -12,6 +12,7 @@ export declare class CallStateController {
   private readonly _calls;
   private readonly _callMap;
   private _disposed;
+  private _listenerClient?;
   private _isWaitingForInvite?;
   private _onInviteAutoAccepted?;
   constructor(_sessionManager: SessionManager);
@@ -86,6 +87,11 @@ export declare class CallStateController {
    * Set up event listeners for the Telnyx client
    */
   private _setupClientListeners;
+  private _removeClientListeners;
+  private _handleTelnyxIncomingCall;
+  private _handleTelnyxReattachedCall;
+  private _handleTelnyxCallStateChanged;
+  private _handleTelnyxCallRemoved;
   /**
    * Handle incoming call or reattached call
    */

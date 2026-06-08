@@ -15,7 +15,6 @@ import {
   TelnyxVoipClient,
   createTelnyxVoipClient,
 } from '../react-voice-commons-sdk/src';
-import { CallManager } from '~/components/CallManager';
 import log from 'loglevel';
 
 // Enable debug logging for the Telnyx SDK
@@ -50,6 +49,7 @@ const usePlatformSpecificSetup = Platform.select({
 const voipClient = createTelnyxVoipClient({
   enableAppStateManagement: true,
   debug: true,
+  useTrickleIce: true,
 });
 
 export default function RootLayout() {
@@ -99,7 +99,6 @@ export default function RootLayout() {
             headerShown: false,
           }}
         />
-        <CallManager debug={true} />
         <PortalHost />
       </ThemeProvider>
     </TelnyxVoiceApp>

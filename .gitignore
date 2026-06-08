@@ -59,6 +59,7 @@ ios/Pods
 ios/Podfile.lock
 ios/.xcode.env.local
 ios/*.xcworkspace/xcuserdata/
+drivers/
 
 
 .yarn/

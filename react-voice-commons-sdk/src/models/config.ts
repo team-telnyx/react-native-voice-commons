@@ -7,6 +7,8 @@ export interface CredentialConfig {
   sipPassword: string;
   debug?: boolean;
   pushNotificationDeviceToken?: string;
+  /** Enable Trickle ICE. Default: false */
+  useTrickleIce?: boolean;
   /** Enable automatic call quality reporting. Default: true */
   enableCallReports?: boolean;
   /** Stats collection interval in seconds. Default: 5 */
@@ -25,6 +27,8 @@ export interface TokenConfig {
   token: string;
   debug?: boolean;
   pushNotificationDeviceToken?: string;
+  /** Enable Trickle ICE. Default: false */
+  useTrickleIce?: boolean;
   /** Enable automatic call quality reporting. Default: true */
   enableCallReports?: boolean;
   /** Stats collection interval in seconds. Default: 5 */
