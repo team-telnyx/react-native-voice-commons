@@ -22,7 +22,11 @@ import {
 import { createAttachMessage } from './messages/attach';
 import { Peer } from './peer';
 import type { TrickleIceCandidate } from './peer';
-import { prepareTrickleSdp, normalizeRemoteCandidateString, cleanCandidateString } from './sdp-utils';
+import {
+  prepareTrickleSdp,
+  normalizeRemoteCandidateString,
+  cleanCandidateString,
+} from './sdp-utils';
 import { WebRTCReporter } from './webrtc-reporter';
 import { CallReportCollector } from './call-report-collector';
 import type { CallReportConfig, CallReportSummary } from './call-report-models';
@@ -203,6 +207,7 @@ export class Call extends EventEmitter<CallEvents> {
   private debugEnabled: boolean = false;
   private callReportCollector: CallReportCollector | null = null;
   private callReportConfig: CallReportConfig;
+  private callReportPostingStarted = false;
   private callStartTimestamp: string;
 
   constructor({
@@ -351,7 +356,9 @@ export class Call extends EventEmitter<CallEvents> {
     log.debug('[Call] Setting state to connecting before answering');
     this.setState('connecting');
 
-    await this.peer.attachLocalStream({ audio: true, video: false }).then((peer) => peer.createAnswer());
+    await this.peer
+      .attachLocalStream({ audio: true, video: false })
+      .then((peer) => peer.createAnswer());
 
     if (!this.isTrickleIceEnabled()) {
       await this.peer.waitForIceGatheringComplete();
@@ -473,7 +480,7 @@ export class Call extends EventEmitter<CallEvents> {
       })
     );
 
-    this.peer?.close();
+    this.closePeerAfterCallReport('done');
     this.setState('ended');
   };
 
@@ -850,16 +857,20 @@ export class Call extends EventEmitter<CallEvents> {
     this.state = state;
 
     // Log state change to call report collector
-    this.callReportCollector?.log('info', 'Call state changed', { state, previousState: prevState });
+    this.callReportCollector?.log('info', 'Call state changed', {
+      state,
+      previousState: prevState,
+    });
 
     // Start stats collection when call becomes active
     if (state === 'active') {
       this.startCallReportCollector();
     }
 
-    // Post call report when call ends
-    if (state === 'ended' || state === 'dropped') {
-      this.stopAndPostCallReport(state === 'dropped' ? 'dropped' : 'done');
+    if (state === 'dropped') {
+      this.stopAndPostCallReport('dropped').catch((err) => {
+        log.error('[Call] Failed to stop and post call report:', err);
+      });
     }
 
     this.emit('telnyx.call.state', this, state);
@@ -946,7 +957,6 @@ export class Call extends EventEmitter<CallEvents> {
     this.telnyxSessionId = msg.params.telnyx_session_id;
   };
 
-
   private handleHangupEvent = (msg: ByeEvent) => {
     log.debug('[Call] Hangup event received', msg);
 
@@ -961,9 +971,8 @@ export class Call extends EventEmitter<CallEvents> {
     // Stop debug stats collection before ending the call
     this.stopDebugStats();
 
+    this.closePeerAfterCallReport('done');
     this.setState('ended');
-
-    this.peer?.close();
   };
 
   // --- Call Report Collector Integration ---
@@ -992,10 +1001,27 @@ export class Call extends EventEmitter<CallEvents> {
     };
   }
 
-  private stopAndPostCallReport(finalState: 'done' | 'dropped'): void {
-    if (!this.callReportCollector) return;
+  private closePeerAfterCallReport(finalState: 'done' | 'dropped'): void {
+    if (!this.callReportCollector) {
+      this.peer?.close();
+      return;
+    }
 
-    this.callReportCollector.stop();
+    this.stopAndPostCallReport(finalState)
+      .catch((err) => {
+        log.error('[Call] Failed to stop and post call report:', err);
+      })
+      .finally(() => {
+        this.peer?.close();
+      });
+  }
+
+  private async stopAndPostCallReport(finalState: 'done' | 'dropped'): Promise<void> {
+    if (!this.callReportCollector) return;
+    if (this.callReportPostingStarted) return;
+    this.callReportPostingStarted = true;
+
+    await this.callReportCollector.stop();
 
     const callReportId = CALL_REPORT_ID;
     if (!callReportId) {
@@ -1006,12 +1032,14 @@ export class Call extends EventEmitter<CallEvents> {
     const summary = this.buildReportSummary(finalState);
     const payload = this.callReportCollector.buildPayload(summary);
 
-    // Fire and forget — don't block call cleanup
-    this.callReportCollector.sendPayload(payload, callReportId, PROD_HOST, VOICE_SDK_ID).catch((err) => {
-      log.error('[Call] Failed to send call report:', err);
-    });
-
-    log.debug('[Call] Posted call report');
+    this.callReportCollector
+      .sendPayload(payload, callReportId, PROD_HOST, VOICE_SDK_ID)
+      .then(() => {
+        log.debug('[Call] Posted call report');
+      })
+      .catch((err) => {
+        log.error('[Call] Failed to send call report:', err);
+      });
   }
 
   private flushIntermediateReport(): void {
@@ -1023,9 +1051,11 @@ export class Call extends EventEmitter<CallEvents> {
     const summary = this.buildReportSummary('active');
     const payload = this.callReportCollector.flush(summary);
 
-    this.callReportCollector.sendPayload(payload, callReportId, PROD_HOST, VOICE_SDK_ID).catch((err) => {
-      log.error('[Call] Failed to send intermediate call report:', err);
-    });
+    this.callReportCollector
+      .sendPayload(payload, callReportId, PROD_HOST, VOICE_SDK_ID)
+      .catch((err) => {
+        log.error('[Call] Failed to send intermediate call report:', err);
+      });
 
     log.debug(`[Call] Flushed intermediate call report segment ${payload.segment}`);
   }

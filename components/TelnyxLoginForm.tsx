@@ -62,6 +62,7 @@ async function buildProfileConnectionConfig(
     debug: true,
     pushNotificationDeviceToken: pushToken || undefined,
     useTrickleIce: DEMO_USE_TRICKLE_ICE,
+    enableCallReports: true,
   };
 
   return nextProfile.loginMode === 'token'

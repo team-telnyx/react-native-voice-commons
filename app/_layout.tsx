@@ -50,6 +50,7 @@ const voipClient = createTelnyxVoipClient({
   enableAppStateManagement: true,
   debug: true,
   useTrickleIce: true,
+  enableCallReports: true,
 });
 
 export default function RootLayout() {

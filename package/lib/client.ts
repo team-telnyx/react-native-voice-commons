@@ -14,7 +14,12 @@ import { setSDKVersion } from './env';
 import { KeepAliveHandler } from './keep-alive-handler';
 import { eventBus } from './legacy-event-bus';
 import { LoginHandler } from './login-handler';
-import type { InviteEvent, AnswerEvent, CandidateEvent, EndOfCandidatesEvent } from './messages/call';
+import type {
+  InviteEvent,
+  AnswerEvent,
+  CandidateEvent,
+  EndOfCandidatesEvent,
+} from './messages/call';
 import {
   isInviteEvent,
   isAnswerEvent,
@@ -229,7 +234,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * Access any active call tracked by the SDK.
    * A call will be accessible until it has ended (transitioned to the 'ended' state).
    * This matches the iOS SDK `getCall(callId:)` method.
-   * 
+   *
    * @param callId The unique identifier of a call.
    * @returns The Call object that matches the requested callId, or null if not found.
    * @example
@@ -249,7 +254,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * @returns Array of all tracked Call objects
    */
   public getActiveCalls(): Call[] {
-    return Array.from(this.calls.values()).filter(call => call.state !== 'ended');
+    return Array.from(this.calls.values()).filter((call) => call.state !== 'ended');
   }
 
   /**
@@ -1131,9 +1136,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
 
     if (rejectedByPushAction) {
-      log.debug(
-        '[TelnyxRTC] Suppressing telnyx.call.incoming for call rejected via push action'
-      );
+      log.debug('[TelnyxRTC] Suppressing telnyx.call.incoming for call rejected via push action');
       return;
     }
 
@@ -1257,9 +1260,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         });
       }
     } else {
-      log.debug(
-        '[TelnyxRTC] No call found for callID, storing media event for later processing'
-      );
+      log.debug('[TelnyxRTC] No call found for callID, storing media event for later processing');
       // Media event received before invite - this is valid and expected for early media
     }
 
@@ -1311,12 +1312,20 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       // Transition call to active state
       log.debug('[TelnyxRTC] Setting call state to active');
       targetCall.setActive();
-      
+
       // Emit the answer event for applications to handle
       log.debug('[TelnyxRTC] Emitting telnyx.call.answered event');
       this.emit('telnyx.call.answered', targetCall, msg);
     } else {
       log.warn('[TelnyxRTC] No call found for callID in answer event');
+    }
+
+    if (msg.id != null) {
+      this.connection.send({
+        id: msg.id,
+        jsonrpc: '2.0',
+        result: { method: 'telnyx_rtc.answer' },
+      });
     }
 
     log.debug('[TelnyxRTC] ====== CALL ANSWER HANDLING COMPLETE ======');
@@ -1589,9 +1598,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
   private getCallReportConfig(): CallReportConfig {
     return {
-      enableCallReports: this.options.enableCallReports ?? DEFAULT_CALL_REPORT_CONFIG.enableCallReports,
-      callReportInterval: this.options.callReportInterval ?? DEFAULT_CALL_REPORT_CONFIG.callReportInterval,
-      callReportLogLevel: this.options.callReportLogLevel ?? DEFAULT_CALL_REPORT_CONFIG.callReportLogLevel,
+      enableCallReports:
+        this.options.enableCallReports ?? DEFAULT_CALL_REPORT_CONFIG.enableCallReports,
+      callReportInterval:
+        this.options.callReportInterval ?? DEFAULT_CALL_REPORT_CONFIG.callReportInterval,
+      callReportLogLevel:
+        this.options.callReportLogLevel ?? DEFAULT_CALL_REPORT_CONFIG.callReportLogLevel,
       callReportMaxLogEntries:
         this.options.callReportMaxLogEntries ?? DEFAULT_CALL_REPORT_CONFIG.callReportMaxLogEntries,
     };

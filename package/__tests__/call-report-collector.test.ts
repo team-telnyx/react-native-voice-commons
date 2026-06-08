@@ -28,6 +28,7 @@ const MOCK_SUMMARY: CallReportSummary = {
 function createMockPeerConnection(statsMap: Map<string, any> = new Map()) {
   return {
     getStats: jest.fn().mockResolvedValue({
+      get: (id: string) => statsMap.get(id),
       forEach: (cb: (report: any) => void) => {
         statsMap.forEach((report) => cb(report));
       },
@@ -67,35 +68,39 @@ describe('CallReportCollector', () => {
   });
 
   describe('start / stop', () => {
-    it('starts periodic stats collection', () => {
+    it('starts periodic stats collection', async () => {
       const collector = new CallReportCollector(DEFAULT_CONFIG);
       const mockPC = createMockPeerConnection();
 
       collector.start(mockPC);
 
-      // Advance by one interval
-      jest.advanceTimersByTime(5000);
+      // JS SDK behavior: collect every second for the first 10 seconds.
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+      await Promise.resolve();
       expect(mockPC.getStats).toHaveBeenCalledTimes(1);
 
-      // Advance by another interval
-      jest.advanceTimersByTime(5000);
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+      await Promise.resolve();
       expect(mockPC.getStats).toHaveBeenCalledTimes(2);
 
       collector.stop();
     });
 
-    it('stops collection on stop()', () => {
+    it('stops collection on stop()', async () => {
       const collector = new CallReportCollector(DEFAULT_CONFIG);
       const mockPC = createMockPeerConnection();
 
       collector.start(mockPC);
-      jest.advanceTimersByTime(5000);
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
       expect(mockPC.getStats).toHaveBeenCalledTimes(1);
 
-      collector.stop();
+      await collector.stop();
       jest.advanceTimersByTime(10000);
-      // No more calls after stop
-      expect(mockPC.getStats).toHaveBeenCalledTimes(1);
+      // stop() collects one final partial interval, then no more timer calls.
+      expect(mockPC.getStats).toHaveBeenCalledTimes(2);
     });
 
     it('does not start without a peer connection', () => {
@@ -105,14 +110,15 @@ describe('CallReportCollector', () => {
       jest.advanceTimersByTime(5000);
     });
 
-    it('only starts once (idempotent)', () => {
+    it('only starts once (idempotent)', async () => {
       const collector = new CallReportCollector(DEFAULT_CONFIG);
       const mockPC = createMockPeerConnection();
 
       collector.start(mockPC);
       collector.start(mockPC); // second call ignored
 
-      jest.advanceTimersByTime(5000);
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
       expect(mockPC.getStats).toHaveBeenCalledTimes(1);
 
       collector.stop();
@@ -155,7 +161,7 @@ describe('CallReportCollector', () => {
       const mockPC = createMockPeerConnection(statsMap);
       collector.start(mockPC);
 
-      jest.advanceTimersByTime(5000);
+      jest.advanceTimersByTime(1000);
       // Let the async getStats resolve
       await Promise.resolve();
 
@@ -193,7 +199,7 @@ describe('CallReportCollector', () => {
       collector.log('info', 'pre-flush log');
       collector.start(mockPC);
 
-      jest.advanceTimersByTime(5000);
+      jest.advanceTimersByTime(1000);
       await Promise.resolve();
 
       const flushed = collector.flush(MOCK_SUMMARY);
@@ -335,7 +341,7 @@ describe('CallReportCollector', () => {
       collector.start(mockPC);
 
       // First interval - no bitrate (no previous data)
-      jest.advanceTimersByTime(5000);
+      jest.advanceTimersByTime(1000);
       await Promise.resolve();
 
       // Update stats for second interval
@@ -348,10 +354,10 @@ describe('CallReportCollector', () => {
       });
 
       // Second interval - should have bitrate
-      jest.advanceTimersByTime(5000);
+      jest.advanceTimersByTime(1000);
       await Promise.resolve();
 
-      collector.stop();
+      await collector.stop();
 
       const payload = collector.buildPayload(MOCK_SUMMARY);
       expect(payload.stats).toHaveLength(2);
@@ -376,10 +382,10 @@ describe('CallReportCollector', () => {
       const mockPC = createMockPeerConnection(statsMap);
       collector.start(mockPC);
 
-      jest.advanceTimersByTime(5000);
+      jest.advanceTimersByTime(1000);
       await Promise.resolve();
 
-      collector.stop();
+      await collector.stop();
 
       const payload = collector.buildPayload(MOCK_SUMMARY);
       const conn = payload.stats[0].connection;
@@ -387,6 +393,85 @@ describe('CallReportCollector', () => {
       expect(conn!.roundTripTimeAvg).toBe(0.05);
       expect(conn!.packetsSent).toBe(100);
       expect(conn!.packetsReceived).toBe(95);
+    });
+
+    it('includes selected ICE candidate pair and transport stats', async () => {
+      const statsMap = new Map();
+      statsMap.set('local-candidate', {
+        id: 'local-candidate',
+        type: 'local-candidate',
+        address: '192.168.1.10',
+        port: 5000,
+        candidateType: 'srflx',
+        protocol: 'udp',
+        networkType: 'wifi',
+      });
+      statsMap.set('remote-candidate', {
+        id: 'remote-candidate',
+        type: 'remote-candidate',
+        address: '50.114.148.33',
+        port: 28714,
+        candidateType: 'host',
+        protocol: 'udp',
+      });
+      statsMap.set('pair', {
+        id: 'candidate-pair',
+        type: 'candidate-pair',
+        nominated: true,
+        state: 'succeeded',
+        writable: true,
+        localCandidateId: 'local-candidate',
+        remoteCandidateId: 'remote-candidate',
+        requestsSent: 3,
+        responsesReceived: 3,
+      });
+      statsMap.set('transport', {
+        type: 'transport',
+        iceState: 'connected',
+        dtlsState: 'connected',
+        srtpCipher: 'AES_CM_128_HMAC_SHA1_80',
+        tlsVersion: 'FEFD',
+        selectedCandidatePairChanges: 1,
+      });
+
+      const collector = new CallReportCollector(DEFAULT_CONFIG);
+      const mockPC = createMockPeerConnection(statsMap);
+      collector.start(mockPC);
+
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+      await collector.stop();
+
+      const payload = collector.buildPayload(MOCK_SUMMARY);
+      const interval = payload.stats[0];
+      expect(interval.ice).toEqual({
+        id: 'candidate-pair',
+        state: 'succeeded',
+        nominated: true,
+        writable: true,
+        requestsSent: 3,
+        responsesReceived: 3,
+        local: {
+          address: '192.168.1.10',
+          port: 5000,
+          candidateType: 'srflx',
+          protocol: 'udp',
+          networkType: 'wifi',
+        },
+        remote: {
+          address: '50.114.148.33',
+          port: 28714,
+          candidateType: 'host',
+          protocol: 'udp',
+        },
+      });
+      expect(interval.transport).toEqual({
+        iceState: 'connected',
+        dtlsState: 'connected',
+        srtpCipher: 'AES_CM_128_HMAC_SHA1_80',
+        tlsVersion: 'FEFD',
+        selectedCandidatePairChanges: 1,
+      });
     });
   });
 });
