@@ -154,6 +154,13 @@ class Call {
     return this._duration.value;
   }
   /**
+   * Latest WebRTC stats interval collected by the underlying SDK call report pipeline.
+   * Returns null until stats collection has produced its first interval.
+   */
+  get currentStats() {
+    return this._telnyxCall.getLatestStats?.() ?? null;
+  }
+  /**
    * Custom headers received from the WebRTC INVITE message.
    * These headers are passed during call initiation and can contain application-specific information.
    * Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".

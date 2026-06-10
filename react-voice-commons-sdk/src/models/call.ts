@@ -2,6 +2,7 @@ import { BehaviorSubject, Observable } from 'rxjs';
 import { distinctUntilChanged, map } from 'rxjs/operators';
 import { TelnyxCallState, CallStateHelpers } from './call-state';
 import { Call as TelnyxCall } from '@telnyx/react-native-voice-sdk';
+import type { StatsInterval } from '@telnyx/react-native-voice-sdk';
 import { Platform } from 'react-native';
 
 /**
@@ -108,6 +109,14 @@ export class Call {
    */
   get currentDuration(): number {
     return this._duration.value;
+  }
+
+  /**
+   * Latest WebRTC stats interval collected by the underlying SDK call report pipeline.
+   * Returns null until stats collection has produced its first interval.
+   */
+  get currentStats(): StatsInterval | null {
+    return this._telnyxCall.getLatestStats?.() ?? null;
   }
 
   /**
