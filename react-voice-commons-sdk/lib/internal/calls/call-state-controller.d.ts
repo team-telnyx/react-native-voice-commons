@@ -1,6 +1,11 @@
 import { Observable } from 'rxjs';
 import { Call } from '../../models/call';
 import { SessionManager } from '../session/session-manager';
+export type CustomHeader = {
+  name: string;
+  value: string;
+};
+export type CustomHeaders = Record<string, string> | CustomHeader[];
 /**
  * Central state machine for call management.
  *
@@ -63,8 +68,12 @@ export declare class CallStateController {
     destination: string,
     callerName?: string,
     callerNumber?: string,
-    customHeaders?: Record<string, string>
+    customHeaders?: CustomHeaders
   ): Promise<Call>;
+  /**
+   * Normalize public custom headers into the format expected by the underlying SDK.
+   */
+  private _normalizeCustomHeaders;
   /**
    * Set callbacks for waiting for invite logic (used for push notifications)
    */

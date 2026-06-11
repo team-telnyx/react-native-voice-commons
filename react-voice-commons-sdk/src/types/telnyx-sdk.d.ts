@@ -9,7 +9,7 @@ declare module '@telnyx/react-native-voice-sdk' {
   export interface CallOptions {
     callerIdName?: string;
     callerIdNumber?: string;
-    customHeaders?: Record<string, string>;
+    customHeaders?: { name: string; value: string }[];
     clientState?: string;
     destinationNumber?: string;
     audio?: boolean;

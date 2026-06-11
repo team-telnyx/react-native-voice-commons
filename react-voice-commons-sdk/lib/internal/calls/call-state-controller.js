@@ -160,7 +160,7 @@ class CallStateController {
         destinationNumber: destination,
         callerIdName: callerName,
         callerIdNumber: callerNumber,
-        customHeaders,
+        customHeaders: this._normalizeCustomHeaders(customHeaders),
         peerConnectionOptions: {
           useTrickleIce: this._sessionManager.useTrickleIce,
         },
@@ -183,6 +183,18 @@ class CallStateController {
       console.error('Failed to create new call:', error);
       throw error;
     }
+  }
+  /**
+   * Normalize public custom headers into the format expected by the underlying SDK.
+   */
+  _normalizeCustomHeaders(customHeaders) {
+    if (!customHeaders) {
+      return undefined;
+    }
+    if (Array.isArray(customHeaders)) {
+      return customHeaders;
+    }
+    return Object.entries(customHeaders).map(([name, value]) => ({ name, value }));
   }
   /**
    * Set callbacks for waiting for invite logic (used for push notifications)
