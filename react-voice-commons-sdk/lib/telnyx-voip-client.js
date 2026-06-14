@@ -11,6 +11,7 @@ const session_manager_1 = require('./internal/session/session-manager');
 const call_state_controller_1 = require('./internal/calls/call-state-controller');
 const voice_pn_bridge_1 = require('./internal/voice-pn-bridge');
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
+const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
 /**
  * The main public interface for the react-voice-commons module.
  *
@@ -257,8 +258,12 @@ class TelnyxVoipClient {
       const storedCredentialToken = await AsyncStorage.getItem('@credential_token');
       const storedPushToken = await AsyncStorage.getItem('@push_token');
       const storedUseTrickleIce = await AsyncStorage.getItem(USE_TRICKLE_ICE_STORAGE_KEY);
+      const storedMissedCallNotifications = await AsyncStorage.getItem(
+        MISSED_CALL_NOTIFICATIONS_STORAGE_KEY
+      );
       const useTrickleIce =
         storedUseTrickleIce === null ? this._options.useTrickleIce : storedUseTrickleIce === 'true';
+      const enableMissedCallNotifications = storedMissedCallNotifications === 'true';
       // Check if we have credential-based authentication data
       if (storedUsername && storedPassword) {
         // Create credential config from stored data
@@ -266,6 +271,7 @@ class TelnyxVoipClient {
         const config = createCredentialConfig(storedUsername, storedPassword, {
           pushNotificationDeviceToken: storedPushToken,
           useTrickleIce,
+          enableMissedCallNotifications,
         });
         if (this._options.debug) {
           console.log(
@@ -283,6 +289,7 @@ class TelnyxVoipClient {
         const config = createTokenConfig(storedCredentialToken, {
           pushNotificationDeviceToken: storedPushToken,
           useTrickleIce,
+          enableMissedCallNotifications,
         });
         if (this._options.debug) {
           console.log('TelnyxVoipClient: Reconnecting with stored token');
@@ -460,6 +467,10 @@ class TelnyxVoipClient {
         USE_TRICKLE_ICE_STORAGE_KEY,
         String(config.useTrickleIce ?? false)
       );
+      await AsyncStorage.setItem(
+        MISSED_CALL_NOTIFICATIONS_STORAGE_KEY,
+        String(config.enableMissedCallNotifications ?? false)
+      );
       if (config.pushNotificationDeviceToken) {
         await AsyncStorage.setItem('@push_token', config.pushNotificationDeviceToken);
       }
@@ -485,6 +496,10 @@ class TelnyxVoipClient {
       await AsyncStorage.setItem(
         USE_TRICKLE_ICE_STORAGE_KEY,
         String(config.useTrickleIce ?? false)
+      );
+      await AsyncStorage.setItem(
+        MISSED_CALL_NOTIFICATIONS_STORAGE_KEY,
+        String(config.enableMissedCallNotifications ?? false)
       );
       if (config.pushNotificationDeviceToken) {
         await AsyncStorage.setItem('@push_token', config.pushNotificationDeviceToken);

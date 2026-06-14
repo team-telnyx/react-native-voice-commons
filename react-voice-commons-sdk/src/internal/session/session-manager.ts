@@ -12,6 +12,7 @@ import {
 } from '../../models/config';
 
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
+const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
 
 /**
  * Manages the connection lifecycle to the Telnyx platform.
@@ -217,7 +218,11 @@ export class SessionManager {
         const storedCredentialToken = await AsyncStorage.getItem('@credential_token');
         const storedPushToken = await AsyncStorage.getItem('@push_token');
         const storedUseTrickleIce = await AsyncStorage.getItem(USE_TRICKLE_ICE_STORAGE_KEY);
+        const storedMissedCallNotifications = await AsyncStorage.getItem(
+          MISSED_CALL_NOTIFICATIONS_STORAGE_KEY
+        );
         const useTrickleIce = storedUseTrickleIce === 'true';
+        const enableMissedCallNotifications = storedMissedCallNotifications === 'true';
 
         // Check if we have credential-based authentication data
         if (storedUsername && storedPassword) {
@@ -226,6 +231,7 @@ export class SessionManager {
           this._currentConfig = createCredentialConfig(storedUsername, storedPassword, {
             pushNotificationDeviceToken: storedPushToken,
             useTrickleIce,
+            enableMissedCallNotifications,
           });
         }
         // Check if we have token-based authentication data
@@ -235,6 +241,7 @@ export class SessionManager {
           this._currentConfig = createTokenConfig(storedCredentialToken, {
             pushNotificationDeviceToken: storedPushToken,
             useTrickleIce,
+            enableMissedCallNotifications,
           });
         }
 
