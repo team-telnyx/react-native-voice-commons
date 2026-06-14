@@ -109,3 +109,9 @@ Trickle ICE is handled by the underlying `@telnyx/react-native-voice-sdk`. No ad
 - **Mixing Trickle ICE and non-Trickle ICE endpoints.** If one side supports Trickle ICE and the other does not, the connection still works — the Trickle-ICE-enabled side will fall back to the traditional full SDP exchange. No special handling is needed.
 - **Expecting instant call setup.** Trickle ICE reduces, but does not eliminate, ICE gathering time. The first candidates are sent immediately, but the call still requires at least one viable candidate pair to complete.
 - **Changing `useTrickleIce` mid-call.** The setting is evaluated at call creation time. Changing the client option or login config after a call has started does not affect the ongoing call.
+
+## See Also
+
+- [TelnyxVoipClientOptions](../interfaces/TelnyxVoipClientOptions.md) — full reference for client configuration including `useTrickleIce`
+- [Push Notification App Setup](../push-notification/app-setup.md) — configuring push notifications for incoming calls
+- [Error Handling](../error-handling/ErrorHandling.md) — handling call errors and reconnection
