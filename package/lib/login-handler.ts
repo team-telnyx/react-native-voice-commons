@@ -132,6 +132,7 @@ export class LoginHandler {
         password: options.password,
         attachCall: true, // Always include attach_call for reliable reconnection
         fromPush: this.isFromPush, // Pass the from push flag
+        enableMissedCallNotifications: options.enableMissedCallNotifications ?? false,
         userVariables,
         sessid,
       });
@@ -142,6 +143,7 @@ export class LoginHandler {
         login_token: options.login_token,
         attachCall: true, // Always include attach_call for reliable reconnection
         fromPush: this.isFromPush, // Pass the from push flag
+        enableMissedCallNotifications: options.enableMissedCallNotifications ?? false,
         userVariables,
         sessid,
       });

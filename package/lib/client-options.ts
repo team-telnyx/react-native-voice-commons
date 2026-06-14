@@ -35,6 +35,12 @@ export interface ClientOptions {
    */
   pushNotificationDeviceToken?: string;
   /**
+   * Enable native missed call push notifications.
+   * When enabled, the SDK tags the User-Agent with the missed-call notification marker.
+   * @default false
+   */
+  enableMissedCallNotifications?: boolean;
+  /**
    * Set the log level for the TelnyxRTC client.s
    * It can be one of the following values: 'trace', 'debug', 'info', 'warn', 'error', 'silent'.
    */
