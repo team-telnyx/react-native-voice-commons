@@ -55,7 +55,7 @@ export function CredentialProfileSheet({
 
   const handleAddProfile = () => {
     onEditProfile(null);
-    setIsAddProfile((current) => !current);
+    setIsAddProfile(true);
   };
 
   const handleEditProfile = (nextProfile: SavedProfile) => {
@@ -90,78 +90,83 @@ export function CredentialProfileSheet({
             contentContainerStyle={styles.sheetScrollContent}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={styles.loginSheetContent}>
-              <Text style={styles.sheetTitle}>Existing profiles</Text>
+            {!isAddProfile && (
+              <View style={styles.loginSheetContent}>
+                <Text style={styles.sheetTitle}>Existing profiles</Text>
 
-              <TouchableOpacity
-                style={styles.addProfileButton}
-                onPress={handleAddProfile}
-                testID="addNewProfileButton"
-                accessibilityLabel="Add new profile"
-              >
-                <Plus size={16} color={demoColors.text} />
-                <Text style={styles.addProfileText}>Add new profile</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.addProfileButton}
+                  onPress={handleAddProfile}
+                  testID="addNewProfileButton"
+                  accessibilityLabel="Add new profile"
+                >
+                  <Plus size={16} color={demoColors.text} />
+                  <Text style={styles.addProfileText}>Add new profile</Text>
+                </TouchableOpacity>
 
-              <Text style={styles.infoValue}>Production</Text>
+                <Text style={styles.infoValue}>Production</Text>
 
-              {profiles.length > 0 && (
-                <View style={styles.profileList} testID="profileList">
-                  {profiles.map((nextProfile) => {
-                    const isSelected =
-                      !!selectedProfile && profileKey(selectedProfile) === profileKey(nextProfile);
+                {profiles.length > 0 && (
+                  <View style={styles.profileList} testID="profileList">
+                    {profiles.map((nextProfile) => {
+                      const isSelected =
+                        !!selectedProfile &&
+                        profileKey(selectedProfile) === profileKey(nextProfile);
 
-                    return (
-                      <TouchableOpacity
-                        key={profileKey(nextProfile)}
-                        style={[styles.profileItem, isSelected && styles.profileItemSelected]}
-                        onPress={() => setSelectedProfile(nextProfile)}
-                      >
-                        <Text style={styles.profileItemText}>{nextProfile.callerIdName}</Text>
-                        {isSelected && (
-                          <>
-                            <TouchableOpacity
-                              onPress={() => handleEditProfile(nextProfile)}
-                              accessibilityLabel="Edit profile"
-                            >
-                              <Pencil size={22} color={demoColors.text} />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              onPress={() => onDeleteProfile(nextProfile)}
-                              accessibilityLabel="Delete profile"
-                            >
-                              <Trash2 size={22} color={demoColors.text} />
-                            </TouchableOpacity>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
+                      return (
+                        <TouchableOpacity
+                          key={profileKey(nextProfile)}
+                          style={[styles.profileItem, isSelected && styles.profileItemSelected]}
+                          onPress={() => setSelectedProfile(nextProfile)}
+                        >
+                          <Text style={styles.profileItemText}>{nextProfile.callerIdName}</Text>
+                          {isSelected && (
+                            <>
+                              <TouchableOpacity
+                                onPress={() => handleEditProfile(nextProfile)}
+                                accessibilityLabel="Edit profile"
+                              >
+                                <Pencil size={22} color={demoColors.text} />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                onPress={() => onDeleteProfile(nextProfile)}
+                                accessibilityLabel="Delete profile"
+                              >
+                                <Trash2 size={22} color={demoColors.text} />
+                              </TouchableOpacity>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+
+                <View style={styles.sheetActions}>
+                  <TouchableOpacity
+                    style={[styles.sheetActionButton, styles.cancelButton]}
+                    onPress={onCancel}
+                    testID="cancelButton"
+                    accessibilityLabel="Cancel"
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.sheetActionButton}
+                    onPress={onConfirm}
+                    testID="confirmButton"
+                    accessibilityLabel="Confirm"
+                  >
+                    <Text style={styles.saveButtonText}>Confirm</Text>
+                  </TouchableOpacity>
                 </View>
-              )}
-
-              <View style={styles.sheetActions}>
-                <TouchableOpacity
-                  style={[styles.sheetActionButton, styles.cancelButton]}
-                  onPress={onCancel}
-                  testID="cancelButton"
-                  accessibilityLabel="Cancel"
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.sheetActionButton}
-                  onPress={onConfirm}
-                  testID="confirmButton"
-                  accessibilityLabel="Confirm"
-                >
-                  <Text style={styles.saveButtonText}>Confirm</Text>
-                </TouchableOpacity>
               </View>
-            </View>
+            )}
 
             {isAddProfile && (
               <View style={styles.credentialsForm} testID="credentialsForm">
+                <Text style={styles.sheetTitle}>Profile credentials</Text>
+
                 <View style={styles.segmentedControl}>
                   <TouchableOpacity
                     style={[styles.segment, !isTokenState && styles.segmentSelected]}
@@ -260,6 +265,14 @@ export function CredentialProfileSheet({
 
           {isAddProfile && (
             <View style={styles.stickyActions}>
+              <TouchableOpacity
+                style={[styles.sheetActionButton, styles.cancelButton]}
+                onPress={onCancel}
+                testID="cancelButton"
+                accessibilityLabel="Cancel"
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.sheetActionButton}
                 onPress={handleSaveProfile}
