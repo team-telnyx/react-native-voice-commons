@@ -547,6 +547,7 @@ For complete API documentation and advanced usage patterns, see:
 
 - **[API Reference](https://developers.telnyx.com/development/webrtc/react-native-sdk)** - Auto-generated TypeDoc documentation
 - **[TelnyxVoiceApp Documentation](https://developers.telnyx.com/development/webrtc/react-native-sdk)** - Detailed component guide
+- **[iOS Missed Call Notifications](./docs-markdown/call-features/ios-missed-call-notifications.md)** - iOS-specific missed call handling with CallKit
 
 ## License
 
