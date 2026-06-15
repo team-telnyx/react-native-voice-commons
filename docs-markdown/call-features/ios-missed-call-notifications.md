@@ -40,7 +40,6 @@ Use `CallStateHelpers.isTerminated(state)` instead of checking only `ENDED`:
 
 ```tsx
 import {
-  TelnyxCallState,
   CallStateHelpers,
 } from '@telnyx/react-voice-commons-sdk';
 
@@ -48,10 +47,10 @@ function useMissedCallDetector(call: Call) {
   const [missed, setMissed] = React.useState(false);
 
   React.useEffect(() => {
-    let wasActive = call.currentState === TelnyxCallState.ACTIVE;
+    let wasActive = CallStateHelpers.isActive(call.currentState);
 
     const sub = call.callState$.subscribe((state) => {
-      if (state === TelnyxCallState.ACTIVE) {
+      if (CallStateHelpers.isActive(state)) {
         wasActive = true;
       }
 
