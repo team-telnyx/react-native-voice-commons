@@ -113,14 +113,14 @@ function MissedCallMonitor({
 Once you have detected a missed call, you can display it in your UI:
 
 ```tsx
-interface MissedCallRecord {
+interface CallRecord {
   call: Call;
-  timestamp: number; // app-recorded time when the call was detected as missed
+  timestamp: number; // app-recorded time when the call was detected
+  wasMissed: boolean; // true if the call was never answered
 }
 
-function CallHistoryItem({ record }: { record: MissedCallRecord }) {
-  const wasMissed = !record.call.currentState ||
-    record.call.currentState !== 'ACTIVE';
+function CallHistoryItem({ record }: { record: CallRecord }) {
+  const wasMissed = record.wasMissed;
 
   return (
     <View style={styles.container}>
