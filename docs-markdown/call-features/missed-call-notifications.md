@@ -245,7 +245,7 @@ React.useEffect(() => {
 }, [call]);
 ```
 
-- **Assuming ENDED means the caller hung up.** The `ENDED` state covers all termination reasons — caller hang-up, callee rejection, network error, or timeout. If you need to distinguish between these, check the `endReason` property on the `Call` object when availabel.
+- **Assuming ENDED means the caller hung up.** The `ENDED` state covers all termination reasons — caller hang-up, callee rejection, network error, or timeout. If you need to distinguish between these, check the `endReason` property on the `Call` object when available.
 
 ## See Also
 
