@@ -28,10 +28,10 @@ function useMissedCallDetector(call: Call) {
   const [missed, setMissed] = React.useState(false);
 
   React.useEffect(() => {
-    let wasActive = false;
+    let wasActive = CallStateHelpers.isActive(call.currentState);
 
     const sub = call.callState$.subscribe((state) => {
-      if (state === TelnyxCallState.ACTIVE) {
+      if (CallStateHelpers.isActive(state)) {
         wasActive = true;
       }
 
@@ -52,8 +52,8 @@ function useMissedCallDetector(call: Call) {
 
 **How it works:**
 
-1. `wasActive` starts as `false`
-2. If the call ever reaches `ACTIVE`, we set `wasActive = true`
+1. `wasActive` is initialized based on the call's current state — `true` if already `ACTIVE` or `HELD`
+2. If the call transitions to an active state, we set `wasActive = true`
 3. When the call reaches a terminal state (`ENDED`, `FAILED`, or `DROPPED`) and `wasActive` is still `false`, the call was never answered — it was missed
 
 ### Using the Active Call Stream
