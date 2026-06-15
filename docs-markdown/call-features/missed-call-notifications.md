@@ -19,7 +19,10 @@ The SDK does not have a dedicated "missed" call state. Instead, you detect the p
 Subscribe to `call.callState$` on each incoming call to track its lifecycle:
 
 ```tsx
-import { TelnyxCallState } from '@telnyx/react-voice-commons-sdk';
+import {
+  TelnyxCallState,
+  CallStateHelpers,
+} from '@telnyx/react-voice-commons-sdk';
 
 function useMissedCallDetector(call: Call) {
   const [missed, setMissed] = React.useState(false);
@@ -33,7 +36,7 @@ function useMissedCallDetector(call: Call) {
       }
 
       if (
-        state === TelnyxCallState.ENDED &&
+        CallStateHelpers.isTerminated(state) &&
         !wasActive
       ) {
         setMissed(true);
@@ -51,7 +54,7 @@ function useMissedCallDetector(call: Call) {
 
 1. `wasActive` starts as `false`
 2. If the call ever reaches `ACTIVE`, we set `wasActive = true`
-3. When the call ends (`ENDED`) and `wasActive` is still `false`, the call was never answered — it was missed
+3. When the call reaches a terminal state (`ENDED`, `FAILED`, or `DROPPED`) and `wasActive` is still `false`, the call was never answered — it was missed
 
 ### Using the Active Call Stream
 
@@ -61,7 +64,9 @@ For app-wide missed call detection, monitor `voipClient.activeCall$`:
 import {
   TelnyxVoipClient,
   TelnyxCallState,
+  CallStateHelpers,
 } from '@telnyx/react-voice-commons-sdk';
+import { filter } from 'rxjs/operators';
 
 function MissedCallMonitor({
   voipClient,
@@ -85,13 +90,13 @@ function MissedCallMonitor({
           if (state === TelnyxCallState.ACTIVE) {
             wasActiveRef.current = true;
           }
-          if (state === TelnyxCallState.ENDED && !wasActiveRef.current) {
+          if (CallStateHelpers.isTerminated(state) && !wasActiveRef.current) {
             onMissedCall(call);
           }
         });
 
         call.callState$
-          .pipe(filter((s) => s === TelnyxCallState.ENDED))
+          .pipe(filter((s) => CallStateHelpers.isTerminated(s)))
           .subscribe(() => stateSub.unsubscribe());
       }
     });
@@ -108,7 +113,15 @@ function MissedCallMonitor({
 Once you have detected a missed call, you can display it in your UI:
 
 ```tsx
-function CallHistoryItem({ call, wasMissed }: { call: Call; wasMissed: boolean }) {
+interface MissedCallRecord {
+  call: Call;
+  timestamp: number; // app-recorded time when the call was detected as missed
+}
+
+function CallHistoryItem({ record }: { record: MissedCallRecord }) {
+  const wasMissed = !record.call.currentState ||
+    record.call.currentState !== 'ACTIVE';
+
   return (
     <View style={styles.container}>
       <View style={styles.iconContainer}>
@@ -120,14 +133,14 @@ function CallHistoryItem({ call, wasMissed }: { call: Call; wasMissed: boolean }
       </View>
       <View style={styles.info}>
         <Text style={styles.caller}>
-          {call.callerName || call.callerNumber || 'Unknown'}
+          {record.call.callerName || record.call.callerNumber || 'Unknown'}
         </Text>
         <Text style={[styles.status, wasMissed && styles.missedText]}>
           {wasMissed ? 'Missed' : 'Answered'}
         </Text>
       </View>
       <Text style={styles.timestamp}>
-        {formatTimestamp(call.startedAt)}
+        {formatTimestamp(record.timestamp)}
       </Text>
     </View>
   );
@@ -167,6 +180,7 @@ import {
   TelnyxVoiceApp,
   createTelnyxVoipClient,
   TelnyxCallState,
+  CallStateHelpers,
 } from '@telnyx/react-voice-commons-sdk';
 
 const voipClient = createTelnyxVoipClient({
@@ -177,13 +191,13 @@ const voipClient = createTelnyxVoipClient({
 function AppContent() {
   const [activeCall, setActiveCall] = React.useState(null);
   const [missedCalls, setMissedCalls] = React.useState([]);
-  const [wasActive, setWasActive] = React.useState(false);
+  const wasActiveRef = React.useRef(false);
 
   React.useEffect(() => {
     const callSub = voipClient.activeCall$.subscribe((call) => {
       setActiveCall(call);
       if (call) {
-        setWasActive(false);
+        wasActiveRef.current = false;
       }
     });
     return () => callSub.unsubscribe();
@@ -194,17 +208,17 @@ function AppContent() {
 
     const stateSub = activeCall.callState$.subscribe((state) => {
       if (state === TelnyxCallState.ACTIVE) {
-        setWasActive(true);
+        wasActiveRef.current = true;
       }
-      if (state === TelnyxCallState.ENDED) {
-        if (!wasActive) {
+      if (CallStateHelpers.isTerminated(state)) {
+        if (!wasActiveRef.current) {
           setMissedCalls((prev) => [...prev, activeCall]);
         }
       }
     });
 
     return () => stateSub.unsubscribe();
-  }, [activeCall, wasActive]);
+  }, [activeCall]);
 
   return (
     <View>
@@ -235,6 +249,7 @@ Missed call detection interacts with the push notification system described in [
 ## Common Pitfalls
 
 - **Treating every ENDED call as missed.** A call that was answered and then hung up normally is not missed. Always check whether the call ever reached the `ACTIVE` state before flagging it as missed.
+- **Only checking for `ENDED` state.** A missed call can also end in `FAILED` or `DROPPED` states (e.g., network drop before answer). Use `CallStateHelpers.isTerminated(state)` to catch all terminal states, not just `ENDED`.
 - **Not unsubscribing from callState$.** The observable is hot — if you create subscriptions in `useEffect` without cleaning them up, you will get stale updates or duplicate missed-call entries.
 - **Missing the ACTIVE transition.** If your subscription starts after the call is already `ACTIVE` (for example, due to a slow render), you may miss the transition. Check `call.currentState` when you first subscribe and set your `wasActive` flag accordingly:
 
