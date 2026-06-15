@@ -162,7 +162,7 @@ callState$: RINGING ────────────────────
     │                                                │
     │  (user does not answer)                        │
     ▼                                                │
-callState$: ENDED  ◄── caller hangs up or timeout   │
+callState$: ENDED/FAILED/DROPPED  ◄── terminal state │
     │                                                │
     ▼                                                │
 App detects: wasActive === false                     │
@@ -242,8 +242,8 @@ export default function App() {
 
 Missed call detection interacts with the push notification system described in [Push Notification App Setup](../push-notification/app-setup.md):
 
-- **Push-launched cold starts**: When the OS wakes your app for an incoming call, the SDK handles login automatically. If the user does not answer, the call transitions to `ENDED` and your app can record the missed state.
-- **Background state**: If your app is in the background when the call comes in, CallKit (iOS) or ConnectionService (Android) shows the native incoming-call UI. If the call is missed, the SDK delivers the `ENDED` state when your app returns to the foreground.
+- **Push-launched cold starts**: When the OS wakes your app for an incoming call, the SDK handles login automatically. If the user does not answer, the call transitions to a terminal state (`ENDED`, `FAILED`, or `DROPPED`) and your app can record the missed state.
+- **Background state**: If your app is in the background when the call comes in, CallKit (iOS) or ConnectionService (Android) shows the native incoming-call UI. If the call is missed, the SDK delivers the terminal state when your app returns to the foreground.
 - **Double-login guard**: Make sure you follow the guidance in [Push Notification App Setup](../push-notification/app-setup.md) about avoiding double-login on push-launched cold starts. A double-login can cause the call to disconnect prematurely, which would incorrectly register as a "missed" call.
 
 ## Common Pitfalls
