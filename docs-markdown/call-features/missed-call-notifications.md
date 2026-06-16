@@ -20,7 +20,6 @@ Subscribe to `call.callState$` on each incoming call to track its lifecycle:
 
 ```tsx
 import {
-  TelnyxCallState,
   CallStateHelpers,
 } from '@telnyx/react-voice-commons-sdk';
 
@@ -63,7 +62,6 @@ For app-wide missed call detection, monitor `voipClient.activeCall$`:
 ```tsx
 import {
   TelnyxVoipClient,
-  TelnyxCallState,
   CallStateHelpers,
 } from '@telnyx/react-voice-commons-sdk';
 import { filter } from 'rxjs/operators';
@@ -87,7 +85,7 @@ function MissedCallMonitor({
 
         // Subscribe to the new call's state
         const stateSub = call.callState$.subscribe((state) => {
-          if (state === TelnyxCallState.ACTIVE) {
+          if (CallStateHelpers.isActive(state)) {
             wasActiveRef.current = true;
           }
           if (CallStateHelpers.isTerminated(state) && !wasActiveRef.current) {
@@ -179,7 +177,6 @@ import { View, Text } from 'react-native';
 import {
   TelnyxVoiceApp,
   createTelnyxVoipClient,
-  TelnyxCallState,
   CallStateHelpers,
 } from '@telnyx/react-voice-commons-sdk';
 
@@ -207,7 +204,7 @@ function AppContent() {
     if (!activeCall) return;
 
     const stateSub = activeCall.callState$.subscribe((state) => {
-      if (state === TelnyxCallState.ACTIVE) {
+      if (CallStateHelpers.isActive(state)) {
         wasActiveRef.current = true;
       }
       if (CallStateHelpers.isTerminated(state)) {
@@ -255,7 +252,7 @@ Missed call detection interacts with the push notification system described in [
 
 ```tsx
 React.useEffect(() => {
-  let wasActive = call.currentState === TelnyxCallState.ACTIVE;
+  let wasActive = CallStateHelpers.isActive(call.currentState);
   // ... subscribe as shown above
 }, [call]);
 ```
@@ -264,7 +261,6 @@ React.useEffect(() => {
 
 ## See Also
 
-- [iOS Missed Call Notifications](./ios-missed-call-notifications.md) — iOS-specific missed call handling with CallKit and app lifecycle
 - [Push Notification App Setup](../push-notification/app-setup.md) — configuring push notifications for incoming calls
 - [Push Notification Portal Setup](../push-notification/portal-setup.md) — Telnyx portal configuration for push certificates
 - [DTMF](./dtmf.md) — sending DTMF tones during an active call
