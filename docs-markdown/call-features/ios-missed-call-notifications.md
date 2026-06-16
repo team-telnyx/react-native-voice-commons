@@ -2,7 +2,7 @@
 
 On iOS, missed call detection works closely with CallKit and the app lifecycle. This guide explains iOS-specific behavior for detecting and displaying missed calls with the Telnyx React Voice Commons SDK.
 
-For the general (cross-platform) missed-call detection pattern, see [Missed Call Notification Handling](./missed-call-notifications.md).
+For the general (cross-platform) missed-call detection pattern, see the Missed Call Notification guide in this directory.
 
 ## How iOS Affects Missed Call Detection
 
@@ -134,6 +134,14 @@ function useMissedCallRecorder(
 }
 ```
 
+> **Tip:** Wrap `onMissed` with `React.useCallback` to avoid re-subscribing on every render:
+>
+> ```tsx
+> const onMissed = React.useCallback((record: MissedCallRecord) => {
+>   // handle missed call
+> }, []);
+> ```
+
 Do **not** reference `call.startedAt` — that property does not exist on the SDK `Call` class.
 
 ## iOS Background State Considerations
@@ -155,7 +163,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 async function persistMissedCall(record: MissedCallRecord) {
   const existing = await AsyncStorage.getItem('missedCalls');
   const calls: MissedCallRecord[] = existing ? JSON.parse(existing) : [];
-  calls.push(record);
+  // Deduplicate by callId to prevent double-recording
+  if (!calls.some((c) => c.callId === record.callId)) {
+    calls.push(record);
+  }
   await AsyncStorage.setItem('missedCalls', JSON.stringify(calls));
 }
 ```
@@ -199,6 +210,7 @@ function CallHistoryItem({
   return (
     <View style={styles.container}>
       <View style={styles.iconContainer}>
+        {/* Icon: from react-native-vector-icons or your icon library */}
         <Icon
           name="call-missed"
           color="#FF3B30"
@@ -212,6 +224,7 @@ function CallHistoryItem({
         <Text style={styles.missedText}>Missed</Text>
       </View>
       <Text style={styles.timestamp}>
+        {/* formatTimestamp: app-defined utility */}
         {formatTimestamp(record.detectedAt)}
       </Text>
     </View>
@@ -231,7 +244,6 @@ Note that we use `record.detectedAt` (our own `Date` object) for the timestamp d
 
 ## See Also
 
-- [Missed Call Notification Handling](./missed-call-notifications.md) — cross-platform missed-call detection guide
 - [Push Notification App Setup](../push-notification/app-setup.md) — configuring push notifications and double-login prevention
 - [Push Notification Portal Setup](../push-notification/portal-setup.md) — Telnyx portal configuration for VoIP certificates
 - [Call States](../enumerations/TelnyxCallState.md) — full list of call states and `CallStateHelpers`
