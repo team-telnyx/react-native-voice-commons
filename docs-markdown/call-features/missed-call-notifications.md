@@ -79,6 +79,8 @@ function MissedCallMonitor({
   const wasActiveRef = React.useRef(false);
 
   React.useEffect(() => {
+    const innerSubs: any[] = [];
+
     const sub = voipClient.activeCall$.subscribe((call) => {
       if (call && call !== previousCallRef.current) {
         // New call appeared
@@ -95,13 +97,18 @@ function MissedCallMonitor({
           }
         });
 
-        call.callState$
+        const termSub = call.callState$
           .pipe(filter((s) => CallStateHelpers.isTerminated(s)))
           .subscribe(() => stateSub.unsubscribe());
+
+        innerSubs.push(stateSub, termSub);
       }
     });
 
-    return () => sub.unsubscribe();
+    return () => {
+      sub.unsubscribe();
+      innerSubs.forEach((s) => s.unsubscribe());
+    };
   }, [voipClient, onMissedCall]);
 
   return null;
