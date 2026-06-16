@@ -197,36 +197,35 @@ const voipClient = createTelnyxVoipClient({
 });
 
 function AppContent() {
-  const [activeCall, setActiveCall] = React.useState(null);
   const [missedCalls, setMissedCalls] = React.useState([]);
-  const wasActiveRef = React.useRef(false);
 
   React.useEffect(() => {
+    const innerSubs = [];
+
     const callSub = voipClient.activeCall$.subscribe((call) => {
-      setActiveCall(call);
-      if (call) {
-        wasActiveRef.current = false;
-      }
-    });
-    return () => callSub.unsubscribe();
-  }, []);
+      if (!call) return;
 
-  React.useEffect(() => {
-    if (!activeCall) return;
+      // Initialize wasActive from the call's current state to avoid
+      // missing a quick RINGING→ACTIVE transition before the next render
+      let wasActive = CallStateHelpers.isActive(call.currentState);
 
-    const stateSub = activeCall.callState$.subscribe((state) => {
-      if (CallStateHelpers.isActive(state)) {
-        wasActiveRef.current = true;
-      }
-      if (CallStateHelpers.isTerminated(state)) {
-        if (!wasActiveRef.current) {
-          setMissedCalls((prev) => [...prev, activeCall]);
+      const stateSub = call.callState$.subscribe((state) => {
+        if (CallStateHelpers.isActive(state)) {
+          wasActive = true;
         }
-      }
+        if (CallStateHelpers.isTerminated(state) && !wasActive) {
+          setMissedCalls((prev) => [...prev, call]);
+        }
+      });
+
+      innerSubs.push(stateSub);
     });
 
-    return () => stateSub.unsubscribe();
-  }, [activeCall]);
+    return () => {
+      callSub.unsubscribe();
+      innerSubs.forEach((s) => s.unsubscribe());
+    };
+  }, []);
 
   return (
     <View>
