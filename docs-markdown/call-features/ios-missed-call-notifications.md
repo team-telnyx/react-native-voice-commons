@@ -2,7 +2,7 @@
 
 On iOS, missed call detection works closely with CallKit and the app lifecycle. This guide explains iOS-specific behavior for detecting and displaying missed calls with the Telnyx React Voice Commons SDK.
 
-For the general (cross-platform) missed-call detection pattern, see the Missed Call Notification guide in this directory.
+For the general (cross-platform) missed-call detection pattern, see [Missed Call Notifications](./missed-call-notifications.md).
 
 ## How iOS Affects Missed Call Detection
 
@@ -168,6 +168,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 async function persistMissedCall(record: MissedCallRecord) {
   const existing = await AsyncStorage.getItem('missedCalls');
+  // Note: JSON.parse revives detectedAt as a string (ISO 8601), not a Date.
+  // If you need Date methods later, revive it: new Date(c.detectedAt)
   const calls: MissedCallRecord[] = existing ? JSON.parse(existing) : [];
   // Deduplicate by callId to prevent double-recording
   if (!calls.some((c) => c.callId === record.callId)) {
@@ -195,6 +197,7 @@ A double-login (calling `login*` on mount when the SDK is already handling the p
 React.useEffect(() => {
   TelnyxVoipClient.isLaunchedFromPushNotification().then((isFromPush) => {
     if (!isFromPush) {
+      // voipClient = your TelnyxVoipClient instance
       voipClient.loginFromStoredConfig();
     }
   });
@@ -250,6 +253,7 @@ Note that we use `record.detectedAt` (our own `Date` object) for the timestamp d
 
 ## See Also
 
+- [Missed Call Notifications](./missed-call-notifications.md) — cross-platform missed-call detection guide
 - [Push Notification App Setup](../push-notification/app-setup.md) — configuring push notifications and double-login prevention
 - [Push Notification Portal Setup](../push-notification/portal-setup.md) — Telnyx portal configuration for VoIP certificates
 - [Call States](../enumerations/TelnyxCallState.md) — full list of call states and `CallStateHelpers`
