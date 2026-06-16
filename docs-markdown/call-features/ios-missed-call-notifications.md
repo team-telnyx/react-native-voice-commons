@@ -40,6 +40,7 @@ Use `CallStateHelpers.isTerminated(state)` instead of checking only `ENDED`:
 
 ```tsx
 import {
+  Call,
   CallStateHelpers,
 } from '@telnyx/react-voice-commons-sdk';
 
@@ -100,6 +101,11 @@ Using `CallStateHelpers.isActive` covers both `ACTIVE` and `HELD`, so a call tha
 The SDK `Call` object does **not** expose a `startedAt` or timestamp property. When recording a missed call for display, store your own timestamp at detection time:
 
 ```tsx
+import {
+  Call,
+  CallStateHelpers,
+} from '@telnyx/react-voice-commons-sdk';
+
 interface MissedCallRecord {
   callId: string;
   callerName: string;
