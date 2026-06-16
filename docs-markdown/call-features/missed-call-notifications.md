@@ -20,6 +20,7 @@ Subscribe to `call.callState$` on each incoming call to track its lifecycle:
 
 ```tsx
 import {
+  Call,
   CallStateHelpers,
 } from '@telnyx/react-voice-commons-sdk';
 
@@ -61,6 +62,7 @@ For app-wide missed call detection, monitor `voipClient.activeCall$`:
 
 ```tsx
 import {
+  Call,
   TelnyxVoipClient,
   CallStateHelpers,
 } from '@telnyx/react-voice-commons-sdk';
@@ -111,6 +113,8 @@ function MissedCallMonitor({
 Once you have detected a missed call, you can display it in your UI:
 
 ```tsx
+import { Call } from '@telnyx/react-voice-commons-sdk';
+
 interface CallRecord {
   call: Call;
   timestamp: number; // app-recorded time when the call was detected
@@ -257,7 +261,7 @@ React.useEffect(() => {
 }, [call]);
 ```
 
-- **Assuming ENDED means the caller hung up.** The `ENDED` state covers all termination reasons — caller hang-up, callee rejection, network error, or timeout. If you need to distinguish between these, check the `endReason` property on the `Call` object when available.
+- **Assuming ENDED means the caller hung up.** The `ENDED` state covers all termination reasons — caller hang-up, callee rejection, network error, or timeout. The SDK does not currently expose a termination reason property on the `Call` object. If you need to distinguish between these, use server-side call detail records (CDRs) via the Telnyx API.
 
 ## See Also
 
