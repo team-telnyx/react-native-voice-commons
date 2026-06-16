@@ -37,7 +37,11 @@ This sets the default for every call made through this client. Individual login 
 Pass `useTrickleIce` in the credential or token config when logging in. This overrides the client-level setting for that session:
 
 ```tsx
-import { createCredentialConfig } from '@telnyx/react-voice-commons-sdk';
+import { createTelnyxVoipClient, createCredentialConfig } from '@telnyx/react-voice-commons-sdk';
+
+const voipClient = createTelnyxVoipClient({
+  /* client-level options */
+});
 
 // Credential auth
 const config = createCredentialConfig('sip_user', 'sip_password', {
@@ -49,7 +53,11 @@ await voipClient.login(config);
 ```
 
 ```tsx
-import { createTokenConfig } from '@telnyx/react-voice-commons-sdk';
+import { createTelnyxVoipClient, createTokenConfig } from '@telnyx/react-voice-commons-sdk';
+
+const voipClient = createTelnyxVoipClient({
+  /* client-level options */
+});
 
 // Token auth
 const config = createTokenConfig('your_jwt_token', {

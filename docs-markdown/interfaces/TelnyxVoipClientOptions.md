@@ -30,7 +30,7 @@ Enable debug logging. Default: `false`
 
 > `optional` **useTrickleIce**: `boolean`
 
-Defined in: [telnyx-voip-client.ts:23](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L23)
+Defined in: [telnyx-voip-client.ts:24](https://github.com/team-telnyx/react-native-voice-commons/blob/c4cb510b087336b2b81d43ac34f7dbecac40ee19/react-voice-commons-sdk/src/telnyx-voip-client.ts#L24)
 
 Enable Trickle ICE for calls created by this client. When enabled, the SDK sends the initial SDP immediately and delivers ICE candidates incrementally, which can reduce call setup latency. Default: `false`
 
