@@ -49,6 +49,7 @@ function useMissedCallDetector(call: Call) {
   const [missed, setMissed] = React.useState(false);
 
   React.useEffect(() => {
+    setMissed(false);
     let wasActive = CallStateHelpers.isActive(call.currentState);
 
     const sub = call.callState$.subscribe((state) => {
@@ -79,6 +80,9 @@ On iOS, a VoIP push may launch your app from a terminated state. By the time you
 
 ```tsx
 import React from 'react';
+import {
+  CallStateHelpers,
+} from '@telnyx/react-voice-commons-sdk';
 
 React.useEffect(() => {
   let wasActive = CallStateHelpers.isActive(call.currentState);
@@ -172,9 +176,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 async function persistMissedCall(record: MissedCallRecord) {
   const existing = await AsyncStorage.getItem('missedCalls');
-  // Note: JSON.parse revives detectedAt as a string (ISO 8601), not a Date.
-  // If you need Date methods later, revive it: new Date(c.detectedAt)
-  const calls: MissedCallRecord[] = existing ? JSON.parse(existing) : [];
+  const calls: MissedCallRecord[] = existing
+    ? JSON.parse(existing).map((c: MissedCallRecord) => ({
+        ...c,
+        detectedAt: new Date(c.detectedAt),
+      }))
+    : [];
   // Deduplicate by callId to prevent double-recording
   if (!calls.some((c) => c.callId === record.callId)) {
     calls.push(record);
