@@ -121,5 +121,6 @@ Trickle ICE is handled by the underlying `@telnyx/react-native-voice-sdk`. No ad
 ## See Also
 
 - [TelnyxVoipClientOptions](../interfaces/TelnyxVoipClientOptions.md) — full reference for client configuration including `useTrickleIce`
+- [DTMF](./dtmf.md) — sending DTMF tones during an active call
 - [Push Notification App Setup](../push-notification/app-setup.md) — configuring push notifications for incoming calls
 - [Error Handling](../error-handling/ErrorHandling.md) — handling call errors and reconnection
