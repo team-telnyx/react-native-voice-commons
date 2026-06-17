@@ -81,6 +81,8 @@ function MissedCallMonitor({
 }) {
   const previousCallRef = React.useRef<Call | null>(null);
   const wasActiveRef = React.useRef(false);
+  const onMissedCallRef = React.useRef(onMissedCall);
+  onMissedCallRef.current = onMissedCall;
 
   React.useEffect(() => {
     const innerSubs: any[] = [];
@@ -97,7 +99,7 @@ function MissedCallMonitor({
             wasActiveRef.current = true;
           }
           if (CallStateHelpers.isTerminated(state) && !wasActiveRef.current) {
-            onMissedCall(call);
+            onMissedCallRef.current(call);
           }
         });
 
@@ -113,7 +115,7 @@ function MissedCallMonitor({
       sub.unsubscribe();
       innerSubs.forEach((s) => s.unsubscribe());
     };
-  }, [voipClient, onMissedCall]);
+  }, [voipClient]);
 
   return null;
 }
@@ -285,6 +287,22 @@ React.useEffect(() => {
 ```
 
 Without this reset, if call A was missed (`missed = true`), the hook immediately returns `true` for call B — even before call B is answered or terminated.
+
+- **Putting callback props in `useEffect` dependency arrays.** When a component accepts a callback prop (like `onMissedCall`) and uses it inside a `useEffect` that subscribes to an observable, including the callback in the dependency array causes the effect to tear down and re-subscribe on every parent render — callback props get new references each render unless the parent wraps them in `useCallback`. Instead, use a ref-based stable reference:
+
+```tsx
+const onMissedCallRef = React.useRef(onMissedCall);
+onMissedCallRef.current = onMissedCall;
+
+React.useEffect(() => {
+  const sub = call.callState$.subscribe((state) => {
+    if (CallStateHelpers.isTerminated(state) && !wasActive) {
+      onMissedCallRef.current({ /* ... */ });
+    }
+  });
+  return () => sub.unsubscribe();
+}, [call]); // onMissedCall NOT in deps — ref is stable
+```
 
 - **Assuming ENDED means the caller hung up.** The `ENDED` state covers all termination reasons — caller hang-up, callee rejection, network error, or timeout. The SDK does not currently expose a termination reason property on the `Call` object. If you need to distinguish between these, use server-side call detail records (CDRs) via the Telnyx API.
 
