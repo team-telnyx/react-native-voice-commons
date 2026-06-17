@@ -123,6 +123,12 @@ function useMissedCallRecorder(
   call: Call,
   onMissed: (record: MissedCallRecord) => void
 ) {
+  // Use a ref so the callback doesn't need to be in the effect deps.
+  // This avoids re-subscribing on every render when the parent doesn't
+  // wrap onMissed in useCallback.
+  const onMissedRef = React.useRef(onMissed);
+  onMissedRef.current = onMissed;
+
   React.useEffect(() => {
     let wasActive = CallStateHelpers.isActive(call.currentState);
 
@@ -132,7 +138,7 @@ function useMissedCallRecorder(
       }
 
       if (CallStateHelpers.isTerminated(state) && !wasActive) {
-        onMissed({
+        onMissedRef.current({
           callId: call.callId,
           callerName: call.callerName,
           callerNumber: call.callerNumber,
@@ -142,17 +148,9 @@ function useMissedCallRecorder(
     });
 
     return () => sub.unsubscribe();
-  }, [call, onMissed]);
+  }, [call]);
 }
 ```
-
-> **Tip:** Wrap `onMissed` with `React.useCallback` to avoid re-subscribing on every render:
->
-> ```tsx
-> const onMissed = React.useCallback((record: MissedCallRecord) => {
->   // handle missed call
-> }, []);
-> ```
 
 Do **not** reference `call.startedAt` — that property does not exist on the SDK `Call` class.
 
@@ -223,6 +221,7 @@ See [Push Notification App Setup](../push-notification/app-setup.md) for the com
 After detecting a missed call, display it in your call history or as a badge:
 
 ```tsx
+import React from 'react';
 import { View, Text } from 'react-native';
 
 function CallHistoryItem({
