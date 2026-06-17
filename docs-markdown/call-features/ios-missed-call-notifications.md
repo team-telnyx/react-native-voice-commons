@@ -39,6 +39,7 @@ A missed call on iOS can terminate in any of three states, not just `ENDED`:
 Use `CallStateHelpers.isTerminated(state)` instead of checking only `ENDED`:
 
 ```tsx
+import React from 'react';
 import {
   Call,
   CallStateHelpers,
@@ -77,6 +78,8 @@ function useMissedCallDetector(call: Call) {
 On iOS, a VoIP push may launch your app from a terminated state. By the time your component mounts and subscribes to `callState$`, the call may already be in a terminal state. Always check `call.currentState` at subscription time:
 
 ```tsx
+import React from 'react';
+
 React.useEffect(() => {
   let wasActive = CallStateHelpers.isActive(call.currentState);
 
@@ -101,6 +104,7 @@ Using `CallStateHelpers.isActive` covers both `ACTIVE` and `HELD`, so a call tha
 The SDK `Call` object does **not** expose a `startedAt` or timestamp property. When recording a missed call for display, store your own timestamp at detection time:
 
 ```tsx
+import React from 'react';
 import {
   Call,
   CallStateHelpers,
@@ -194,6 +198,8 @@ See the [double-login guard](../push-notification/app-setup.md#step-3-detect-pus
 A double-login (calling `login*` on mount when the SDK is already handling the push) causes the socket to disconnect and the call to terminate prematurely. The call would then appear as "missed" even though it was actually an integration bug. Always guard auto-login:
 
 ```tsx
+import React from 'react';
+
 React.useEffect(() => {
   TelnyxVoipClient.isLaunchedFromPushNotification().then((isFromPush) => {
     if (!isFromPush) {
@@ -211,6 +217,8 @@ See [Push Notification App Setup](../push-notification/app-setup.md) for the com
 After detecting a missed call, display it in your call history or as a badge:
 
 ```tsx
+import { View, Text } from 'react-native';
+
 function CallHistoryItem({
   record,
 }: {
