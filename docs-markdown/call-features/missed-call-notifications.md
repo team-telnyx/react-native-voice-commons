@@ -2,6 +2,8 @@
 
 When an incoming call is not answered, your app needs to detect the missed state and present it to the user. The Telnyx React Voice Commons SDK exposes call lifecycle events that make it straightforward to track missed calls and display appropriate UI.
 
+For iOS-specific missed call handling with CallKit integration, see the iOS Missed Call Notifications guide (available in this directory once merged).
+
 ## Overview
 
 A "missed call" in the Telnyx SDK context is any incoming call that transitions to a terminated state without ever reaching `ACTIVE`. This can happen when:
@@ -279,4 +281,5 @@ React.useEffect(() => {
 - [Push Notification App Setup](../push-notification/app-setup.md) — configuring push notifications for incoming calls
 - [Push Notification Portal Setup](../push-notification/portal-setup.md) — Telnyx portal configuration for push certificates
 - [DTMF](./dtmf.md) — sending DTMF tones during an active call
+- iOS Missed Call Notifications — iOS-specific guide with CallKit integration (link will work once the iOS guide is merged)
 - [Error Handling](../error-handling/ErrorHandling.md) — handling call errors and reconnection
