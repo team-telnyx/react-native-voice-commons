@@ -206,6 +206,7 @@ A double-login (calling `login*` on mount when the SDK is already handling the p
 
 ```tsx
 import React from 'react';
+import { TelnyxVoipClient } from '@telnyx/react-voice-commons-sdk';
 
 React.useEffect(() => {
   TelnyxVoipClient.isLaunchedFromPushNotification().then((isFromPush) => {
