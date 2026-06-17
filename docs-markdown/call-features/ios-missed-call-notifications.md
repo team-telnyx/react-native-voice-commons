@@ -2,8 +2,6 @@
 
 On iOS, missed call detection works closely with CallKit and the app lifecycle. This guide explains iOS-specific behavior for detecting and displaying missed calls with the Telnyx React Voice Commons SDK.
 
-For the general (cross-platform) missed-call detection pattern, see [Missed Call Notifications](./missed-call-notifications.md).
-
 ## How iOS Affects Missed Call Detection
 
 iOS introduces three app states that change how call state events arrive:
@@ -16,7 +14,7 @@ iOS introduces three app states that change how call state events arrive:
 
 ### CallKit and Missed Calls
 
-On iOS the SDK integrates with CallKit through `CallKitHandler` (automatically included in `TelnyxVoiceApp`). When an incoming VoIP push arrives:
+On iOS the SDK integrates with CallKit through the `CallKit` module (automatically included in `TelnyxVoiceApp`). When an incoming VoIP push arrives:
 
 1. CallKit displays the native incoming-call UI.
 2. If the user taps **Decline** or the caller hangs up, the call transitions to a terminal state.
@@ -269,7 +267,6 @@ Note that we use `record.detectedAt` (our own `Date` object) for the timestamp d
 
 ## See Also
 
-- [Missed Call Notifications](./missed-call-notifications.md) — cross-platform missed-call detection guide
 - [Push Notification App Setup](../push-notification/app-setup.md) — configuring push notifications and double-login prevention
 - [Push Notification Portal Setup](../push-notification/portal-setup.md) — Telnyx portal configuration for VoIP certificates
 - [Call States](../enumerations/TelnyxCallState.md) — full list of call states and `CallStateHelpers`
