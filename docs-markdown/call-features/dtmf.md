@@ -90,4 +90,5 @@ DTMF is handled entirely by the underlying `@telnyx/react-native-voice-sdk` and 
 
 ## See Also
 
-- [iOS Missed Call Notifications](./ios-missed-call-notifications.md) — iOS-specific missed call handling with CallKit and app lifecycle
+- [Missed Call Notifications](./missed-call-notifications.md) — detecting and displaying missed calls
+- [iOS Missed Call Notifications](./ios-missed-call-notifications.md) — iOS-specific missed call handling with CallKit

@@ -2,7 +2,7 @@
 
 On iOS, missed call detection works closely with CallKit and the app lifecycle. This guide explains iOS-specific behavior for detecting and displaying missed calls with the Telnyx React Voice Commons SDK.
 
-For the general (cross-platform) missed-call detection pattern, see the Missed Call Notifications guide (available in this directory once merged).
+For the general (cross-platform) missed-call detection pattern, see [Missed Call Notifications](./missed-call-notifications.md).
 
 ## How iOS Affects Missed Call Detection
 
@@ -269,7 +269,7 @@ Note that we use `record.detectedAt` (our own `Date` object) for the timestamp d
 
 ## See Also
 
-- Missed Call Notifications — cross-platform missed-call detection guide (link will work once the cross-platform guide is merged)
+- [Missed Call Notifications](./missed-call-notifications.md) — cross-platform missed-call detection guide
 - [Push Notification App Setup](../push-notification/app-setup.md) — configuring push notifications and double-login prevention
 - [Push Notification Portal Setup](../push-notification/portal-setup.md) — Telnyx portal configuration for VoIP certificates
 - [Call States](../enumerations/TelnyxCallState.md) — full list of call states and `CallStateHelpers`
