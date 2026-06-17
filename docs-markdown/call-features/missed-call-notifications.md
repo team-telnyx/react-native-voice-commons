@@ -19,6 +19,7 @@ The SDK does not have a dedicated "missed" call state. Instead, you detect the p
 Subscribe to `call.callState$` on each incoming call to track its lifecycle:
 
 ```tsx
+import React from 'react';
 import {
   Call,
   CallStateHelpers,
@@ -61,6 +62,7 @@ function useMissedCallDetector(call: Call) {
 For app-wide missed call detection, monitor `voipClient.activeCall$`:
 
 ```tsx
+import React from 'react';
 import {
   Call,
   TelnyxVoipClient,
@@ -85,7 +87,7 @@ function MissedCallMonitor({
       if (call && call !== previousCallRef.current) {
         // New call appeared
         previousCallRef.current = call;
-        wasActiveRef.current = false;
+        wasActiveRef.current = CallStateHelpers.isActive(call.currentState);
 
         // Subscribe to the new call's state
         const stateSub = call.callState$.subscribe((state) => {
@@ -120,7 +122,10 @@ function MissedCallMonitor({
 Once you have detected a missed call, you can display it in your UI:
 
 ```tsx
+import { View, Text } from 'react-native';
 import { Call } from '@telnyx/react-voice-commons-sdk';
+// Icon and formatTimestamp are app-specific placeholders
+// Replace with your own icon library and date formatting utility
 
 interface CallRecord {
   call: Call;
