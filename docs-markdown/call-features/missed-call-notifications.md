@@ -31,6 +31,7 @@ function useMissedCallDetector(call: Call) {
   const [missed, setMissed] = React.useState(false);
 
   React.useEffect(() => {
+    setMissed(false); // Reset for each new call
     let wasActive = CallStateHelpers.isActive(call.currentState);
 
     const sub = call.callState$.subscribe((state) => {
@@ -55,9 +56,10 @@ function useMissedCallDetector(call: Call) {
 
 **How it works:**
 
-1. `wasActive` is initialized based on the call's current state — `true` if already `ACTIVE` or `HELD`
-2. If the call transitions to an active state, we set `wasActive = true`
-3. When the call reaches a terminal state (`ENDED`, `FAILED`, or `DROPPED`) and `wasActive` is still `false`, the call was never answered — it was missed
+1. When the `call` prop changes, `missed` is reset to `false` so state from a previous call doesn't leak
+2. `wasActive` is initialized based on the call's current state — `true` if already `ACTIVE` or `HELD`
+3. If the call transitions to an active state, we set `wasActive = true`
+4. When the call reaches a terminal state (`ENDED`, `FAILED`, or `DROPPED`) and `wasActive` is still `false`, the call was never answered — it was missed
 
 ### Using the Active Call Stream
 
@@ -273,6 +275,18 @@ React.useEffect(() => {
   // ... subscribe as shown above
 }, [call]);
 ```
+
+- **Not resetting `missed` state when the call prop changes.** When using a hook like `useMissedCallDetector(call)`, the `missed` state from a previous call persists if the component receives a new `call` prop. Always reset the state at the start of the `useEffect` that depends on `call`:
+
+```tsx
+React.useEffect(() => {
+  setMissed(false); // Reset for each new call
+  let wasActive = CallStateHelpers.isActive(call.currentState);
+  // ... subscribe to callState$
+}, [call]);
+```
+
+Without this reset, if call A was missed (`missed = true`), the hook immediately returns `true` for call B — even before call B is answered or terminated.
 
 - **Assuming ENDED means the caller hung up.** The `ENDED` state covers all termination reasons — caller hang-up, callee rejection, network error, or timeout. The SDK does not currently expose a termination reason property on the `Call` object. If you need to distinguish between these, use server-side call detail records (CDRs) via the Telnyx API.
 
