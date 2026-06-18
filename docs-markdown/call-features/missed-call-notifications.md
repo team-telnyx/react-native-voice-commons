@@ -312,4 +312,3 @@ React.useEffect(() => {
 - [Push Notification Portal Setup](../push-notification/portal-setup.md) — Telnyx portal configuration for push certificates
 - [DTMF](./dtmf.md) — sending DTMF tones during an active call
 - [Error Handling](../error-handling/ErrorHandling.md) — handling call errors and reconnection
-- [iOS Missed Call Notifications](./ios-missed-call-notifications.md) — iOS-specific missed call handling
