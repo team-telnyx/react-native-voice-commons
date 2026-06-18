@@ -270,4 +270,3 @@ Note that we use `record.detectedAt` (our own `Date` object) for the timestamp d
 - [Push Notification Portal Setup](../push-notification/portal-setup.md) — Telnyx portal configuration for VoIP certificates
 - [Call States](../enumerations/TelnyxCallState.md) — full list of call states and `CallStateHelpers`
 - [DTMF](./dtmf.md) — sending DTMF tones during an active call
-- [Missed Call Notifications](./missed-call-notifications.md) — general missed call notification handling
