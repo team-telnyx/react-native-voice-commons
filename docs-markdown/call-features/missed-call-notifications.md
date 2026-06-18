@@ -308,6 +308,8 @@ React.useEffect(() => {
 
 ## See Also
 
+- [iOS Missed Call Notifications](./ios-missed-call-notifications.md) — iOS-specific missed call notification handling
+
 - [Push Notification App Setup](../push-notification/app-setup.md) — configuring push notifications for incoming calls
 - [Push Notification Portal Setup](../push-notification/portal-setup.md) — Telnyx portal configuration for push certificates
 - [DTMF](./dtmf.md) — sending DTMF tones during an active call
