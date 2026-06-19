@@ -210,7 +210,7 @@ function AppContent() {
   const [missedCalls, setMissedCalls] = React.useState<Call[]>([]);
 
   React.useEffect(() => {
-    const innerSubs = [];
+    const innerSubs: any[] = [];
 
     const callSub = voipClient.activeCall$.subscribe((call) => {
       if (!call) return;
