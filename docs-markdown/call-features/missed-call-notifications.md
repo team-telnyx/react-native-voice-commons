@@ -195,6 +195,7 @@ Show "Missed Call" notification / UI                 │
 import React from 'react';
 import { View, Text } from 'react-native';
 import {
+  Call,
   TelnyxVoiceApp,
   createTelnyxVoipClient,
   CallStateHelpers,
@@ -206,7 +207,7 @@ const voipClient = createTelnyxVoipClient({
 });
 
 function AppContent() {
-  const [missedCalls, setMissedCalls] = React.useState([]);
+  const [missedCalls, setMissedCalls] = React.useState<Call[]>([]);
 
   React.useEffect(() => {
     const innerSubs = [];
