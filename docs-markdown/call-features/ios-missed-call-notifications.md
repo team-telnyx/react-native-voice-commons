@@ -222,12 +222,20 @@ After detecting a missed call, display it in your call history or as a badge:
 
 ```tsx
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 // Adjust the import for your icon library (e.g. react-native-vector-icons)
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
+interface MissedCallRecord {
+  callId: string;
+  callerName: string;
+  callerNumber: string;
+  detectedAt: Date;
+}
+
 // Replace with your app's date formatting utility
-const formatTimestamp = (ts: number) => new Date(ts).toLocaleTimeString();
+const formatTimestamp = (ts: Date | number) =>
+  new Date(ts instanceof Date ? ts.getTime() : ts).toLocaleTimeString();
 
 function CallHistoryItem({
   record,
@@ -255,6 +263,32 @@ function CallHistoryItem({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+  },
+  iconContainer: {
+    marginRight: 12,
+  },
+  info: {
+    flex: 1,
+  },
+  caller: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  missedText: {
+    fontSize: 12,
+    color: '#FF3B30',
+  },
+  timestamp: {
+    fontSize: 12,
+    color: '#999',
+  },
+});
 ```
 
 Note that we use `record.detectedAt` (our own `Date` object) for the timestamp display, not any SDK property.
