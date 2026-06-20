@@ -96,6 +96,8 @@ const voipClient = createTelnyxVoipClient({
 
 When you log in with `useTrickleIce: true`, the SDK persists the setting to AsyncStorage under the key `@use_trickle_ice`. On subsequent reconnections — including auto-reconnect via `TelnyxVoiceApp` and push-notification-triggered reconnects — the stored value is used as the default, unless a new login config explicitly overrides it.
 
+> **Note:** This storage key is an internal implementation detail and may change in future versions without a semver major bump. Do not read from or write to this key directly in your app code.
+
 ## When to use Trickle ICE
 
 Trickle ICE is most beneficial when:
