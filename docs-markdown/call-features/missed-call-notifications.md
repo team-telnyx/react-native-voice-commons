@@ -127,7 +127,7 @@ Once you have detected a missed call, you can display it in your UI:
 
 ```tsx
 import { View, Text, StyleSheet } from 'react-native';
-import { Call } from '@telnyx/react-voice-commons-sdk';
+
 // Adjust the import for your icon library (e.g. react-native-vector-icons)
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
@@ -209,7 +209,6 @@ Show "Missed Call" notification / UI                 │
 import React from 'react';
 import { View, Text } from 'react-native';
 import {
-  Call,
   TelnyxVoiceApp,
   createTelnyxVoipClient,
   CallStateHelpers,
@@ -220,6 +219,13 @@ const voipClient = createTelnyxVoipClient({
   enableAppStateManagement: true,
   debug: true,
 });
+
+interface CallRecord {
+  callerName: string;
+  callerNumber: string;
+  timestamp: number;
+  wasMissed: boolean;
+}
 
 function AppContent() {
   const [missedCalls, setMissedCalls] = React.useState<CallRecord[]>([]);
@@ -254,7 +260,7 @@ function AppContent() {
       // Unsubscribe from this call's state when it terminates
       // to avoid accumulating subscriptions across multiple calls
       const termSub = call.callState$
-        .pipe(filter((s: string) => CallStateHelpers.isTerminated(s)))
+        .pipe(filter((s) => CallStateHelpers.isTerminated(s)))
         .subscribe(() => stateSub.unsubscribe());
 
       innerSubs.push(stateSub, termSub);
