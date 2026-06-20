@@ -126,7 +126,7 @@ function MissedCallMonitor({
 Once you have detected a missed call, you can display it in your UI:
 
 ```tsx
-import { View, Text } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Call } from '@telnyx/react-voice-commons-sdk';
 // Adjust the import for your icon library (e.g. react-native-vector-icons)
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -135,9 +135,10 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 const formatTimestamp = (ts: number) => new Date(ts).toLocaleTimeString();
 
 interface CallRecord {
-  call: Call;
-  timestamp: number; // app-recorded time when the call was detected
-  wasMissed: boolean; // true if the call was never answered
+  callerName: string;    // captured from call.callerName at detection time
+  callerNumber: string; // captured from call.callerNumber at detection time
+  timestamp: number;    // app-recorded time when the call was detected
+  wasMissed: boolean;   // true if the call was never answered
 }
 
 function CallHistoryItem({ record }: { record: CallRecord }) {
@@ -154,7 +155,7 @@ function CallHistoryItem({ record }: { record: CallRecord }) {
       </View>
       <View style={styles.info}>
         <Text style={styles.caller}>
-          {record.call.callerName || record.call.callerNumber || 'Unknown'}
+          {record.callerName || record.callerNumber || 'Unknown'}
         </Text>
         <Text style={[styles.status, wasMissed && styles.missedText]}>
           {wasMissed ? 'Missed' : 'Answered'}
@@ -166,6 +167,16 @@ function CallHistoryItem({ record }: { record: CallRecord }) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flexDirection: 'row', alignItems: 'center', padding: 12 },
+  iconContainer: { marginRight: 12 },
+  info: { flex: 1 },
+  caller: { fontSize: 16, fontWeight: '600' },
+  status: { fontSize: 14, color: '#666' },
+  missedText: { color: '#FF3B30' },
+  timestamp: { fontSize: 12, color: '#999' },
+});
 ```
 
 ## Missed Call Notification Flow
@@ -203,6 +214,7 @@ import {
   createTelnyxVoipClient,
   CallStateHelpers,
 } from '@telnyx/react-voice-commons-sdk';
+import { filter } from 'rxjs/operators';
 
 const voipClient = createTelnyxVoipClient({
   enableAppStateManagement: true,
@@ -210,7 +222,7 @@ const voipClient = createTelnyxVoipClient({
 });
 
 function AppContent() {
-  const [missedCalls, setMissedCalls] = React.useState<Call[]>([]);
+  const [missedCalls, setMissedCalls] = React.useState<CallRecord[]>([]);
 
   React.useEffect(() => {
     const innerSubs: any[] = [];
@@ -227,17 +239,32 @@ function AppContent() {
           wasActive = true;
         }
         if (CallStateHelpers.isTerminated(state) && !wasActive) {
-          setMissedCalls((prev) => [...prev, call]);
+          setMissedCalls((prev) => [
+            ...prev,
+            {
+              callerName: call.callerName,
+              callerNumber: call.callerNumber,
+              timestamp: Date.now(),
+              wasMissed: true,
+            },
+          ]);
         }
       });
 
-      innerSubs.push(stateSub);
+      // Unsubscribe from this call's state when it terminates
+      // to avoid accumulating subscriptions across multiple calls
+      const termSub = call.callState$
+        .pipe(filter((s: string) => CallStateHelpers.isTerminated(s)))
+        .subscribe(() => stateSub.unsubscribe());
+
+      innerSubs.push(stateSub, termSub);
     });
 
     return () => {
       callSub.unsubscribe();
       innerSubs.forEach((s) => s.unsubscribe());
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
