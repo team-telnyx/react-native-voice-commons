@@ -128,8 +128,11 @@ Once you have detected a missed call, you can display it in your UI:
 ```tsx
 import { View, Text } from 'react-native';
 import { Call } from '@telnyx/react-voice-commons-sdk';
-// Icon and formatTimestamp are app-specific placeholders
-// Replace with your own icon library and date formatting utility
+// Adjust the import for your icon library (e.g. react-native-vector-icons)
+import Icon from 'react-native-vector-icons/MaterialIcons';
+
+// Replace with your app's date formatting utility
+const formatTimestamp = (ts: number) => new Date(ts).toLocaleTimeString();
 
 interface CallRecord {
   call: Call;
