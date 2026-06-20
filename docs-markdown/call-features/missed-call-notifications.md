@@ -307,6 +307,8 @@ Missed call detection interacts with the push notification system described in [
 - **Missing the ACTIVE transition.** If your subscription starts after the call is already `ACTIVE` (for example, due to a slow render), you may miss the transition. Check `call.currentState` when you first subscribe and set your `wasActive` flag accordingly:
 
 ```tsx
+import React from 'react';
+import { CallStateHelpers } from '@telnyx/react-voice-commons-sdk';
 React.useEffect(() => {
   let wasActive = CallStateHelpers.isActive(call.currentState);
   // ... subscribe as shown above
@@ -316,6 +318,8 @@ React.useEffect(() => {
 - **Not resetting `missed` state when the call prop changes.** When using a hook like `useMissedCallDetector(call)`, the `missed` state from a previous call persists if the component receives a new `call` prop. Always reset the state at the start of the `useEffect` that depends on `call`:
 
 ```tsx
+import React from 'react';
+import { CallStateHelpers } from '@telnyx/react-voice-commons-sdk';
 React.useEffect(() => {
   setMissed(false); // Reset for each new call
   let wasActive = CallStateHelpers.isActive(call.currentState);
@@ -328,6 +332,8 @@ Without this reset, if call A was missed (`missed = true`), the hook immediately
 - **Putting callback props in `useEffect` dependency arrays.** When a component accepts a callback prop (like `onMissedCall`) and uses it inside a `useEffect` that subscribes to an observable, including the callback in the dependency array causes the effect to tear down and re-subscribe on every parent render — callback props get new references each render unless the parent wraps them in `useCallback`. Instead, use a ref-based stable reference:
 
 ```tsx
+import React from 'react';
+import { CallStateHelpers } from '@telnyx/react-voice-commons-sdk';
 const onMissedCallRef = React.useRef(onMissedCall);
 onMissedCallRef.current = onMissedCall;
 
