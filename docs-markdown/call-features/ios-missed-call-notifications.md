@@ -223,6 +223,11 @@ After detecting a missed call, display it in your call history or as a badge:
 ```tsx
 import React from 'react';
 import { View, Text } from 'react-native';
+// Adjust the import for your icon library (e.g. react-native-vector-icons)
+import Icon from 'react-native-vector-icons/MaterialIcons';
+
+// Replace with your app's date formatting utility
+const formatTimestamp = (ts: number) => new Date(ts).toLocaleTimeString();
 
 function CallHistoryItem({
   record,
@@ -232,7 +237,6 @@ function CallHistoryItem({
   return (
     <View style={styles.container}>
       <View style={styles.iconContainer}>
-        {/* Icon: from react-native-vector-icons or your icon library */}
         <Icon
           name="call-missed"
           color="#FF3B30"
@@ -246,7 +250,6 @@ function CallHistoryItem({
         <Text style={styles.missedText}>Missed</Text>
       </View>
       <Text style={styles.timestamp}>
-        {/* formatTimestamp: app-defined utility */}
         {formatTimestamp(record.detectedAt)}
       </Text>
     </View>
