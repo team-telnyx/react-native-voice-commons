@@ -171,18 +171,22 @@ When your app is in the background and an incoming call arrives:
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 async function persistMissedCall(record: MissedCallRecord) {
-  const existing = await AsyncStorage.getItem('missedCalls');
-  const calls: MissedCallRecord[] = existing
-    ? JSON.parse(existing).map((c: MissedCallRecord) => ({
-        ...c,
-        detectedAt: new Date(c.detectedAt),
-      }))
-    : [];
-  // Deduplicate by callId to prevent double-recording
-  if (!calls.some((c) => c.callId === record.callId)) {
-    calls.push(record);
+  try {
+    const existing = await AsyncStorage.getItem('missedCalls');
+    const calls: MissedCallRecord[] = existing
+      ? JSON.parse(existing).map((c: MissedCallRecord) => ({
+          ...c,
+          detectedAt: new Date(c.detectedAt),
+        }))
+      : [];
+    // Deduplicate by callId to prevent double-recording
+    if (!calls.some((c) => c.callId === record.callId)) {
+      calls.push(record);
+    }
+    await AsyncStorage.setItem('missedCalls', JSON.stringify(calls));
+  } catch (error) {
+    console.error('Failed to persist missed call record:', error);
   }
-  await AsyncStorage.setItem('missedCalls', JSON.stringify(calls));
 }
 ```
 
@@ -194,7 +198,7 @@ When the OS launches the app from a terminated state to deliver a VoIP push:
 2. The call may already be in a terminal state by the time your component mounts.
 3. Use `TelnyxVoipClient.isLaunchedFromPushNotification()` to detect this scenario and avoid double-login.
 
-See the [double-login guard](../push-notification/app-setup.md#step-3-detect-push-launched-cold-starts-avoid-double-login) section in the push notification docs for the full pattern.
+See the [double-login guard](../push-notification/app-setup.md) section in the push notification docs for the full pattern.
 
 ### Double-Login and False Missed Calls
 
@@ -226,6 +230,7 @@ import { View, Text, StyleSheet } from 'react-native';
 // Adjust the import for your icon library (e.g. react-native-vector-icons)
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
+// Same MissedCallRecord interface as above — repeated here for a self-contained example
 interface MissedCallRecord {
   callId: string;
   callerName: string;
