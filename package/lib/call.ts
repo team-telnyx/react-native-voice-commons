@@ -31,6 +31,8 @@ import { WebRTCReporter } from './webrtc-reporter';
 import { CallReportCollector } from './call-report-collector';
 import type { CallReportConfig, CallReportSummary } from './call-report-models';
 import { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
+import { QualityMetricsCollector } from './quality-metrics-collector';
+import type { CallQualityMetrics } from './quality-metrics';
 import { CALL_REPORT_ID, VOICE_SDK_ID } from './global';
 import { PROD_HOST, SDK_VERSION } from './env';
 
@@ -209,6 +211,15 @@ export class Call extends EventEmitter<CallEvents> {
   private callReportConfig: CallReportConfig;
   private callReportPostingStarted = false;
   private callStartTimestamp: string;
+  private qualityMetricsCollector: QualityMetricsCollector | null = null;
+  private latestQualityMetrics: CallQualityMetrics | null = null;
+
+  /**
+   * Callback invoked with the latest quality metrics snapshot on each
+   * polling interval while quality metrics collection is active.
+   * Set this to receive periodic quality updates.
+   */
+  public onQualityMetrics: ((metrics: CallQualityMetrics) => void) | null = null;
 
   constructor({
     connection,
@@ -328,6 +339,73 @@ export class Call extends EventEmitter<CallEvents> {
    */
   public getDebugStatsId(): string | null {
     return this.reporter?.getDebugStatsId() ?? null;
+  }
+
+  // ── Quality Metrics ───────────────────────────────────────────────────────
+
+  /**
+   * Start periodic call quality metrics collection.
+   *
+   * The collector polls the peer connection's `getStats()` at the configured
+   * interval (default 5 seconds) and invokes the `onQualityMetrics` callback
+   * with a normalized metrics snapshot on each tick.
+   *
+   * This is called automatically when the call becomes active, but can also be
+   * called manually to start collection earlier or with a custom interval.
+   *
+   * @param intervalMs Polling interval in milliseconds. Default: 5000 (5s).
+   */
+  public startQualityMetrics(intervalMs?: number): void {
+    if (this.qualityMetricsCollector) {
+      log.debug('[Call] Quality metrics already started');
+      return;
+    }
+
+    const pc = this.peer?.getPeerConnection();
+    if (!pc) {
+      log.warn('[Call] Cannot start quality metrics: no peer connection');
+      return;
+    }
+
+    this.qualityMetricsCollector = new QualityMetricsCollector({
+      peerConnection: pc as any,
+      callId: this.callId,
+      intervalMs,
+    });
+
+    this.qualityMetricsCollector.onMetrics = (metrics) => {
+      this.latestQualityMetrics = metrics;
+      if (this.onQualityMetrics) {
+        this.onQualityMetrics(metrics);
+      }
+    };
+
+    this.qualityMetricsCollector.start();
+  }
+
+  /**
+   * Stop call quality metrics collection.
+   */
+  public stopQualityMetrics(): void {
+    if (this.qualityMetricsCollector) {
+      this.qualityMetricsCollector.stop();
+      this.qualityMetricsCollector = null;
+    }
+  }
+
+  /**
+   * Check if quality metrics collection is active.
+   */
+  public isQualityMetricsActive(): boolean {
+    return this.qualityMetricsCollector?.isActive() ?? false;
+  }
+
+  /**
+   * Get the most recently collected quality metrics snapshot, or null if
+   * no metrics have been collected yet.
+   */
+  public getQualityMetrics(): CallQualityMetrics | null {
+    return this.latestQualityMetrics;
   }
 
   public get remoteStream() {
@@ -467,6 +545,7 @@ export class Call extends EventEmitter<CallEvents> {
 
     // Stop debug stats collection before ending the call
     this.stopDebugStats();
+    this.stopQualityMetrics();
 
     this.connection.send(
       createHangupRequest({
@@ -865,12 +944,18 @@ export class Call extends EventEmitter<CallEvents> {
     // Start stats collection when call becomes active
     if (state === 'active') {
       this.startCallReportCollector();
+      this.startQualityMetrics();
     }
 
     if (state === 'dropped') {
+      this.stopQualityMetrics();
       this.stopAndPostCallReport('dropped').catch((err) => {
         log.error('[Call] Failed to stop and post call report:', err);
       });
+    }
+
+    if (state === 'ended') {
+      this.stopQualityMetrics();
     }
 
     this.emit('telnyx.call.state', this, state);
@@ -970,6 +1055,7 @@ export class Call extends EventEmitter<CallEvents> {
 
     // Stop debug stats collection before ending the call
     this.stopDebugStats();
+    this.stopQualityMetrics();
 
     this.closePeerAfterCallReport('done');
     this.setState('ended');
