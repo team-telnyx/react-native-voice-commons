@@ -19,7 +19,7 @@ Both delivery mechanisms receive the same `CallQualityMetrics` snapshot.
 import type { CallQualityMetrics, CallQualityLevel } from '@telnyx/react-native-voice-sdk';
 
 // Register a callback on the Call object
-call.onQualityMetrics = (metrics: CallQualityMetrics | null) => {
+call.onQualityMetrics = (metrics: CallQualityMetrics) => {
   console.log('Quality:', metrics.qualityLevel, 'MOS:', metrics.mos);
 };
 
