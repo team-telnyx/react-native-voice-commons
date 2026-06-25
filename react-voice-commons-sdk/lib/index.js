@@ -38,6 +38,7 @@ var __exportStar =
   };
 Object.defineProperty(exports, '__esModule', { value: true });
 exports.useAppReadyNotifier =
+  exports.CallQualityLevel =
   exports.VoicePnBridge =
   exports.createTokenConfig =
   exports.createCredentialConfig =
@@ -212,6 +213,14 @@ Object.defineProperty(exports, 'createTokenConfig', {
   enumerable: true,
   get: function () {
     return config_1.createTokenConfig;
+  },
+});
+// Re-export call quality metrics types from the underlying SDK
+var react_native_voice_sdk_1 = require('@telnyx/react-native-voice-sdk');
+Object.defineProperty(exports, 'CallQualityLevel', {
+  enumerable: true,
+  get: function () {
+    return react_native_voice_sdk_1.CallQualityLevel;
   },
 });
 // Export CallKit functionality

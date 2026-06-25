@@ -2,6 +2,7 @@ import { BehaviorSubject, Observable } from 'rxjs';
 import { distinctUntilChanged, map } from 'rxjs/operators';
 import { TelnyxCallState, CallStateHelpers } from './call-state';
 import { Call as TelnyxCall } from '@telnyx/react-native-voice-sdk';
+import type { CallQualityMetrics } from '@telnyx/react-native-voice-sdk';
 import { Platform } from 'react-native';
 
 /**
@@ -16,6 +17,7 @@ export class Call {
   private readonly _isMuted = new BehaviorSubject<boolean>(false);
   private readonly _isHeld = new BehaviorSubject<boolean>(false);
   private readonly _duration = new BehaviorSubject<number>(0);
+  private readonly _qualityMetrics = new BehaviorSubject<CallQualityMetrics | null>(null);
 
   private _durationTimer?: NodeJS.Timeout;
   private _startTime?: Date;
@@ -162,6 +164,23 @@ export class Call {
    */
   get duration$(): Observable<number> {
     return this._duration.asObservable().pipe(distinctUntilChanged());
+  }
+
+  /**
+   * Observable stream of call quality metrics updates.
+   * Emits `null` initially, then a {@link CallQualityMetrics} object
+   * each time the underlying SDK collects a new sample.
+   */
+  get qualityMetrics$(): Observable<CallQualityMetrics | null> {
+    return this._qualityMetrics.asObservable().pipe(distinctUntilChanged());
+  }
+
+  /**
+   * Current call quality metrics (synchronous access).
+   * Returns `null` until the first metrics sample is collected.
+   */
+  get currentQualityMetrics(): CallQualityMetrics | null {
+    return this._qualityMetrics.value;
   }
 
   /**
@@ -395,6 +414,7 @@ export class Call {
     this._isMuted.complete();
     this._isHeld.complete();
     this._duration.complete();
+    this._qualityMetrics.complete();
   }
 
   /**
@@ -484,6 +504,11 @@ export class Call {
         }
       }
     });
+
+    // Forward quality metrics from the underlying SDK
+    this._telnyxCall.onQualityMetrics = (metrics: CallQualityMetrics | null) => {
+      this._qualityMetrics.next(metrics);
+    };
   }
 
   /**

@@ -473,6 +473,7 @@ For complete API documentation and advanced usage patterns, see the [TelnyxVoice
 
 - [Push Notification Setup](./push-notification/app-setup.md) — FCM/APNs setup and avoiding double-login on push-launched cold starts.
 - [Sending DTMF Tones](./call-features/dtmf.md) — dialpad presses, IVR sequences, and gating on call state.
+- [Call Quality Metrics](./call-features/call-quality-metrics.md) — real-time MOS estimation, quality level classification, and WebRTC stats normalization.
 - [Error Handling](./error-handling/ErrorHandling.md) — common errors and recovery patterns.
 - [Expo Integration](./expo/ExpoIntegration.md) — Expo-specific setup.
 

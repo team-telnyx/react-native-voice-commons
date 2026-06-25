@@ -84,6 +84,7 @@ class Call {
     this._isMuted = new rxjs_1.BehaviorSubject(false);
     this._isHeld = new rxjs_1.BehaviorSubject(false);
     this._duration = new rxjs_1.BehaviorSubject(0);
+    this._qualityMetrics = new rxjs_1.BehaviorSubject(null);
     // Set initial state based on whether this is a reattached call
     if (isReattached) {
       console.log('Call: Setting initial state to ACTIVE for reattached call');
@@ -199,6 +200,21 @@ class Call {
    */
   get duration$() {
     return this._duration.asObservable().pipe((0, operators_1.distinctUntilChanged)());
+  }
+  /**
+   * Observable stream of call quality metrics updates.
+   * Emits `null` initially, then a {@link CallQualityMetrics} object
+   * each time the underlying SDK collects a new sample.
+   */
+  get qualityMetrics$() {
+    return this._qualityMetrics.asObservable().pipe((0, operators_1.distinctUntilChanged)());
+  }
+  /**
+   * Current call quality metrics (synchronous access).
+   * Returns `null` until the first metrics sample is collected.
+   */
+  get currentQualityMetrics() {
+    return this._qualityMetrics.value;
   }
   /**
    * Observable that emits true when the call can be answered
@@ -413,6 +429,7 @@ class Call {
     this._isMuted.complete();
     this._isHeld.complete();
     this._duration.complete();
+    this._qualityMetrics.complete();
   }
   /**
    * Set up listeners for the underlying Telnyx call
@@ -496,6 +513,10 @@ class Call {
         }
       }
     });
+    // Forward quality metrics from the underlying SDK
+    this._telnyxCall.onQualityMetrics = (metrics) => {
+      this._qualityMetrics.next(metrics);
+    };
   }
   /**
    * Map Telnyx SDK call states to our simplified call states
