@@ -475,6 +475,7 @@ For complete API documentation and advanced usage patterns, see the [TelnyxVoice
 - [Sending DTMF Tones](./call-features/dtmf.md) — dialpad presses, IVR sequences, and gating on call state.
 - [Error Handling](./error-handling/ErrorHandling.md) — common errors and recovery patterns.
 - [Expo Integration](./expo/ExpoIntegration.md) — Expo-specific setup.
+- [Trickle ICE](./call-features/trickle-ice.md) — enabling and disabling Trickle ICE for faster call setup.
 
 ## License
 

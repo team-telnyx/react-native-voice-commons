@@ -87,3 +87,7 @@ DTMF is handled entirely by the underlying `@telnyx/react-native-voice-sdk` and 
 - **Calling `dtmf()` before the call is `ACTIVE`.** Will throw. Gate on `callState$` or on `CallStateHelpers.isActive(state)`.
 - **Passing non-DTMF characters** (letters outside `A-D`, whitespace, punctuation other than `*#`). They are silently dropped — the platform will not error, but the tones you expect will not be sent. Normalize input upstream if you accept user-typed strings.
 - **Expecting DTMF to interrupt the remote audio locally.** DTMF is a signaling feature; the local party does not hear a feedback tone unless your UI plays one. Most dialpads play a short local beep on press purely for UX.
+
+## See Also
+
+- [Trickle ICE](./trickle-ice.md) — optimizing WebRTC connection setup with Trickle ICE
