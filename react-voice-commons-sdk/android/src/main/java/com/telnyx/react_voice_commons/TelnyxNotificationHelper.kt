@@ -1,15 +1,21 @@
 package com.telnyx.react_voice_commons
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.app.ActivityOptions
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
-import androidx.core.app.NotificationCompat
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import android.util.Log
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 
 /**
  * Helper class for managing Telnyx voice call notifications
@@ -47,6 +53,88 @@ class TelnyxNotificationHelper(private val context: Context) {
 
     init {
         createNotificationChannel()
+    }
+
+    private fun getNotificationBlockReason(): String? {
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return "POST_NOTIFICATIONS permission is denied"
+        }
+
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            return "app notifications are disabled"
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = notificationManager.getNotificationChannel(CHANNEL_ID)
+            if (channel?.importance == NotificationManager.IMPORTANCE_NONE) {
+                return "incoming-call notification channel is blocked"
+            }
+
+            val channelGroupId = channel?.group
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && channelGroupId != null) {
+                val channelGroup = notificationManager.getNotificationChannelGroup(channelGroupId)
+                if (channelGroup?.isBlocked == true) {
+                    return "incoming-call notification channel group is blocked"
+                }
+            }
+        }
+
+        return null
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun notifyIfPermitted(notificationId: Int, notification: Notification): String? {
+        val blockReason = getNotificationBlockReason()
+        if (blockReason != null) {
+            Log.w(TAG, "Skipping notification $notificationId because $blockReason")
+            return blockReason
+        }
+
+        notificationManager.notify(notificationId, notification)
+        return null
+    }
+
+    private fun launchFullScreenIntentFallback(
+        notification: Notification,
+        callId: String,
+        metadata: String,
+        blockReason: String,
+    ) {
+        val fullScreenIntent = notification.fullScreenIntent
+        if (fullScreenIntent == null) {
+            Log.w(TAG, "Notifications unavailable ($blockReason); no full-screen fallback available for call: $callId")
+            return
+        }
+
+        try {
+            VoicePnManager.setPendingPushAction(context, "incoming_call", metadata)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to preserve incoming-call metadata before fallback launch for call: $callId", e)
+        }
+
+        try {
+            sendFullScreenIntent(fullScreenIntent)
+            Log.w(TAG, "Notifications unavailable ($blockReason); launched full-screen incoming call fallback for call: $callId")
+        } catch (e: PendingIntent.CanceledException) {
+            Log.e(TAG, "Notifications unavailable ($blockReason); failed to launch full-screen incoming call fallback for call: $callId", e)
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "Notifications unavailable ($blockReason); background fallback launch failed for call: $callId", e)
+        }
+    }
+
+    private fun sendFullScreenIntent(fullScreenIntent: PendingIntent) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val options = ActivityOptions.makeBasic().apply {
+                setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+            }.toBundle()
+
+            fullScreenIntent.send(context, 0, null, null, null, null, options)
+        } else {
+            fullScreenIntent.send()
+        }
     }
 
     private fun createNotificationChannel() {
@@ -95,7 +183,10 @@ class TelnyxNotificationHelper(private val context: Context) {
         val appIntent = Intent(context, activityClass).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("call_id", callId)
-            putExtra("action", "open_call")
+            putExtra("action", "incoming_call")
+            putExtra("meta_data", metadata)
+            putExtra("caller_name", callerName)
+            putExtra("caller_number", callerNumber)
         }
         val appPendingIntent = PendingIntent.getActivity(
             context, 0, appIntent,
@@ -160,8 +251,12 @@ class TelnyxNotificationHelper(private val context: Context) {
         hideIncomingCallNotification()
         
         val notification = createIncomingCallNotification(callerName, callerNumber, callId,metadata, mainActivityClass)
-        notificationManager.notify(NOTIFICATION_ID, notification)
-        Log.d(TAG, "Showed incoming call notification for: $callerName ($callerNumber)")
+        val blockReason = notifyIfPermitted(NOTIFICATION_ID, notification)
+        if (blockReason == null) {
+            Log.d(TAG, "Showed incoming call notification for: $callerName ($callerNumber)")
+        } else {
+            launchFullScreenIntentFallback(notification, callId, metadata, blockReason)
+        }
     }
 
     fun showMissedCallNotification(
@@ -186,8 +281,12 @@ class TelnyxNotificationHelper(private val context: Context) {
             .setColor(Color.RED)
             .build()
             
-        notificationManager.notify(NOTIFICATION_ID, notification)
-        Log.d(TAG, "Showed missed call notification for: $callerName ($callerNumber)")
+        val blockReason = notifyIfPermitted(NOTIFICATION_ID, notification)
+        if (blockReason == null) {
+            Log.d(TAG, "Showed missed call notification for: $callerName ($callerNumber)")
+        } else {
+            Log.w(TAG, "Skipped missed call notification because $blockReason")
+        }
     }
 
     fun showOngoingCallNotification(
@@ -197,8 +296,12 @@ class TelnyxNotificationHelper(private val context: Context) {
         mainActivityClass: Class<*>? = null
     ) {
         val notification = createOngoingCallNotification(callerName, callerNumber, callId, mainActivityClass)
-        notificationManager.notify(ONGOING_CALL_NOTIFICATION_ID, notification)
-        Log.d(TAG, "Showed ongoing call notification for: $callerName ($callerNumber)")
+        val blockReason = notifyIfPermitted(ONGOING_CALL_NOTIFICATION_ID, notification)
+        if (blockReason == null) {
+            Log.d(TAG, "Showed ongoing call notification for: $callerName ($callerNumber)")
+        } else {
+            Log.w(TAG, "Skipped ongoing call notification because $blockReason")
+        }
     }
 
     /**
