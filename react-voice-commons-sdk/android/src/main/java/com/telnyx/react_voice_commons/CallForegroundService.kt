@@ -2,6 +2,8 @@ package com.telnyx.react_voice_commons
 
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import android.util.Log
 
@@ -18,6 +20,10 @@ class CallForegroundService : Service() {
         const val EXTRA_CALLER_NAME = "caller_name"
         const val EXTRA_CALLER_NUMBER = "caller_number"
         const val EXTRA_CALL_ID = "call_id"
+
+        private val callForegroundServiceType =
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL or
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -51,7 +57,15 @@ class CallForegroundService : Service() {
             val notification = notificationHelper.createOngoingCallNotification(callerName, callerNumber, callId)
             
             // Start foreground service with the notification
-            startForeground(TelnyxNotificationHelper.ONGOING_CALL_NOTIFICATION_ID, notification)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                startForeground(
+                    TelnyxNotificationHelper.ONGOING_CALL_NOTIFICATION_ID,
+                    notification,
+                    callForegroundServiceType
+                )
+            } else {
+                startForeground(TelnyxNotificationHelper.ONGOING_CALL_NOTIFICATION_ID, notification)
+            }
             
             Log.d(TAG, "Foreground service started with ongoing call notification")
         } catch (e: Exception) {
