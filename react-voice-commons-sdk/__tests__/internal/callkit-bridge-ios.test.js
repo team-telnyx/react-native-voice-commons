@@ -51,12 +51,8 @@ function sliceBetween(source, startToken, endToken) {
   return source.slice(start, end + endToken.length);
 }
 
-const reportAndEndWatchdogCall = extractFunction(
-  'fileprivate func reportAndEndWatchdogCall('
-);
-const handleMissedCallPushIfNeeded = extractFunction(
-  'public func handleMissedCallPushIfNeeded('
-);
+const reportAndEndWatchdogCall = extractFunction('fileprivate func reportAndEndWatchdogCall(');
+const handleMissedCallPushIfNeeded = extractFunction('public func handleMissedCallPushIfNeeded(');
 const handleVoipPush = extractFunction('@objc public func handleVoipPush(');
 const answerAction = extractFunction(
   'public func provider(_ provider: CXProvider, perform action: CXAnswerCallAction)'
@@ -91,9 +87,10 @@ describe('iOS CallKitBridge PushKit watchdog handling', () => {
       'return'
     );
     const storeIndex = handleVoipPush.indexOf('UserDefaults.standard.set("incoming_call"');
-    const malformedReturnIndex = handleVoipPush.indexOf('return', handleVoipPush.indexOf(
-      'source: "malformed_push_watchdog"'
-    ));
+    const malformedReturnIndex = handleVoipPush.indexOf(
+      'return',
+      handleVoipPush.indexOf('source: "malformed_push_watchdog"')
+    );
 
     expect(malformedBranch).toContain('reportAndEndWatchdogCall(');
     expect(malformedBranch).toContain('callUUID: UUID()');
