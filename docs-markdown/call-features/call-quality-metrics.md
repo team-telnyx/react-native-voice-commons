@@ -149,3 +149,7 @@ function CallQualityIndicator() {
   return null;
 }
 ```
+
+## See Also
+
+- [Sending DTMF Tones](./dtmf.md) — Send DTMF tones during an active call.
