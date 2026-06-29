@@ -1,0 +1,69 @@
+let mockSocket: {
+  onOpen: jest.Mock;
+  onError: jest.Mock;
+  onClose: jest.Mock;
+  onMessage: jest.Mock;
+  connect: jest.Mock;
+  send: jest.Mock;
+  close: jest.Mock;
+  removeOnOpenListener: jest.Mock;
+  removeOnErrorListener: jest.Mock;
+  removeOnCloseListener: jest.Mock;
+  removeOnMessageListener: jest.Mock;
+};
+
+jest.mock('react-native-websocket-self-signed', () => ({
+  getInstance: jest.fn(() => mockSocket),
+}));
+
+describe('Connection teardown', () => {
+  let emitClose: () => void;
+
+  beforeEach(() => {
+    emitClose = () => {};
+    mockSocket = {
+      onOpen: jest.fn(),
+      onError: jest.fn(),
+      onClose: jest.fn((callback: () => void) => {
+        emitClose = callback;
+      }),
+      onMessage: jest.fn(),
+      connect: jest.fn(() => Promise.resolve()),
+      send: jest.fn(),
+      close: jest.fn(),
+      removeOnOpenListener: jest.fn(),
+      removeOnErrorListener: jest.fn(),
+      removeOnCloseListener: jest.fn(),
+      removeOnMessageListener: jest.fn(),
+    };
+  });
+
+  it('rejects pending sendAndWait promises on explicit close', async () => {
+    const { Connection } = require('../lib/connection.ts') as typeof import('../lib/connection');
+    const connection = new Connection();
+    const closeListener = jest.fn();
+
+    connection.addListener('telnyx.socket.close', closeListener);
+
+    const pendingResponse = connection.sendAndWait({ id: 'login' });
+    const rejection = expect(pendingResponse).rejects.toThrow('Connection closed');
+
+    connection.close();
+
+    await rejection;
+    expect(closeListener).toHaveBeenCalledTimes(1);
+    expect(mockSocket.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects pending sendAndWait promises on natural socket close', async () => {
+    const { Connection } = require('../lib/connection.ts') as typeof import('../lib/connection');
+    const connection = new Connection();
+
+    const pendingResponse = connection.sendAndWait({ id: 'login' });
+    const rejection = expect(pendingResponse).rejects.toThrow('Connection closed');
+
+    emitClose();
+
+    await rejection;
+  });
+});
