@@ -861,8 +861,10 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     this.credentialSessionConfig = null;
     this.tokenSessionConfig = null;
 
+    this.loginHandler?.cancelPendingLogin();
     this.connection.close();
     this.connection = null;
+    this.loginHandler = null;
 
     if (!fromReconnection) {
       log.debug('[TelnyxRTC] Disconnected due to reconnection process');

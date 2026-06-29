@@ -91,4 +91,50 @@ describe('SessionManager', () => {
       manager.connectWithCredential(createCredentialConfig('other-user', 'other-password'))
     ).rejects.toThrow('SessionManager has been disposed');
   });
+
+  it('cancels and forgets an in-flight connect when disconnect runs', async () => {
+    const TelnyxRTCMock = TelnyxSDK.TelnyxRTC as unknown as jest.Mock;
+    let resolveConnect: () => void = () => {};
+    const telnyxClient = {
+      connect: jest.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveConnect = resolve;
+          })
+      ),
+      disconnect: jest.fn(() => Promise.resolve()),
+      newCall: jest.fn(),
+      on: jest.fn(),
+      off: jest.fn(),
+    };
+
+    TelnyxRTCMock.mockImplementationOnce(() => telnyxClient);
+
+    const manager = new SessionManager();
+    const connectResult = manager
+      .connectWithCredential(createCredentialConfig('sip-user', 'sip-password'))
+      .then(
+        () => undefined,
+        (error: Error) => error
+      );
+
+    expect(telnyxClient.connect).toHaveBeenCalledTimes(1);
+    expect(manager.telnyxClient).toBe(telnyxClient);
+
+    await manager.disconnect();
+
+    expect(telnyxClient.disconnect).toHaveBeenCalledTimes(1);
+    expect(manager.telnyxClient).toBeUndefined();
+
+    resolveConnect();
+
+    const connectError = await connectResult;
+    expect(connectError).toBeInstanceOf(Error);
+    expect(connectError?.message).toBe('SessionManager connection has been canceled');
+    expect(telnyxClient.disconnect).toHaveBeenCalledTimes(2);
+
+    await expect(
+      manager.connectWithCredential(createCredentialConfig('other-user', 'other-password'))
+    ).resolves.toBeUndefined();
+  });
 });

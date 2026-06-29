@@ -161,13 +161,13 @@ export class Connection extends EventEmitter<ConnectionEvents> {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    this.rejectPendingTransactions(new Error('Connection closed'));
     this.socket.close();
     this.socket.removeOnOpenListener();
     this.socket.removeOnErrorListener();
     this.socket.removeOnCloseListener();
     this.socket.removeOnMessageListener();
     this.removeAllListeners();
-    this.transactions.clear();
     this.messageQueue = [];
   };
   public get isConnected() {
@@ -214,6 +214,11 @@ export class Connection extends EventEmitter<ConnectionEvents> {
     this.messageQueue.forEach((msg) => this.send(msg));
     this.messageQueue = [];
   };
+
+  private rejectPendingTransactions(error: Error) {
+    this.transactions.forEach((transaction) => transaction.reject(error));
+    this.transactions.clear();
+  }
 
   private safeParseMessage = (msg: string) => {
     try {

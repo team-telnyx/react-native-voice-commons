@@ -19,6 +19,7 @@ import type { DeferredPromise } from './promise';
 export class LoginHandler {
   private connection: Connection;
   private clientIsReady: DeferredPromise<boolean> | null;
+  private waitingForClientReady: boolean = false;
   private shouldAttachCall: boolean = false;
   private isFromPush: boolean = false;
   private lastSessionId: string | null = null; // Store sessid from login response
@@ -91,7 +92,12 @@ export class LoginHandler {
     // Persist to AsyncStorage for future TelnyxRTC instances
     this.persistSessionId(this.lastSessionId);
 
-    await this.clientIsReady.promise;
+    this.waitingForClientReady = true;
+    try {
+      await this.clientIsReady.promise;
+    } finally {
+      this.waitingForClientReady = false;
+    }
 
     const gatewayResponse = await this.connection.sendAndWait(createGetGatewayStateMessage());
     if (!isValidGatewayStateResponse(gatewayResponse)) {
@@ -110,6 +116,14 @@ export class LoginHandler {
 
     return gatewayResponse.result.sessid;
   };
+
+  public cancelPendingLogin(reason = 'Connection closed') {
+    if (this.waitingForClientReady) {
+      this.clientIsReady?.reject(new Error(reason));
+    }
+    this.waitingForClientReady = false;
+    this.clientIsReady = null;
+  }
 
   private createLoginMessage = (options: ClientOptions) => {
     const userVariables = {

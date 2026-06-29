@@ -74,7 +74,7 @@ class SessionManager {
     );
     this._disposed = false;
     this._disposing = false;
-    this._disposeGeneration = 0;
+    this._connectionGeneration = 0;
     this._sessionId = this._generateSessionId();
   }
   /**
@@ -149,6 +149,7 @@ class SessionManager {
     if (this._disposed) {
       return;
     }
+    this._connectionGeneration += 1;
     this._currentConfig = undefined;
     this._connectionState.next(connection_state_1.TelnyxConnectionState.DISCONNECTED);
     if (this._onDisconnect) {
@@ -159,7 +160,7 @@ class SessionManager {
       }
     }
     if (this._telnyxClient) {
-      await this._disconnectClient(this._telnyxClient, 'Error during disconnect:');
+      await this._disconnectAndForgetClient(this._telnyxClient, 'Error during disconnect:');
     }
   }
   /**
@@ -383,8 +384,8 @@ class SessionManager {
     if (!config) {
       throw new Error('No configuration provided');
     }
-    const disposeGeneration = this._disposeGeneration;
-    const connectPromise = this._runConnect(config, disposeGeneration);
+    const connectionGeneration = (this._connectionGeneration += 1);
+    const connectPromise = this._runConnect(config, connectionGeneration);
     this._connectPromise = connectPromise;
     try {
       await connectPromise;
@@ -396,7 +397,7 @@ class SessionManager {
   }
   async _dispose() {
     this._disposing = true;
-    this._disposeGeneration += 1;
+    this._connectionGeneration += 1;
     const inFlightConnect = this._connectPromise;
     await this.disconnect();
     if (inFlightConnect) {
@@ -416,8 +417,8 @@ class SessionManager {
     this._disposing = false;
     this._connectionState.complete();
   }
-  async _runConnect(config, disposeGeneration) {
-    this._throwIfConnectCanceled(disposeGeneration);
+  async _runConnect(config, connectionGeneration) {
+    this._throwIfConnectCanceled(connectionGeneration);
     this._connectionState.next(connection_state_1.TelnyxConnectionState.CONNECTING);
     let client;
     try {
@@ -425,7 +426,7 @@ class SessionManager {
       if (this._telnyxClient) {
         await this._disconnectClient(this._telnyxClient, 'Error during disconnect:');
       }
-      this._throwIfConnectCanceled(disposeGeneration);
+      this._throwIfConnectCanceled(connectionGeneration);
       // Create new client instance with authentication options
       let clientOptions;
       if ((0, config_1.isCredentialConfig)(config)) {
@@ -514,24 +515,24 @@ class SessionManager {
       } else {
         console.log('🔧 SessionManager: No _onClientReady callback found');
       }
-      this._throwIfConnectCanceled(disposeGeneration);
+      this._throwIfConnectCanceled(connectionGeneration);
       // Connect to the platform AFTER processing push notification
       console.log(
         'SessionManager: RELEASE DEBUG - About to call connect() after processing push notification'
       );
       await client.connect();
-      if (this._isConnectCanceled(disposeGeneration)) {
+      if (this._isConnectCanceled(connectionGeneration)) {
         await this._disconnectAndForgetClient(client, 'Error during dispose disconnect:');
-        throw new Error('SessionManager has been disposed');
+        throw this._createConnectCanceledError();
       }
       // Notify that client is ready for event listeners
       console.log('🔧 SessionManager: Client connected successfully');
     } catch (error) {
-      if (this._isConnectCanceled(disposeGeneration)) {
+      if (this._isConnectCanceled(connectionGeneration)) {
         if (client) {
           await this._disconnectAndForgetClient(client, 'Error during dispose disconnect:');
         }
-        throw new Error('SessionManager has been disposed');
+        throw this._createConnectCanceledError();
       }
       console.error('Connection failed:', error);
       this._connectionState.next(connection_state_1.TelnyxConnectionState.ERROR);
@@ -633,13 +634,20 @@ class SessionManager {
   _isTeardownActive() {
     return this._disposed || this._disposing;
   }
-  _isConnectCanceled(disposeGeneration) {
-    return this._isTeardownActive() || this._disposeGeneration !== disposeGeneration;
+  _isConnectCanceled(connectionGeneration) {
+    return this._isTeardownActive() || this._connectionGeneration !== connectionGeneration;
   }
-  _throwIfConnectCanceled(disposeGeneration) {
-    if (this._isConnectCanceled(disposeGeneration)) {
-      throw new Error('SessionManager has been disposed');
+  _throwIfConnectCanceled(connectionGeneration) {
+    if (this._isConnectCanceled(connectionGeneration)) {
+      throw this._createConnectCanceledError();
     }
+  }
+  _createConnectCanceledError() {
+    return new Error(
+      this._isTeardownActive()
+        ? 'SessionManager has been disposed'
+        : 'SessionManager connection has been canceled'
+    );
   }
   async _disconnectClient(client, errorMessage) {
     try {

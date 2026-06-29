@@ -15,7 +15,7 @@ export declare class SessionManager {
   private _sessionId;
   private _disposed;
   private _disposing;
-  private _disposeGeneration;
+  private _connectionGeneration;
   private _disposePromise?;
   private _connectPromise?;
   private _onClientReady?;
@@ -106,6 +106,7 @@ export declare class SessionManager {
   private _isTeardownActive;
   private _isConnectCanceled;
   private _throwIfConnectCanceled;
+  private _createConnectCanceledError;
   private _disconnectClient;
   private _disconnectAndForgetClient;
 }
