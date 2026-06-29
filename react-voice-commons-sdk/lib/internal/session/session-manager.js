@@ -73,6 +73,8 @@ class SessionManager {
       connection_state_1.TelnyxConnectionState.DISCONNECTED
     );
     this._disposed = false;
+    this._disposing = false;
+    this._disposeGeneration = 0;
     this._sessionId = this._generateSessionId();
   }
   /**
@@ -119,21 +121,19 @@ class SessionManager {
    * Connect using credential authentication
    */
   async connectWithCredential(config) {
-    if (this._disposed) {
-      throw new Error('SessionManager has been disposed');
-    }
+    this._assertCanStartConnection();
     this._currentConfig = config;
     await this._connect();
+    this._assertCanStartConnection();
   }
   /**
    * Connect using token authentication
    */
   async connectWithToken(config) {
-    if (this._disposed) {
-      throw new Error('SessionManager has been disposed');
-    }
+    this._assertCanStartConnection();
     this._currentConfig = config;
     await this._connect();
+    this._assertCanStartConnection();
   }
   /**
    * Disconnect from the Telnyx platform.
@@ -159,11 +159,7 @@ class SessionManager {
       }
     }
     if (this._telnyxClient) {
-      try {
-        await this._telnyxClient.disconnect();
-      } catch (error) {
-        console.error('Error during disconnect:', error);
-      }
+      await this._disconnectClient(this._telnyxClient, 'Error during disconnect:');
     }
   }
   /**
@@ -173,6 +169,7 @@ class SessionManager {
    */
   disablePushNotifications() {
     if (
+      !this._isTeardownActive() &&
       this._telnyxClient &&
       this.currentState === connection_state_1.TelnyxConnectionState.CONNECTED
     ) {
@@ -186,7 +183,7 @@ class SessionManager {
    * Handle push notification with stored config
    */
   handlePushNotificationWithConfig(pushMetaData, config) {
-    if (this._disposed) {
+    if (this._isTeardownActive()) {
       return;
     }
     this._currentConfig = config;
@@ -198,7 +195,7 @@ class SessionManager {
    * Handle push notification (async version)
    */
   async handlePushNotification(payload) {
-    if (this._disposed) {
+    if (this._isTeardownActive()) {
       return;
     }
     console.log(
@@ -218,6 +215,9 @@ class SessionManager {
       } catch (err) {
         console.warn('SessionManager: disconnect of prior client threw:', err);
       }
+    }
+    if (this._isTeardownActive()) {
+      return;
     }
     this._telnyxClient = undefined;
     if (this.currentState !== connection_state_1.TelnyxConnectionState.DISCONNECTED) {
@@ -242,6 +242,9 @@ class SessionManager {
         );
         const useTrickleIce = storedUseTrickleIce === 'true';
         const enableMissedCallNotifications = storedMissedCallNotifications === 'true';
+        if (this._isTeardownActive()) {
+          return;
+        }
         // Check if we have credential-based authentication data
         if (storedUsername && storedPassword) {
           console.log('SessionManager: RELEASE DEBUG - Found stored credentials, creating config');
@@ -272,6 +275,9 @@ class SessionManager {
       } catch (error) {
         console.warn('SessionManager: Failed to load stored config for push notification:', error);
       }
+    }
+    if (this._isTeardownActive()) {
+      return;
     }
     // If we already have a client, process the push notification immediately
     if (this._telnyxClient) {
@@ -317,10 +323,16 @@ class SessionManager {
         );
         try {
           await this._connect();
+          if (this._isTeardownActive()) {
+            return;
+          }
           console.log(
             'SessionManager: RELEASE DEBUG - Successfully connected after push notification trigger'
           );
         } catch (error) {
+          if (this._isTeardownActive()) {
+            return;
+          }
           console.error(
             'SessionManager: Failed to connect after push notification trigger:',
             error
@@ -347,70 +359,121 @@ class SessionManager {
     if (this._disposed) {
       return;
     }
-    await this.disconnect();
-    this._disposed = true;
-    this._connectionState.complete();
+    if (!this._disposePromise) {
+      this._disposePromise = this._dispose();
+    }
+    await this._disposePromise;
   }
   /**
    * Internal method to establish connection with or without push notification handling
    */
   async _connect() {
-    if (!this._currentConfig) {
+    const previousConnect = this._connectPromise;
+    if (previousConnect) {
+      try {
+        await previousConnect;
+      } catch (error) {
+        if (this._isTeardownActive()) {
+          throw error;
+        }
+      }
+    }
+    this._assertCanStartConnection();
+    const config = this._currentConfig;
+    if (!config) {
       throw new Error('No configuration provided');
     }
+    const disposeGeneration = this._disposeGeneration;
+    const connectPromise = this._runConnect(config, disposeGeneration);
+    this._connectPromise = connectPromise;
+    try {
+      await connectPromise;
+    } finally {
+      if (this._connectPromise === connectPromise) {
+        this._connectPromise = undefined;
+      }
+    }
+  }
+  async _dispose() {
+    this._disposing = true;
+    this._disposeGeneration += 1;
+    const inFlightConnect = this._connectPromise;
+    await this.disconnect();
+    if (inFlightConnect) {
+      try {
+        await inFlightConnect;
+      } catch {
+        // A connect canceled by disposal is expected; the cleanup path runs in _runConnect.
+      }
+    }
+    const client = this._telnyxClient;
+    if (client) {
+      await this._disconnectAndForgetClient(client, 'Error during dispose disconnect:');
+    }
+    this._currentConfig = undefined;
+    this._pendingPushPayload = null;
+    this._disposed = true;
+    this._disposing = false;
+    this._connectionState.complete();
+  }
+  async _runConnect(config, disposeGeneration) {
+    this._throwIfConnectCanceled(disposeGeneration);
     this._connectionState.next(connection_state_1.TelnyxConnectionState.CONNECTING);
+    let client;
     try {
       // Clean up existing client
       if (this._telnyxClient) {
-        await this._telnyxClient.disconnect();
+        await this._disconnectClient(this._telnyxClient, 'Error during disconnect:');
       }
+      this._throwIfConnectCanceled(disposeGeneration);
       // Create new client instance with authentication options
       let clientOptions;
-      if ((0, config_1.isCredentialConfig)(this._currentConfig)) {
+      if ((0, config_1.isCredentialConfig)(config)) {
         clientOptions = {
-          login: this._currentConfig.sipUser,
-          password: this._currentConfig.sipPassword,
-          logLevel: this._currentConfig.debug ? 'debug' : 'warn',
-          debug: this._currentConfig.debug ?? false,
-          pushNotificationDeviceToken: this._currentConfig.pushNotificationDeviceToken,
-          enableMissedCallNotifications: this._currentConfig.enableMissedCallNotifications ?? false,
-          useTrickleIce: this._currentConfig.useTrickleIce,
-          enableCallReports: this._currentConfig.enableCallReports,
-          callReportInterval: this._currentConfig.callReportInterval,
-          callReportLogLevel: this._currentConfig.callReportLogLevel,
-          callReportMaxLogEntries: this._currentConfig.callReportMaxLogEntries,
+          login: config.sipUser,
+          password: config.sipPassword,
+          logLevel: config.debug ? 'debug' : 'warn',
+          debug: config.debug ?? false,
+          pushNotificationDeviceToken: config.pushNotificationDeviceToken,
+          enableMissedCallNotifications: config.enableMissedCallNotifications ?? false,
+          useTrickleIce: config.useTrickleIce,
+          enableCallReports: config.enableCallReports,
+          callReportInterval: config.callReportInterval,
+          callReportLogLevel: config.callReportLogLevel,
+          callReportMaxLogEntries: config.callReportMaxLogEntries,
           sdkVersion: pkg.version,
         };
         console.log(
           '🔧 SessionManager: Creating TelnyxRTC with credential config, logLevel:',
           clientOptions.logLevel,
           'pushToken:',
-          !!this._currentConfig.pushNotificationDeviceToken
+          !!config.pushNotificationDeviceToken
         );
-      } else if ((0, config_1.isTokenConfig)(this._currentConfig)) {
+      } else if ((0, config_1.isTokenConfig)(config)) {
         clientOptions = {
-          login_token: this._currentConfig.token,
-          logLevel: this._currentConfig.debug ? 'debug' : 'warn',
-          debug: this._currentConfig.debug ?? false,
-          pushNotificationDeviceToken: this._currentConfig.pushNotificationDeviceToken,
-          enableMissedCallNotifications: this._currentConfig.enableMissedCallNotifications ?? false,
-          useTrickleIce: this._currentConfig.useTrickleIce,
-          enableCallReports: this._currentConfig.enableCallReports,
-          callReportInterval: this._currentConfig.callReportInterval,
-          callReportLogLevel: this._currentConfig.callReportLogLevel,
-          callReportMaxLogEntries: this._currentConfig.callReportMaxLogEntries,
+          login_token: config.token,
+          logLevel: config.debug ? 'debug' : 'warn',
+          debug: config.debug ?? false,
+          pushNotificationDeviceToken: config.pushNotificationDeviceToken,
+          enableMissedCallNotifications: config.enableMissedCallNotifications ?? false,
+          useTrickleIce: config.useTrickleIce,
+          enableCallReports: config.enableCallReports,
+          callReportInterval: config.callReportInterval,
+          callReportLogLevel: config.callReportLogLevel,
+          callReportMaxLogEntries: config.callReportMaxLogEntries,
           sdkVersion: pkg.version,
         };
         console.log(
           '🔧 SessionManager: Creating TelnyxRTC with token config, logLevel:',
           clientOptions.logLevel,
           'pushToken:',
-          !!this._currentConfig.pushNotificationDeviceToken
+          !!config.pushNotificationDeviceToken
         );
       } else {
         throw new Error('Invalid configuration type');
       }
-      this._telnyxClient = new TelnyxSDK.TelnyxRTC(clientOptions);
+      client = new TelnyxSDK.TelnyxRTC(clientOptions);
+      this._telnyxClient = client;
       // CRITICAL: Process any pending push notification payload BEFORE connecting
       // This ensures voice_sdk_id and other payload variables are set before connect() is called
       const pendingPushPayload = this._pendingPushPayload;
@@ -437,7 +500,7 @@ class SessionManager {
         // Clear the pending payload
         this._pendingPushPayload = null;
       }
-      this._setupClientListeners();
+      this._setupClientListeners(client);
       // Set up CallStateController listeners immediately after client creation
       // This ensures they're ready before any incoming call events are emitted
       console.log(
@@ -451,14 +514,25 @@ class SessionManager {
       } else {
         console.log('🔧 SessionManager: No _onClientReady callback found');
       }
+      this._throwIfConnectCanceled(disposeGeneration);
       // Connect to the platform AFTER processing push notification
       console.log(
         'SessionManager: RELEASE DEBUG - About to call connect() after processing push notification'
       );
-      await this._telnyxClient.connect();
+      await client.connect();
+      if (this._isConnectCanceled(disposeGeneration)) {
+        await this._disconnectAndForgetClient(client, 'Error during dispose disconnect:');
+        throw new Error('SessionManager has been disposed');
+      }
       // Notify that client is ready for event listeners
       console.log('🔧 SessionManager: Client connected successfully');
     } catch (error) {
+      if (this._isConnectCanceled(disposeGeneration)) {
+        if (client) {
+          await this._disconnectAndForgetClient(client, 'Error during dispose disconnect:');
+        }
+        throw new Error('SessionManager has been disposed');
+      }
       console.error('Connection failed:', error);
       this._connectionState.next(connection_state_1.TelnyxConnectionState.ERROR);
       throw error;
@@ -467,11 +541,14 @@ class SessionManager {
   /**
    * Set up event listeners for the Telnyx client
    */
-  _setupClientListeners() {
-    if (!this._telnyxClient) {
+  _setupClientListeners(client) {
+    if (!client) {
       return;
     }
-    this._telnyxClient.on('telnyx.client.ready', () => {
+    client.on('telnyx.client.ready', () => {
+      if (this._isTeardownActive() || this._telnyxClient !== client) {
+        return;
+      }
       console.log('Telnyx client ready');
       this._connectionState.next(connection_state_1.TelnyxConnectionState.CONNECTED);
       // Ensure CallStateController listeners are set up when client becomes ready
@@ -489,7 +566,10 @@ class SessionManager {
         console.log('🔧 SessionManager: No _onClientReady callback found in client ready event');
       }
     });
-    this._telnyxClient.on('telnyx.client.error', (error) => {
+    client.on('telnyx.client.error', (error) => {
+      if (this._isTeardownActive() || this._telnyxClient !== client) {
+        return;
+      }
       console.error('Telnyx client error:', error);
       this._connectionState.next(connection_state_1.TelnyxConnectionState.ERROR);
     });
@@ -544,6 +624,35 @@ class SessionManager {
    */
   _generateSessionId() {
     return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+  _assertCanStartConnection() {
+    if (this._isTeardownActive()) {
+      throw new Error('SessionManager has been disposed');
+    }
+  }
+  _isTeardownActive() {
+    return this._disposed || this._disposing;
+  }
+  _isConnectCanceled(disposeGeneration) {
+    return this._isTeardownActive() || this._disposeGeneration !== disposeGeneration;
+  }
+  _throwIfConnectCanceled(disposeGeneration) {
+    if (this._isConnectCanceled(disposeGeneration)) {
+      throw new Error('SessionManager has been disposed');
+    }
+  }
+  async _disconnectClient(client, errorMessage) {
+    try {
+      await client.disconnect();
+    } catch (error) {
+      console.error(errorMessage, error);
+    }
+  }
+  async _disconnectAndForgetClient(client, errorMessage) {
+    await this._disconnectClient(client, errorMessage);
+    if (this._telnyxClient === client) {
+      this._telnyxClient = undefined;
+    }
   }
 }
 exports.SessionManager = SessionManager;
