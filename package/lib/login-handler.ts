@@ -30,6 +30,8 @@ export class LoginHandler {
   constructor(con: Connection) {
     this.connection = con;
     this.connection.addListener('telnyx.socket.message', this.onSocketMessage);
+    this.connection.addListener('telnyx.socket.close', this.onSocketClose);
+    this.connection.addListener('telnyx.socket.error', this.onSocketError);
     this.clientIsReady = null;
   }
 
@@ -171,5 +173,13 @@ export class LoginHandler {
     if (isClientReadyEvent(msg)) {
       this.clientIsReady?.resolve(true);
     }
+  };
+
+  private onSocketClose = () => {
+    this.cancelPendingLogin('Connection closed');
+  };
+
+  private onSocketError = () => {
+    this.cancelPendingLogin('Connection error');
   };
 }

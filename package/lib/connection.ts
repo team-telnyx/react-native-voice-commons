@@ -70,6 +70,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
 
     this.socket.onError((error: string) => {
       log.error('[Connection]: WebSocket error occurred', error);
+      this.rejectPendingTransactions(new Error('Connection error'));
       try {
         this.emit('telnyx.socket.error', error as any);
       } catch (emitError) {
@@ -83,6 +84,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
     this.socket.onClose(() => {
       log.debug('[Connection]: WebSocket connection closed');
       this.isSocketConnected = false;
+      this.rejectPendingTransactions(new Error('Connection closed'));
       try {
         this.emit('telnyx.socket.close');
       } catch (error) {
@@ -162,6 +164,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
       this.reconnectTimer = null;
     }
     this.rejectPendingTransactions(new Error('Connection closed'));
+    this.emitConnectionClose();
     this.socket.close();
     this.socket.removeOnOpenListener();
     this.socket.removeOnErrorListener();
@@ -218,6 +221,17 @@ export class Connection extends EventEmitter<ConnectionEvents> {
   private rejectPendingTransactions(error: Error) {
     this.transactions.forEach((transaction) => transaction.reject(error));
     this.transactions.clear();
+  }
+
+  private emitConnectionClose() {
+    try {
+      this.emit('telnyx.socket.close');
+    } catch (error) {
+      log.error(
+        '[Connection]: Failed to emit socket.close event during explicit close:',
+        error
+      );
+    }
   }
 
   private safeParseMessage = (msg: string) => {
