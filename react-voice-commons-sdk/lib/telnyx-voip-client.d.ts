@@ -210,7 +210,7 @@ export declare class TelnyxVoipClient {
    * This is particularly important for background clients that should be
    * disposed after handling push notifications.
    */
-  dispose(): void;
+  dispose(): Promise<void>;
   /**
    * Store credential configuration for automatic reconnection
    */
@@ -238,7 +238,7 @@ export declare function createTelnyxVoipClient(options?: TelnyxVoipClientOptions
  * Disposes the current singleton so that a subsequent call to
  * `createTelnyxVoipClient()` will create a fresh instance.
  */
-export declare function destroyTelnyxVoipClient(): void;
+export declare function destroyTelnyxVoipClient(): Promise<void>;
 /**
  * Create a new TelnyxVoipClient instance for background push notification handling.
  *

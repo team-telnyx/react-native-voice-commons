@@ -339,7 +339,7 @@ const TelnyxVoiceAppComponent = ({
         backgroundDetectorIgnore.current = true;
         log(`Background detector ignore set to: true at ${new Date().toISOString()}`);
         log(`Foreground call handling flag set to: true at ${new Date().toISOString()}`);
-        disposeBackgroundClient();
+        await disposeBackgroundClient();
         // On iOS, coordinate with CallKit using the call_id from push metadata
         if (react_native_1.Platform.OS === 'ios') {
           const callId = pushData.metadata?.call_id;
@@ -375,11 +375,16 @@ const TelnyxVoiceAppComponent = ({
     ]
   );
   // Dispose background client instance when no longer needed
-  const disposeBackgroundClient = (0, react_1.useCallback)(() => {
-    if (backgroundClientRef.current) {
-      log('Disposing background client instance');
-      backgroundClientRef.current.dispose();
+  const disposeBackgroundClient = (0, react_1.useCallback)(async () => {
+    const backgroundClient = backgroundClientRef.current;
+    if (backgroundClient) {
       backgroundClientRef.current = null;
+      log('Disposing background client instance');
+      try {
+        await backgroundClient.dispose();
+      } catch (e) {
+        log('Error disposing background client instance:', e);
+      }
     }
   }, [log]);
   // Create background client for push notification handling
@@ -523,7 +528,7 @@ const TelnyxVoiceAppComponent = ({
       }
       clearTimeout(timeoutId);
       // Clean up background client instance
-      disposeBackgroundClient();
+      void disposeBackgroundClient();
     };
   }, [
     voipClient,
@@ -608,18 +613,25 @@ const initializeAndCreate = async (options) => {
  */
 const handleBackgroundPush = async (message) => {
   console.log('[TelnyxVoiceApp] Background push received:', message);
+  let backgroundClient = null;
   try {
     // TODO: Initialize push notification service in isolate if needed
     // Use singleton pattern for background client to prevent multiple instances
-    let backgroundClient = (0, telnyx_voip_client_1.createBackgroundTelnyxVoipClient)({
+    backgroundClient = (0, telnyx_voip_client_1.createBackgroundTelnyxVoipClient)({
       debug: false,
     });
     await backgroundClient.handlePushNotification(message);
     console.log('[TelnyxVoiceApp] Background push processed successfully');
-    // Clean up the background client
-    backgroundClient.dispose();
   } catch (e) {
     console.log('[TelnyxVoiceApp] Error processing background push:', e);
+  } finally {
+    if (backgroundClient) {
+      try {
+        await backgroundClient.dispose();
+      } catch (e) {
+        console.log('[TelnyxVoiceApp] Error disposing background push client:', e);
+      }
+    }
   }
 };
 // Create the component with static methods

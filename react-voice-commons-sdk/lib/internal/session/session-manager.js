@@ -343,12 +343,12 @@ class SessionManager {
   /**
    * Dispose of the session manager and clean up resources
    */
-  dispose() {
+  async dispose() {
     if (this._disposed) {
       return;
     }
+    await this.disconnect();
     this._disposed = true;
-    this.disconnect();
     this._connectionState.complete();
   }
   /**

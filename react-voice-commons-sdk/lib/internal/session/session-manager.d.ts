@@ -79,7 +79,7 @@ export declare class SessionManager {
   /**
    * Dispose of the session manager and clean up resources
    */
-  dispose(): void;
+  dispose(): Promise<void>;
   /**
    * Internal method to establish connection with or without push notification handling
    */
