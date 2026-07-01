@@ -476,6 +476,7 @@ For complete API documentation and advanced usage patterns, see the [TelnyxVoice
 - [iOS Missed Call Notifications](./call-features/ios-missed-call-notifications.md) — iOS-specific missed call handling with CallKit and app lifecycle.
 - [Error Handling](./error-handling/ErrorHandling.md) — common errors and recovery patterns.
 - [Expo Integration](./expo/ExpoIntegration.md) — Expo-specific setup.
+- [Trickle ICE](./call-features/trickle-ice.md) — enabling and disabling Trickle ICE for faster call setup.
 
 ## License
 
