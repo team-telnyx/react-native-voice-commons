@@ -75,9 +75,9 @@ class CallKitManager {
     });
   }
   notifyListeners(eventType, event) {
-    const listener = this.listeners.get(eventType);
-    if (listener) {
-      listener(event);
+    const listeners = this.listeners.get(eventType);
+    if (listeners) {
+      listeners.forEach((listener) => listener(event));
     }
   }
   // Public API methods
@@ -219,21 +219,32 @@ class CallKitManager {
     }
   }
   // Event listener management
+  addListener(eventType, listener) {
+    if (!this.listeners.has(eventType)) {
+      this.listeners.set(eventType, new Set());
+    }
+    this.listeners.get(eventType).add(listener);
+    return () => {
+      const set = this.listeners.get(eventType);
+      if (set) {
+        set.delete(listener);
+        if (set.size === 0) {
+          this.listeners.delete(eventType);
+        }
+      }
+    };
+  }
   onStartCall(listener) {
-    this.listeners.set('startCall', listener);
-    return () => this.listeners.delete('startCall');
+    return this.addListener('startCall', listener);
   }
   onAnswerCall(listener) {
-    this.listeners.set('answerCall', listener);
-    return () => this.listeners.delete('answerCall');
+    return this.addListener('answerCall', listener);
   }
   onEndCall(listener) {
-    this.listeners.set('endCall', listener);
-    return () => this.listeners.delete('endCall');
+    return this.addListener('endCall', listener);
   }
   onReceivePush(listener) {
-    this.listeners.set('receivePush', listener);
-    return () => this.listeners.delete('receivePush');
+    return this.addListener('receivePush', listener);
   }
   // Utility methods
   generateCallUUID() {

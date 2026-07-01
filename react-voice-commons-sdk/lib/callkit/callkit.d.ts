@@ -30,6 +30,7 @@ declare class CallKitManager {
   constructor();
   private setupEventListeners;
   private notifyListeners;
+  private addListener;
   startOutgoingCall(callUUID: string, handle: string, displayName: string): Promise<boolean>;
   reportIncomingCall(callUUID: string, handle: string, displayName: string): Promise<boolean>;
   answerCall(callUUID: string): Promise<boolean>;

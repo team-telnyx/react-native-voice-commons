@@ -37,7 +37,7 @@ export interface CallKitEvent {
 class CallKitManager {
   private bridge: CallKitBridgeInterface | null = null;
   private eventEmitter: NativeEventEmitter | null = null;
-  private listeners: Map<string, (event: CallKitEvent) => void> = new Map();
+  private listeners: Map<string, Set<(event: CallKitEvent) => void>> = new Map();
 
   /**
    * Normalize UUID to lowercase for consistent handling in React Native
@@ -108,9 +108,9 @@ class CallKitManager {
   }
 
   private notifyListeners(eventType: string, event: CallKitEvent) {
-    const listener = this.listeners.get(eventType);
-    if (listener) {
-      listener(event);
+    const listeners = this.listeners.get(eventType);
+    if (listeners) {
+      listeners.forEach((listener) => listener(event));
     }
   }
 
@@ -282,24 +282,36 @@ class CallKitManager {
 
   // Event listener management
 
+  private addListener(eventType: string, listener: (event: CallKitEvent) => void): () => void {
+    if (!this.listeners.has(eventType)) {
+      this.listeners.set(eventType, new Set());
+    }
+    this.listeners.get(eventType)!.add(listener);
+    return () => {
+      const set = this.listeners.get(eventType);
+      if (set) {
+        set.delete(listener);
+        if (set.size === 0) {
+          this.listeners.delete(eventType);
+        }
+      }
+    };
+  }
+
   public onStartCall(listener: (event: CallKitEvent) => void): () => void {
-    this.listeners.set('startCall', listener);
-    return () => this.listeners.delete('startCall');
+    return this.addListener('startCall', listener);
   }
 
   public onAnswerCall(listener: (event: CallKitEvent) => void): () => void {
-    this.listeners.set('answerCall', listener);
-    return () => this.listeners.delete('answerCall');
+    return this.addListener('answerCall', listener);
   }
 
   public onEndCall(listener: (event: CallKitEvent) => void): () => void {
-    this.listeners.set('endCall', listener);
-    return () => this.listeners.delete('endCall');
+    return this.addListener('endCall', listener);
   }
 
   public onReceivePush(listener: (event: CallKitEvent) => void): () => void {
-    this.listeners.set('receivePush', listener);
-    return () => this.listeners.delete('receivePush');
+    return this.addListener('receivePush', listener);
   }
 
   // Utility methods
