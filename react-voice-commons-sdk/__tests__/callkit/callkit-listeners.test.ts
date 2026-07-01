@@ -30,15 +30,12 @@ jest.mock('react-native', () => ({
 import { CallKit } from '../../src/callkit/callkit';
 
 type NotifyFn = (eventType: string, event: { callUUID: string }) => void;
-const notify = (CallKit as unknown as { notifyListeners: NotifyFn })
-  .notifyListeners.bind(CallKit);
+const notify = (CallKit as unknown as { notifyListeners: NotifyFn }).notifyListeners.bind(CallKit);
 
 describe('CallKit listener management (VSDK-341)', () => {
   afterEach(() => {
     // Clean up any leftover listeners between tests
-    const listeners = (CallKit as unknown as {
-      listeners: Map<string, Set<unknown>>;
-    }).listeners;
+    const listeners = (CallKit as unknown as { listeners: Map<string, Set<unknown>> }).listeners;
     listeners.clear();
   });
 
@@ -105,9 +102,7 @@ describe('CallKit listener management (VSDK-341)', () => {
     expect(listener).not.toHaveBeenCalled();
 
     // The Set should be removed from the Map entirely
-    const listeners = (CallKit as unknown as {
-      listeners: Map<string, Set<unknown>>;
-    }).listeners;
+    const listeners = (CallKit as unknown as { listeners: Map<string, Set<unknown>> }).listeners;
     expect(listeners.has('receivePush')).toBe(false);
   });
 
