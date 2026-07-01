@@ -476,6 +476,7 @@ For complete API documentation and advanced usage patterns, see the [TelnyxVoice
 - [Call Quality Metrics](./call-features/call-quality-metrics.md) — real-time MOS estimation, quality level classification, and WebRTC stats normalization.
 - [Error Handling](./error-handling/ErrorHandling.md) — common errors and recovery patterns.
 - [Expo Integration](./expo/ExpoIntegration.md) — Expo-specific setup.
+- [Trickle ICE](./call-features/trickle-ice.md) — enabling and disabling Trickle ICE for faster call setup.
 
 ## License
 
