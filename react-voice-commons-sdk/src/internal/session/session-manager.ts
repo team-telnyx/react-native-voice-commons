@@ -107,6 +107,36 @@ export class SessionManager {
   }
 
   /**
+   * Reconnect using credential authentication after a connection loss.
+   * Emits RECONNECTING before re-establishing the connection so consumers
+   * can distinguish a reconnect from an initial connect.
+   */
+  async reconnectWithCredential(config: CredentialConfig): Promise<void> {
+    if (this._disposed) {
+      throw new Error('SessionManager has been disposed');
+    }
+
+    this._currentConfig = config;
+    this._connectionState.next(TelnyxConnectionState.RECONNECTING);
+    await this._connect();
+  }
+
+  /**
+   * Reconnect using token authentication after a connection loss.
+   * Emits RECONNECTING before re-establishing the connection so consumers
+   * can distinguish a reconnect from an initial connect.
+   */
+  async reconnectWithToken(config: TokenConfig): Promise<void> {
+    if (this._disposed) {
+      throw new Error('SessionManager has been disposed');
+    }
+
+    this._currentConfig = config;
+    this._connectionState.next(TelnyxConnectionState.RECONNECTING);
+    await this._connect();
+  }
+
+  /**
    * Disconnect from the Telnyx platform.
    *
    * The DISCONNECTED state is emitted BEFORE awaiting the underlying

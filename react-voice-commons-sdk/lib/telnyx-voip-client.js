@@ -279,7 +279,7 @@ class TelnyxVoipClient {
             storedUsername
           );
         }
-        await this._sessionManager.connectWithCredential(config);
+        await this._sessionManager.reconnectWithCredential(config);
         return true;
       }
       // Check if we have token-based authentication data
@@ -294,7 +294,7 @@ class TelnyxVoipClient {
         if (this._options.debug) {
           console.log('TelnyxVoipClient: Reconnecting with stored token');
         }
-        await this._sessionManager.connectWithToken(config);
+        await this._sessionManager.reconnectWithToken(config);
         return true;
       }
       // No stored authentication data found

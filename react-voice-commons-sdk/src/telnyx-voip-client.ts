@@ -334,7 +334,7 @@ export class TelnyxVoipClient {
           );
         }
 
-        await this._sessionManager.connectWithCredential(config);
+        await this._sessionManager.reconnectWithCredential(config);
         return true;
       }
 
@@ -352,7 +352,7 @@ export class TelnyxVoipClient {
           console.log('TelnyxVoipClient: Reconnecting with stored token');
         }
 
-        await this._sessionManager.connectWithToken(config);
+        await this._sessionManager.reconnectWithToken(config);
         return true;
       }
 

@@ -52,6 +52,18 @@ export declare class SessionManager {
    */
   connectWithToken(config: TokenConfig): Promise<void>;
   /**
+   * Reconnect using credential authentication after a connection loss.
+   * Emits RECONNECTING before re-establishing the connection so consumers
+   * can distinguish a reconnect from an initial connect.
+   */
+  reconnectWithCredential(config: CredentialConfig): Promise<void>;
+  /**
+   * Reconnect using token authentication after a connection loss.
+   * Emits RECONNECTING before re-establishing the connection so consumers
+   * can distinguish a reconnect from an initial connect.
+   */
+  reconnectWithToken(config: TokenConfig): Promise<void>;
+  /**
    * Disconnect from the Telnyx platform.
    *
    * The DISCONNECTED state is emitted BEFORE awaiting the underlying
