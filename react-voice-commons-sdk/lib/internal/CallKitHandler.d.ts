@@ -11,6 +11,9 @@ interface CallKitHandlerProps {
  * Internal CallKit handler for iOS push notifications
  * This component is automatically included in TelnyxVoiceApp
  *
+ * The active instance removes only its own DeviceEventEmitter subscriptions on
+ * unmount via each listener's `.remove()` method.
+ *
  * @internal - Users should not use this component directly
  */
 export declare const CallKitHandler: React.FC<CallKitHandlerProps>;
