@@ -153,3 +153,4 @@ function CallQualityIndicator() {
 ## See Also
 
 - [Sending DTMF Tones](./dtmf.md) — Send DTMF tones during an active call.
+- [Trickle ICE](./trickle-ice.md) — ICE candidate gathering for NAT traversal.
