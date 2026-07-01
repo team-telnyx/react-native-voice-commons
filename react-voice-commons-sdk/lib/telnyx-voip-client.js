@@ -451,8 +451,11 @@ class TelnyxVoipClient {
       console.log('TelnyxVoipClient: Disposing client');
     }
     this._disposed = true;
-    this._callStateController.dispose();
+    // Tear down the session/client BEFORE completing call-state streams so the
+    // onDisconnect -> clearAllCalls() callback fires while the controller is
+    // still active and observers receive cleanup state transitions first.
     this._sessionManager.dispose();
+    this._callStateController.dispose();
   }
   // ========== Private Methods ==========
   /**
