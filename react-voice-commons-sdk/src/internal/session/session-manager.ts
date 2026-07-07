@@ -192,18 +192,16 @@ export class SessionManager {
     // gateway routes THIS push's INVITE to a different (correctly-stamped)
     // client and we sit on the wrong socket forever.
     if (this._telnyxClient) {
-      try {
-        await this._telnyxClient.disconnect();
-      } catch (err) {
-        console.warn('SessionManager: disconnect of prior client threw:', err);
-      }
+      await this._disconnectAndForgetClient(
+        this._telnyxClient,
+        'SessionManager: disconnect of prior client threw:'
+      );
     }
 
     if (this._isTeardownActive()) {
       return;
     }
 
-    this._telnyxClient = undefined;
     if (this.currentState !== TelnyxConnectionState.DISCONNECTED) {
       this._connectionState.next(TelnyxConnectionState.DISCONNECTED);
     }
@@ -434,6 +432,7 @@ export class SessionManager {
     this._connectionState.next(TelnyxConnectionState.CONNECTING);
 
     let client: TelnyxSDK.TelnyxRTC | undefined;
+    let canceledConnectCleanupCompleted = false;
 
     try {
       // Clean up existing client
@@ -551,6 +550,7 @@ export class SessionManager {
 
       if (this._isConnectCanceled(connectionGeneration)) {
         await this._disconnectAndForgetClient(client, 'Error during dispose disconnect:');
+        canceledConnectCleanupCompleted = true;
         throw this._createConnectCanceledError();
       }
 
@@ -558,13 +558,20 @@ export class SessionManager {
       console.log('🔧 SessionManager: Client connected successfully');
     } catch (error) {
       if (this._isConnectCanceled(connectionGeneration)) {
-        if (client) {
+        if (client && !canceledConnectCleanupCompleted) {
           await this._disconnectAndForgetClient(client, 'Error during dispose disconnect:');
         }
         throw this._createConnectCanceledError();
       }
 
       console.error('Connection failed:', error);
+      if (client) {
+        try {
+          await this._disconnectAndForgetClient(client, 'Error during failed connect cleanup:');
+        } catch (cleanupError) {
+          console.error('Error during failed connect cleanup:', cleanupError);
+        }
+      }
       this._connectionState.next(TelnyxConnectionState.ERROR);
       throw error;
     }
@@ -708,6 +715,7 @@ export class SessionManager {
       await client.disconnect();
     } catch (error) {
       console.error(errorMessage, error);
+      throw error;
     }
   }
 

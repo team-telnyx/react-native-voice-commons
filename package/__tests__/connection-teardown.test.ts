@@ -51,8 +51,33 @@ describe('Connection teardown', () => {
     connection.close();
 
     await rejection;
-    expect(closeListener).toHaveBeenCalledTimes(1);
+    expect(closeListener).not.toHaveBeenCalled();
     expect(mockSocket.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects sendAndWait calls created after explicit close', async () => {
+    const { Connection } = require('../lib/connection.ts') as typeof import('../lib/connection');
+    const connection = new Connection();
+
+    connection.close();
+
+    await expect(connection.sendAndWait({ id: 'after-close' })).rejects.toThrow(
+      'Connection closed'
+    );
+  });
+
+  it('continues close cleanup when native socket close throws', () => {
+    const { Connection } = require('../lib/connection.ts') as typeof import('../lib/connection');
+    const connection = new Connection();
+    mockSocket.close.mockImplementationOnce(() => {
+      throw new Error('native close failed');
+    });
+
+    expect(() => connection.close()).not.toThrow();
+    expect(mockSocket.removeOnOpenListener).toHaveBeenCalledTimes(1);
+    expect(mockSocket.removeOnErrorListener).toHaveBeenCalledTimes(1);
+    expect(mockSocket.removeOnCloseListener).toHaveBeenCalledTimes(1);
+    expect(mockSocket.removeOnMessageListener).toHaveBeenCalledTimes(1);
   });
 
   it('rejects pending sendAndWait promises on natural socket close', async () => {

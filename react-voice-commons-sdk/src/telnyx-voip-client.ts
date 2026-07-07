@@ -40,6 +40,7 @@ export class TelnyxVoipClient {
   private readonly _callStateController: CallStateController;
   private readonly _options: Required<TelnyxVoipClientOptions>;
   private _disposed = false;
+  private _disposePromise?: Promise<void>;
 
   /**
    * Check if the app was launched from a push notification.
@@ -532,8 +533,8 @@ export class TelnyxVoipClient {
    * disposed after handling push notifications.
    */
   async dispose(): Promise<void> {
-    if (this._disposed) {
-      return;
+    if (this._disposePromise) {
+      return this._disposePromise;
     }
 
     if (this._options.debug) {
@@ -541,11 +542,15 @@ export class TelnyxVoipClient {
     }
 
     this._disposed = true;
-    try {
-      await this._sessionManager.dispose();
-    } finally {
-      this._callStateController.dispose();
-    }
+    this._disposePromise = (async () => {
+      try {
+        await this._sessionManager.dispose();
+      } finally {
+        this._callStateController.dispose();
+      }
+    })();
+
+    return this._disposePromise;
   }
 
   // ========== Private Methods ==========

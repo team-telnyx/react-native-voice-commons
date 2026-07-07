@@ -137,4 +137,62 @@ describe('SessionManager', () => {
       manager.connectWithCredential(createCredentialConfig('other-user', 'other-password'))
     ).resolves.toBeUndefined();
   });
+
+  it('keeps the TelnyxRTC reference when native disconnect fails', async () => {
+    const manager = new SessionManager();
+
+    await manager.connectWithCredential(createCredentialConfig('sip-user', 'sip-password'));
+
+    const TelnyxRTCMock = TelnyxSDK.TelnyxRTC as unknown as jest.Mock;
+    const telnyxClient = TelnyxRTCMock.mock.results[0]?.value;
+    const disconnectError = new Error('native disconnect failed');
+
+    expect(telnyxClient).toBeDefined();
+
+    telnyxClient.disconnect.mockRejectedValueOnce(disconnectError);
+
+    await expect(manager.disconnect()).rejects.toThrow('native disconnect failed');
+    expect(manager.telnyxClient).toBe(telnyxClient);
+  });
+
+  it('disconnects and forgets a TelnyxRTC client after a non-canceled connect failure', async () => {
+    const TelnyxRTCMock = TelnyxSDK.TelnyxRTC as unknown as jest.Mock;
+    const connectError = new Error('login failed');
+    const telnyxClient = {
+      connect: jest.fn(() => Promise.reject(connectError)),
+      disconnect: jest.fn(() => Promise.resolve()),
+      newCall: jest.fn(),
+      on: jest.fn(),
+      off: jest.fn(),
+    };
+
+    TelnyxRTCMock.mockImplementationOnce(() => telnyxClient);
+
+    const manager = new SessionManager();
+
+    await expect(
+      manager.connectWithCredential(createCredentialConfig('sip-user', 'sip-password'))
+    ).rejects.toThrow('login failed');
+
+    expect(telnyxClient.disconnect).toHaveBeenCalledTimes(1);
+    expect(manager.telnyxClient).toBeUndefined();
+  });
+
+  it('keeps the prior TelnyxRTC reference when push rebuild disconnect fails', async () => {
+    const manager = new SessionManager();
+
+    await manager.connectWithCredential(createCredentialConfig('sip-user', 'sip-password'));
+
+    const TelnyxRTCMock = TelnyxSDK.TelnyxRTC as unknown as jest.Mock;
+    const telnyxClient = TelnyxRTCMock.mock.results[0]?.value;
+
+    expect(telnyxClient).toBeDefined();
+
+    telnyxClient.disconnect.mockRejectedValueOnce(new Error('prior disconnect failed'));
+
+    await expect(
+      manager.handlePushNotification({ metadata: { call_id: 'call-id' } })
+    ).rejects.toThrow('prior disconnect failed');
+    expect(manager.telnyxClient).toBe(telnyxClient);
+  });
 });

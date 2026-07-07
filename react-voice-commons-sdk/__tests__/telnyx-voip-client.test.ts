@@ -4,6 +4,11 @@ import {
   destroyTelnyxVoipClient,
 } from '../src/telnyx-voip-client';
 
+const flushMicrotasks = async (): Promise<void> => {
+  await Promise.resolve();
+  await Promise.resolve();
+};
+
 describe('TelnyxVoipClient singleton lifecycle', () => {
   beforeEach(async () => {
     jest.restoreAllMocks();
@@ -34,5 +39,40 @@ describe('TelnyxVoipClient singleton lifecycle', () => {
 
     resolveDispose?.();
     await destroyPromise;
+  });
+
+  it('makes concurrent dispose callers wait for the same teardown', async () => {
+    const client = new TelnyxVoipClient();
+    let resolveSessionDispose: (() => void) | undefined;
+    const sessionDispose = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSessionDispose = resolve;
+        })
+    );
+    const callStateDispose = jest.fn();
+
+    (client as any)._sessionManager.dispose = sessionDispose;
+    (client as any)._callStateController.dispose = callStateDispose;
+
+    const firstDispose = client.dispose();
+    let secondSettled = false;
+    const secondDispose = client.dispose().then(() => {
+      secondSettled = true;
+    });
+
+    await flushMicrotasks();
+
+    expect(sessionDispose).toHaveBeenCalledTimes(1);
+    expect(callStateDispose).not.toHaveBeenCalled();
+    expect(secondSettled).toBe(false);
+    expect(resolveSessionDispose).toBeDefined();
+
+    resolveSessionDispose?.();
+
+    await Promise.all([firstDispose, secondDispose]);
+
+    expect(secondSettled).toBe(true);
+    expect(callStateDispose).toHaveBeenCalledTimes(1);
   });
 });

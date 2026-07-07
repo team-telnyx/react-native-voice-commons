@@ -444,18 +444,21 @@ class TelnyxVoipClient {
    * disposed after handling push notifications.
    */
   async dispose() {
-    if (this._disposed) {
-      return;
+    if (this._disposePromise) {
+      return this._disposePromise;
     }
     if (this._options.debug) {
       console.log('TelnyxVoipClient: Disposing client');
     }
     this._disposed = true;
-    try {
-      await this._sessionManager.dispose();
-    } finally {
-      this._callStateController.dispose();
-    }
+    this._disposePromise = (async () => {
+      try {
+        await this._sessionManager.dispose();
+      } finally {
+        this._callStateController.dispose();
+      }
+    })();
+    return this._disposePromise;
   }
   // ========== Private Methods ==========
   /**

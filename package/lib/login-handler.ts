@@ -121,7 +121,7 @@ export class LoginHandler {
 
   public cancelPendingLogin(reason = 'Connection closed') {
     if (this.waitingForClientReady) {
-      this.clientIsReady?.reject(new Error(reason));
+      this.clientIsReady.reject(new Error(reason));
     }
     this.waitingForClientReady = false;
     this.clientIsReady = null;

@@ -29,6 +29,7 @@ export declare class TelnyxVoipClient {
   private readonly _callStateController;
   private readonly _options;
   private _disposed;
+  private _disposePromise?;
   /**
    * Check if the app was launched from a push notification.
    *

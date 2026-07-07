@@ -7,6 +7,28 @@ const react_native_1 = require('react-native');
 const telnyx_voip_client_1 = require('./telnyx-voip-client');
 const connection_state_1 = require('./models/connection-state');
 const TelnyxVoiceContext_1 = require('./context/TelnyxVoiceContext');
+let sharedBackgroundClient = null;
+let sharedBackgroundDisposePromise = null;
+const disposeSharedBackgroundClient = async (log, expectedClient) => {
+  if (sharedBackgroundDisposePromise) {
+    await sharedBackgroundDisposePromise;
+  }
+  const backgroundClient = expectedClient ?? sharedBackgroundClient;
+  if (!backgroundClient || (expectedClient && sharedBackgroundClient !== expectedClient)) {
+    return;
+  }
+  sharedBackgroundClient = null;
+  log('Disposing background client instance');
+  sharedBackgroundDisposePromise = backgroundClient
+    .dispose()
+    .catch((e) => {
+      log('Error disposing background client instance:', e);
+    })
+    .finally(() => {
+      sharedBackgroundDisposePromise = null;
+    });
+  await sharedBackgroundDisposePromise;
+};
 /**
  * A comprehensive wrapper component that handles all Telnyx SDK lifecycle management.
  *
@@ -42,8 +64,6 @@ const TelnyxVoiceAppComponent = ({
   // Refs for tracking state
   const appStateRef = (0, react_1.useRef)(react_native_1.AppState.currentState);
   const backgroundDetectorIgnore = (0, react_1.useRef)(false);
-  // Static background client instance for singleton pattern
-  const backgroundClientRef = (0, react_1.useRef)(null);
   const log = (0, react_1.useCallback)(
     (message, ...args) => {
       if (debug) {
@@ -376,16 +396,7 @@ const TelnyxVoiceAppComponent = ({
   );
   // Dispose background client instance when no longer needed
   const disposeBackgroundClient = (0, react_1.useCallback)(async () => {
-    const backgroundClient = backgroundClientRef.current;
-    if (backgroundClient) {
-      backgroundClientRef.current = null;
-      log('Disposing background client instance');
-      try {
-        await backgroundClient.dispose();
-      } catch (e) {
-        log('Error disposing background client instance:', e);
-      }
-    }
+    await disposeSharedBackgroundClient(log);
   }, [log]);
   // Create background client for push notification handling
   const createBackgroundClient = (0, react_1.useCallback)(() => {
@@ -616,21 +627,19 @@ const handleBackgroundPush = async (message) => {
   let backgroundClient = null;
   try {
     // TODO: Initialize push notification service in isolate if needed
+    await disposeSharedBackgroundClient(console.log);
     // Use singleton pattern for background client to prevent multiple instances
     backgroundClient = (0, telnyx_voip_client_1.createBackgroundTelnyxVoipClient)({
       debug: false,
     });
+    sharedBackgroundClient = backgroundClient;
     await backgroundClient.handlePushNotification(message);
     console.log('[TelnyxVoiceApp] Background push processed successfully');
   } catch (e) {
     console.log('[TelnyxVoiceApp] Error processing background push:', e);
   } finally {
     if (backgroundClient) {
-      try {
-        await backgroundClient.dispose();
-      } catch (e) {
-        console.log('[TelnyxVoiceApp] Error disposing background push client:', e);
-      }
+      await disposeSharedBackgroundClient(console.log, backgroundClient);
     }
   }
 };
