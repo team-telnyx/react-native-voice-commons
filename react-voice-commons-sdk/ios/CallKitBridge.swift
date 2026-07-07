@@ -529,18 +529,27 @@ import React
             }
         }
 
-        public func setupSynchronously() {
+        @discardableResult
+        public func setupSynchronously() -> CXProvider {
             // Only initialize once
-            guard callKitProvider == nil else {
+            if let callKitProvider = callKitProvider {
                 NSLog("TelnyxVoice: CallKit already setup, skipping")
-                return
+                return callKitProvider
             }
 
             // CRITICAL: Setup CallKit synchronously for terminated app VoIP push handling
             // This MUST happen in the same run loop as the VoIP push
             NSLog("TelnyxVoice: Synchronous CallKit setup for terminated app scenario...")
             setupCallKit()
+            if let callKitProvider = callKitProvider {
+                NSLog("TelnyxVoice: ✅ CallKit provider ready for terminated app handling")
+                return callKitProvider
+            }
+
+            NSLog("TelnyxVoice: CallKit setup did not create a provider; creating fallback provider")
+            let callKitProvider = installCallKitProvider()
             NSLog("TelnyxVoice: ✅ CallKit provider ready for terminated app handling")
+            return callKitProvider
         }
 
         private func setupAutomatically() {
@@ -571,6 +580,10 @@ import React
                 return
             }
 
+            _ = installCallKitProvider()
+        }
+
+        private func installCallKitProvider() -> CXProvider {
             // Use the localizedName from the app's bundle display name or fallback
             let appName =
                 Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
@@ -584,14 +597,62 @@ import React
             configuration.supportedHandleTypes = [.phoneNumber, .generic]
             configuration.includesCallsInRecents = true
 
-            callKitProvider = CXProvider(configuration: configuration)
-            callKitProvider?.setDelegate(self, queue: nil)
+            let provider = CXProvider(configuration: configuration)
+            provider.setDelegate(self, queue: nil)
+            callKitProvider = provider
             callKitController = CXCallController()
 
             NSLog("TelnyxVoice: CallKit provider and controller created")
+            return provider
         }
 
-     
+        fileprivate func reportAndEndWatchdogCall(
+            callUUID: UUID,
+            callerName: String,
+            callerNumber: String,
+            payload: [AnyHashable: Any],
+            source: String,
+            endedReason: CXCallEndedReason,
+            completion: (() -> Void)? = nil
+        ) {
+            let callKitProvider = setupSynchronously()
+
+            activeCalls[callUUID] = [
+                "caller": callerName,
+                "handle": callerNumber,
+                "payload": payload,
+                "uuid": callUUID.uuidString,
+                "direction": "incoming",
+                "source": source,
+                "watchdogPlaceholder": true,
+            ]
+
+            let handle = CXHandle(type: .phoneNumber, value: callerNumber)
+            let callUpdate = CXCallUpdate()
+            callUpdate.remoteHandle = handle
+            callUpdate.hasVideo = false
+            callUpdate.localizedCallerName = callerName
+
+            callKitProvider.reportNewIncomingCall(with: callUUID, update: callUpdate) { error in
+                if let error = error {
+                    NSLog(
+                        "TelnyxVoice: Watchdog CallKit report failed for \(source): \(error.localizedDescription)"
+                    )
+                } else {
+                    NSLog("TelnyxVoice: Watchdog CallKit call reported for \(source)")
+                }
+
+                callKitProvider.reportCall(with: callUUID, endedAt: Date(), reason: endedReason)
+                self.activeCalls.removeValue(forKey: callUUID)
+
+                if self.pendingAnswerAction?.callUUID == callUUID {
+                    self.pendingAnswerAction?.fail()
+                    self.pendingAnswerAction = nil
+                }
+
+                completion?()
+            }
+        }
 
         private func observeAppDelegate() {
             // Automatically hook into app lifecycle if needed
@@ -620,22 +681,30 @@ import React
             }
 
             NSLog("TelnyxVoice: Missed call VoIP push received: \(payload)")
-            setupSynchronously()
+            let callKitProvider = setupSynchronously()
 
             let callId = TelnyxMissedCallPush.callId(from: payload)
             let missedCallId = TelnyxMissedCallPush.stableIdentifier(from: payload)
-            if hasProcessedMissedCall(id: missedCallId) {
-                NSLog("TelnyxVoice: Ignoring duplicate missed call push: \(missedCallId)")
-                completion?()
-                return true
-            }
-
             let callUUID = TelnyxMissedCallPush.uuid(from: missedCallId)
             let callerName = TelnyxMissedCallPush.callerName(from: payload)
             let callerNumber = TelnyxMissedCallPush.callerNumber(from: payload)
 
+            if hasProcessedMissedCall(id: missedCallId) {
+                NSLog("TelnyxVoice: Suppressing duplicate missed call notification: \(missedCallId)")
+                reportAndEndWatchdogCall(
+                    callUUID: UUID(),
+                    callerName: callerName,
+                    callerNumber: callerNumber,
+                    payload: payload,
+                    source: "missed_call_duplicate_watchdog",
+                    endedReason: .remoteEnded,
+                    completion: completion
+                )
+                return true
+            }
+
             let finishMissedCall = {
-                self.callKitProvider?.reportCall(with: callUUID, endedAt: Date(), reason: .remoteEnded)
+                callKitProvider.reportCall(with: callUUID, endedAt: Date(), reason: .remoteEnded)
                 self.activeCalls.removeValue(forKey: callUUID)
 
                 if self.pendingAnswerAction?.callUUID == callUUID {
@@ -656,13 +725,30 @@ import React
 
             if let activeCall = activeCalls[callUUID] {
                 guard activeCall["source"] as? String == "missed_call_push" else {
-                    NSLog("TelnyxVoice: Ignoring missed call push because UUID belongs to an active call: \(callUUID)")
+                    NSLog("TelnyxVoice: Suppressing missed call notification because UUID belongs to an active call: \(callUUID)")
                     markMissedCallProcessed(id: missedCallId)
-                    completion?()
+                    reportAndEndWatchdogCall(
+                        callUUID: UUID(),
+                        callerName: callerName,
+                        callerNumber: callerNumber,
+                        payload: payload,
+                        source: "missed_call_collision_watchdog",
+                        endedReason: .remoteEnded,
+                        completion: completion
+                    )
                     return true
                 }
 
-                finishMissedCall()
+                reportAndEndWatchdogCall(
+                    callUUID: UUID(),
+                    callerName: callerName,
+                    callerNumber: callerNumber,
+                    payload: payload,
+                    source: "missed_call_active_watchdog",
+                    endedReason: .remoteEnded
+                ) {
+                    finishMissedCall()
+                }
                 return true
             }
 
@@ -681,9 +767,10 @@ import React
             callUpdate.hasVideo = false
             callUpdate.localizedCallerName = callerName
 
-            callKitProvider?.reportNewIncomingCall(with: callUUID, update: callUpdate) { error in
+            callKitProvider.reportNewIncomingCall(with: callUUID, update: callUpdate) { error in
                 if let error = error {
                     NSLog("TelnyxVoice: Missed call CallKit report failed: \(error.localizedDescription)")
+                    callKitProvider.reportCall(with: callUUID, endedAt: Date(), reason: .failed)
                     self.activeCalls.removeValue(forKey: callUUID)
                     self.clearPendingPushData(for: callId)
                     completion?()
@@ -952,6 +1039,13 @@ import React
             NSLog("📞 TelnyxVoice: CALLKIT ANSWER ACTION - Provider: \(provider), Action: \(action)")
             NSLog("TelnyxVoice: User answered call with UUID: \(action.callUUID)")
 
+            if activeCalls[action.callUUID]?["watchdogPlaceholder"] as? Bool == true {
+                NSLog("TelnyxVoice: Failing answer for watchdog placeholder call: \(action.callUUID)")
+                activeCalls.removeValue(forKey: action.callUUID)
+                action.fail()
+                return
+            }
+
             // Check if this is a programmatic answer (call already answered in WebRTC)
             // vs a user answer from CallKit UI
             if let callData = activeCalls[action.callUUID],
@@ -1132,6 +1226,47 @@ import React
             } catch {
                 NSLog("Failed to activate audio session: \(error)")
             }
+
+            // Extract caller information and call_id from the payload
+            var callerName = "Unknown Caller"
+            var callerNumber = "Unknown"
+            var callId: String?
+
+            if let metadata = payload.dictionaryPayload["metadata"] as? [String: Any] {
+                callerName =
+                    metadata["caller_name"] as? String ?? metadata["caller_number"] as? String
+                    ?? "Unknown Caller"
+                callerNumber = metadata["caller_number"] as? String ?? callerName
+                callId = metadata["call_id"] as? String
+            } else {
+                callerName =
+                    payload.dictionaryPayload["caller"] as? String ?? payload.dictionaryPayload[
+                        "from"] as? String ?? "Unknown Caller"
+                callerNumber = payload.dictionaryPayload["caller_number"] as? String ?? callerName
+                callId = payload.dictionaryPayload["call_id"] as? String
+            }
+
+            // Use call_id as CallKit UUID to ensure matching with WebRTC.
+            guard let callIdString = callId, let callUUID = UUID(uuidString: callIdString) else {
+                NSLog(
+                    "[TelnyxVoipPushHandler] ⚠️ Invalid or missing call_id in payload (\(callId ?? "nil")); reporting failed watchdog placeholder"
+                )
+                TelnyxCallKitManager.shared.reportAndEndWatchdogCall(
+                    callUUID: UUID(),
+                    callerName: callerName,
+                    callerNumber: callerNumber,
+                    payload: payload.dictionaryPayload,
+                    source: "malformed_push_watchdog",
+                    endedReason: .failed,
+                    completion: completion
+                )
+                return
+            }
+
+            NSLog(
+                "[TelnyxVoipPushHandler] Processing call - Call ID as UUID: \(callUUID.uuidString), Caller: \(callerName), Number: \(callerNumber)"
+            )
+
             // Store the VoIP push data for VoicePnBridge
             do {
                 let jsonData = try JSONSerialization.data(withJSONObject: payload.dictionaryPayload)
@@ -1162,38 +1297,6 @@ import React
                 UserDefaults.standard.synchronize()
             }
 
-            // Extract caller information and call_id from the payload
-            var callerName = "Unknown Caller"
-            var callerNumber = "Unknown"
-            var callId: String?
-
-            if let metadata = payload.dictionaryPayload["metadata"] as? [String: Any] {
-                callerName =
-                    metadata["caller_name"] as? String ?? metadata["caller_number"] as? String
-                    ?? "Unknown Caller"
-                callerNumber = metadata["caller_number"] as? String ?? callerName
-                callId = metadata["call_id"] as? String
-            } else {
-                callerName =
-                    payload.dictionaryPayload["caller"] as? String ?? payload.dictionaryPayload[
-                        "from"] as? String ?? "Unknown Caller"
-                callerNumber = payload.dictionaryPayload["caller_number"] as? String ?? callerName
-                callId = payload.dictionaryPayload["call_id"] as? String
-            }
-
-            // Use call_id as CallKit UUID to ensure matching with WebRTC
-            guard let callIdString = callId, let callUUID = UUID(uuidString: callIdString) else {
-                NSLog(
-                    "[TelnyxVoipPushHandler] ❌ No valid call_id found in payload, cannot process call"
-                )
-                completion()
-                return
-            }
-
-            NSLog(
-                "[TelnyxVoipPushHandler] Processing call - Call ID as UUID: \(callUUID.uuidString), Caller: \(callerName), Number: \(callerNumber)"
-            )
-
             // Use unified CallKit handling path that works for both running and terminated app scenarios
             NSLog("[TelnyxVoipPushHandler] Using unified CallKit handling path")
 
@@ -1202,16 +1305,7 @@ import React
 
             // CRITICAL: Setup CallKit SYNCHRONOUSLY - no async dispatch allowed
             // This must happen in the same run loop as the VoIP push
-            callKitManager.setupSynchronously()
-
-            // Ensure we have a valid CallKit provider after setup
-            guard let callKitProvider = callKitManager.callKitProvider else {
-                NSLog(
-                    "[TelnyxVoipPushHandler] ❌ FATAL: CallKit provider not available after synchronous setup!"
-                )
-                completion()
-                return
-            }
+            let callKitProvider = callKitManager.setupSynchronously()
 
             NSLog("[TelnyxVoipPushHandler] ✅ CallKit provider ready, reporting incoming call")
 
