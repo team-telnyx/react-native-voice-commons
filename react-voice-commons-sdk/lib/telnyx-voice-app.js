@@ -7,6 +7,28 @@ const react_native_1 = require('react-native');
 const telnyx_voip_client_1 = require('./telnyx-voip-client');
 const connection_state_1 = require('./models/connection-state');
 const TelnyxVoiceContext_1 = require('./context/TelnyxVoiceContext');
+let sharedBackgroundClient = null;
+let sharedBackgroundDisposePromise = null;
+const disposeSharedBackgroundClient = async (log, expectedClient) => {
+  if (sharedBackgroundDisposePromise) {
+    await sharedBackgroundDisposePromise;
+  }
+  const backgroundClient = expectedClient ?? sharedBackgroundClient;
+  if (!backgroundClient || (expectedClient && sharedBackgroundClient !== expectedClient)) {
+    return;
+  }
+  sharedBackgroundClient = null;
+  log('Disposing background client instance');
+  sharedBackgroundDisposePromise = backgroundClient
+    .dispose()
+    .catch((e) => {
+      log('Error disposing background client instance:', e);
+    })
+    .finally(() => {
+      sharedBackgroundDisposePromise = null;
+    });
+  await sharedBackgroundDisposePromise;
+};
 /**
  * A comprehensive wrapper component that handles all Telnyx SDK lifecycle management.
  *
@@ -42,8 +64,6 @@ const TelnyxVoiceAppComponent = ({
   // Refs for tracking state
   const appStateRef = (0, react_1.useRef)(react_native_1.AppState.currentState);
   const backgroundDetectorIgnore = (0, react_1.useRef)(false);
-  // Static background client instance for singleton pattern
-  const backgroundClientRef = (0, react_1.useRef)(null);
   const log = (0, react_1.useCallback)(
     (message, ...args) => {
       if (debug) {
@@ -339,7 +359,7 @@ const TelnyxVoiceAppComponent = ({
         backgroundDetectorIgnore.current = true;
         log(`Background detector ignore set to: true at ${new Date().toISOString()}`);
         log(`Foreground call handling flag set to: true at ${new Date().toISOString()}`);
-        disposeBackgroundClient();
+        await disposeBackgroundClient();
         // On iOS, coordinate with CallKit using the call_id from push metadata
         if (react_native_1.Platform.OS === 'ios') {
           const callId = pushData.metadata?.call_id;
@@ -375,12 +395,8 @@ const TelnyxVoiceAppComponent = ({
     ]
   );
   // Dispose background client instance when no longer needed
-  const disposeBackgroundClient = (0, react_1.useCallback)(() => {
-    if (backgroundClientRef.current) {
-      log('Disposing background client instance');
-      backgroundClientRef.current.dispose();
-      backgroundClientRef.current = null;
-    }
+  const disposeBackgroundClient = (0, react_1.useCallback)(async () => {
+    await disposeSharedBackgroundClient(log);
   }, [log]);
   // Create background client for push notification handling
   const createBackgroundClient = (0, react_1.useCallback)(() => {
@@ -523,7 +539,7 @@ const TelnyxVoiceAppComponent = ({
       }
       clearTimeout(timeoutId);
       // Clean up background client instance
-      disposeBackgroundClient();
+      void disposeBackgroundClient();
     };
   }, [
     voipClient,
@@ -608,18 +624,23 @@ const initializeAndCreate = async (options) => {
  */
 const handleBackgroundPush = async (message) => {
   console.log('[TelnyxVoiceApp] Background push received:', message);
+  let backgroundClient = null;
   try {
     // TODO: Initialize push notification service in isolate if needed
+    await disposeSharedBackgroundClient(console.log);
     // Use singleton pattern for background client to prevent multiple instances
-    let backgroundClient = (0, telnyx_voip_client_1.createBackgroundTelnyxVoipClient)({
+    backgroundClient = (0, telnyx_voip_client_1.createBackgroundTelnyxVoipClient)({
       debug: false,
     });
+    sharedBackgroundClient = backgroundClient;
     await backgroundClient.handlePushNotification(message);
     console.log('[TelnyxVoiceApp] Background push processed successfully');
-    // Clean up the background client
-    backgroundClient.dispose();
   } catch (e) {
     console.log('[TelnyxVoiceApp] Error processing background push:', e);
+  } finally {
+    if (backgroundClient) {
+      await disposeSharedBackgroundClient(console.log, backgroundClient);
+    }
   }
 };
 // Create the component with static methods

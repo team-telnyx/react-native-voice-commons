@@ -22,6 +22,8 @@ export class Connection extends EventEmitter<ConnectionEvents> {
   private reconnectEnabled: boolean = true;
   private reconnectAttempts: number = 0;
   private reconnectTimer: any = null;
+  private isClosed: boolean = false;
+  private hasEmittedClose: boolean = false;
 
   // Track last time we observed live traffic in either direction. Used by
   // callers to decide whether the socket is trustworthy after the app has
@@ -49,6 +51,10 @@ export class Connection extends EventEmitter<ConnectionEvents> {
     this.socket = WebSocketSelfSigned.getInstance(wsUrl);
 
     this.socket.onOpen(() => {
+      if (this.isClosed) {
+        return;
+      }
+
       log.debug('[Connection]: WebSocket connection opened');
       this.isSocketConnected = true;
       this._lastActivityAt = Date.now();
@@ -69,7 +75,12 @@ export class Connection extends EventEmitter<ConnectionEvents> {
     });
 
     this.socket.onError((error: string) => {
+      if (this.isClosed) {
+        return;
+      }
+
       log.error('[Connection]: WebSocket error occurred', error);
+      this.rejectPendingTransactions(new Error('Connection error'));
       try {
         this.emit('telnyx.socket.error', error as any);
       } catch (emitError) {
@@ -82,18 +93,18 @@ export class Connection extends EventEmitter<ConnectionEvents> {
 
     this.socket.onClose(() => {
       log.debug('[Connection]: WebSocket connection closed');
+      this.isClosed = true;
       this.isSocketConnected = false;
-      try {
-        this.emit('telnyx.socket.close');
-      } catch (error) {
-        log.error(
-          '[Connection]: Failed to emit socket.close event - bridge may be disconnected:',
-          error
-        );
-      }
+      this.rejectPendingTransactions(new Error('Connection closed'));
+      this.messageQueue = [];
+      this.emitConnectionClose();
     });
 
     this.socket.onMessage((message: string) => {
+      if (this.isClosed) {
+        return;
+      }
+
       const parsedMessage = this.safeParseMessage(message);
       log.debug('Received message:', parsedMessage);
       this._lastActivityAt = Date.now();
@@ -127,6 +138,11 @@ export class Connection extends EventEmitter<ConnectionEvents> {
   }
 
   public send = (msg: unknown) => {
+    if (this.isClosed) {
+      log.warn('[Connection]: Ignoring message send after connection closed');
+      return;
+    }
+
     if (!this.isConnected) {
       this.messageQueue.push(msg);
       return;
@@ -149,6 +165,10 @@ export class Connection extends EventEmitter<ConnectionEvents> {
   };
 
   public sendAndWait = (msg: { id: string }): Promise<unknown> => {
+    if (this.isClosed) {
+      return Promise.reject(new Error('Connection closed'));
+    }
+
     const deferred = createDeferredPromise<unknown>();
     this.transactions.set(msg.id, deferred);
     this.send(msg);
@@ -156,18 +176,20 @@ export class Connection extends EventEmitter<ConnectionEvents> {
   };
 
   public close = () => {
+    this.isClosed = true;
+    this.isSocketConnected = false;
     this.reconnectEnabled = false;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    this.socket.close();
-    this.socket.removeOnOpenListener();
-    this.socket.removeOnErrorListener();
-    this.socket.removeOnCloseListener();
-    this.socket.removeOnMessageListener();
-    this.removeAllListeners();
-    this.transactions.clear();
+    this.rejectPendingTransactions(new Error('Connection closed'));
+    this.runCloseStep('close WebSocket', () => this.socket.close());
+    this.runCloseStep('remove open listener', () => this.socket.removeOnOpenListener());
+    this.runCloseStep('remove error listener', () => this.socket.removeOnErrorListener());
+    this.runCloseStep('remove close listener', () => this.socket.removeOnCloseListener());
+    this.runCloseStep('remove message listener', () => this.socket.removeOnMessageListener());
+    this.runCloseStep('remove event listeners', () => this.removeAllListeners());
     this.messageQueue = [];
   };
   public get isConnected() {
@@ -208,12 +230,41 @@ export class Connection extends EventEmitter<ConnectionEvents> {
     return result;
   };
   private flushMessageQueue = () => {
-    if (this.messageQueue.length === 0) {
+    if (this.isClosed || this.messageQueue.length === 0) {
       return;
     }
     this.messageQueue.forEach((msg) => this.send(msg));
     this.messageQueue = [];
   };
+
+  private rejectPendingTransactions(error: Error) {
+    this.transactions.forEach((transaction) => transaction.reject(error));
+    this.transactions.clear();
+  }
+
+  private emitConnectionClose() {
+    if (this.hasEmittedClose) {
+      return;
+    }
+
+    this.hasEmittedClose = true;
+    try {
+      this.emit('telnyx.socket.close');
+    } catch (error) {
+      log.error(
+        '[Connection]: Failed to emit socket.close event during explicit close:',
+        error
+      );
+    }
+  }
+
+  private runCloseStep(description: string, step: () => void) {
+    try {
+      step();
+    } catch (error) {
+      log.error(`[Connection]: Failed to ${description} during close:`, error);
+    }
+  }
 
   private safeParseMessage = (msg: string) => {
     try {
@@ -225,7 +276,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
   };
 
   private scheduleReconnect = () => {
-    if (!this.reconnectEnabled || this.isSocketConnected || this.reconnectTimer) {
+    if (this.isClosed || !this.reconnectEnabled || this.isSocketConnected || this.reconnectTimer) {
       return;
     }
     const attempt = this.reconnectAttempts;

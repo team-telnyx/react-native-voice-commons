@@ -5,6 +5,37 @@ import { TelnyxConnectionState } from './models/connection-state';
 import { Call } from './models/call';
 import { TelnyxVoiceProvider } from './context/TelnyxVoiceContext';
 
+let sharedBackgroundClient: TelnyxVoipClient | null = null;
+let sharedBackgroundDisposePromise: Promise<void> | null = null;
+
+const disposeSharedBackgroundClient = async (
+  log: (message: string, ...args: any[]) => void,
+  expectedClient?: TelnyxVoipClient
+): Promise<void> => {
+  if (sharedBackgroundDisposePromise) {
+    await sharedBackgroundDisposePromise;
+  }
+
+  const backgroundClient = expectedClient ?? sharedBackgroundClient;
+  if (!backgroundClient || (expectedClient && sharedBackgroundClient !== expectedClient)) {
+    return;
+  }
+
+  sharedBackgroundClient = null;
+  log('Disposing background client instance');
+
+  sharedBackgroundDisposePromise = backgroundClient
+    .dispose()
+    .catch((e) => {
+      log('Error disposing background client instance:', e);
+    })
+    .finally(() => {
+      sharedBackgroundDisposePromise = null;
+    });
+
+  await sharedBackgroundDisposePromise;
+};
+
 /**
  * Configuration options for TelnyxVoiceApp
  */
@@ -94,9 +125,6 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
   // Refs for tracking state
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const backgroundDetectorIgnore = useRef(false);
-
-  // Static background client instance for singleton pattern
-  const backgroundClientRef = useRef<TelnyxVoipClient | null>(null);
 
   const log = useCallback(
     (message: string, ...args: any[]) => {
@@ -449,7 +477,7 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
         log(`Background detector ignore set to: true at ${new Date().toISOString()}`);
         log(`Foreground call handling flag set to: true at ${new Date().toISOString()}`);
 
-        disposeBackgroundClient();
+        await disposeBackgroundClient();
 
         // On iOS, coordinate with CallKit using the call_id from push metadata
         if (Platform.OS === 'ios') {
@@ -488,12 +516,8 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
   );
 
   // Dispose background client instance when no longer needed
-  const disposeBackgroundClient = useCallback(() => {
-    if (backgroundClientRef.current) {
-      log('Disposing background client instance');
-      backgroundClientRef.current.dispose();
-      backgroundClientRef.current = null;
-    }
+  const disposeBackgroundClient = useCallback(async (): Promise<void> => {
+    await disposeSharedBackgroundClient(log);
   }, [log]);
 
   // Create background client for push notification handling
@@ -651,7 +675,7 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
       }
       clearTimeout(timeoutId);
       // Clean up background client instance
-      disposeBackgroundClient();
+      void disposeBackgroundClient();
     };
   }, [
     voipClient,
@@ -769,23 +793,28 @@ const initializeAndCreate = async (options: {
  */
 const handleBackgroundPush = async (message: any): Promise<void> => {
   console.log('[TelnyxVoiceApp] Background push received:', message);
+  let backgroundClient: TelnyxVoipClient | null = null;
 
   try {
     // TODO: Initialize push notification service in isolate if needed
 
+    await disposeSharedBackgroundClient(console.log);
+
     // Use singleton pattern for background client to prevent multiple instances
-    let backgroundClient = createBackgroundTelnyxVoipClient({
+    backgroundClient = createBackgroundTelnyxVoipClient({
       debug: false,
     });
+    sharedBackgroundClient = backgroundClient;
 
     await backgroundClient.handlePushNotification(message);
 
     console.log('[TelnyxVoiceApp] Background push processed successfully');
-
-    // Clean up the background client
-    backgroundClient.dispose();
   } catch (e) {
     console.log('[TelnyxVoiceApp] Error processing background push:', e);
+  } finally {
+    if (backgroundClient) {
+      await disposeSharedBackgroundClient(console.log, backgroundClient);
+    }
   }
 };
 
