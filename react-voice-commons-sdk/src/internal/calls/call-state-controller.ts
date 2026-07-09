@@ -43,17 +43,25 @@ export class CallStateController {
     return this.calls$.pipe(
       map((calls) => {
         // Find the first call that is not terminated (includes RINGING, CONNECTING, ACTIVE, HELD)
-        return (
+        const call =
           calls.find(
             (call) =>
               call.currentState === TelnyxCallState.RINGING ||
               call.currentState === TelnyxCallState.CONNECTING ||
               call.currentState === TelnyxCallState.ACTIVE ||
               call.currentState === TelnyxCallState.HELD
-          ) || null
-        );
+          ) || null;
+        return {
+          call,
+          callId: call?.callId ?? null,
+          state: call?.currentState ?? null,
+        };
       }),
-      distinctUntilChanged()
+      distinctUntilChanged(
+        (previous, current) =>
+          previous.callId === current.callId && previous.state === current.state
+      ),
+      map(({ call }) => call)
     );
   }
 
