@@ -75,4 +75,19 @@ describe('TelnyxVoipClient singleton lifecycle', () => {
     expect(secondSettled).toBe(true);
     expect(callStateDispose).toHaveBeenCalledTimes(1);
   });
+
+  it('forwards active call selection to the call state controller', () => {
+    const client = new TelnyxVoipClient();
+    const setActiveCall = jest.fn();
+    const clearActiveCall = jest.fn();
+
+    (client as any)._callStateController.setActiveCall = setActiveCall;
+    (client as any)._callStateController.clearActiveCall = clearActiveCall;
+
+    client.setActiveCall('call-2');
+    client.clearActiveCall();
+
+    expect(setActiveCall).toHaveBeenCalledWith('call-2');
+    expect(clearActiveCall).toHaveBeenCalledTimes(1);
+  });
 });

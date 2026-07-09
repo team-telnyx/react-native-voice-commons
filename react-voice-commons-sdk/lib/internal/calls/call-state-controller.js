@@ -19,6 +19,7 @@ class CallStateController {
     this._calls = new rxjs_1.BehaviorSubject([]);
     this._callMap = new Map();
     this._disposed = false;
+    this._activeCallId = null;
     this._handleTelnyxIncomingCall = (telnyxCall, msg) => {
       console.log('CallStateController: Incoming call received:', telnyxCall.callId);
       this._handleIncomingCall(telnyxCall, msg, false);
@@ -62,15 +63,7 @@ class CallStateController {
   get activeCall$() {
     return this.calls$.pipe(
       (0, operators_1.map)((calls) => {
-        // Find the first call that is not terminated (includes RINGING, CONNECTING, ACTIVE, HELD)
-        const call =
-          calls.find(
-            (call) =>
-              call.currentState === call_state_1.TelnyxCallState.RINGING ||
-              call.currentState === call_state_1.TelnyxCallState.CONNECTING ||
-              call.currentState === call_state_1.TelnyxCallState.ACTIVE ||
-              call.currentState === call_state_1.TelnyxCallState.HELD
-          ) || null;
+        const call = this._selectActiveCall(calls);
         return {
           call,
           callId: call?.callId ?? null,
@@ -94,16 +87,7 @@ class CallStateController {
    * Current active call (synchronous access)
    */
   get currentActiveCall() {
-    const calls = this.currentCalls;
-    return (
-      calls.find(
-        (call) =>
-          call.currentState === call_state_1.TelnyxCallState.RINGING ||
-          call.currentState === call_state_1.TelnyxCallState.CONNECTING ||
-          call.currentState === call_state_1.TelnyxCallState.ACTIVE ||
-          call.currentState === call_state_1.TelnyxCallState.HELD
-      ) || null
-    );
+    return this._selectActiveCall(this.currentCalls);
   }
   /**
    * Access any active call tracked by the client.
@@ -130,6 +114,32 @@ class CallStateController {
     }
   }
   /**
+   * Explicitly set the active call for multi-call scenarios.
+   * When set, activeCall$ and currentActiveCall prefer this call over
+   * the first-match heuristic. The ID is cleared automatically when the
+   * call reaches a terminal state.
+   * @param callId The ID of the call to mark as active
+   */
+  setActiveCall(callId) {
+    const call = this._callMap.get(callId);
+    if (call) {
+      this._activeCallId = callId;
+      this._calls.next([...this.currentCalls]);
+    } else {
+      console.warn('CallStateController: Cannot set active call - call not found:', callId);
+    }
+  }
+  /**
+   * Clear the explicitly-tracked active call ID, reverting to the
+   * first-match heuristic for active call selection.
+   */
+  clearActiveCall() {
+    if (this._activeCallId !== null) {
+      this._activeCallId = null;
+      this._calls.next([...this.currentCalls]);
+    }
+  }
+  /**
    * Find a call by its underlying Telnyx call ID
    * @param telnyxCall The Telnyx call object to find
    */
@@ -140,6 +150,31 @@ class CallStateController {
       }
     }
     return null;
+  }
+  /**
+   * Select the active call, preferring the explicitly-tracked call ID
+   * over the first-match heuristic.
+   */
+  _selectActiveCall(calls) {
+    if (this._activeCallId) {
+      const tracked = calls.find((c) => c.callId === this._activeCallId);
+      if (tracked && this._isNonTerminal(tracked)) {
+        return tracked;
+      }
+    }
+    // Fall back to first non-terminal call (backward compatible)
+    return calls.find((c) => this._isNonTerminal(c)) || null;
+  }
+  /**
+   * Check if a call is in a non-terminal (active or connecting) state.
+   */
+  _isNonTerminal(call) {
+    return (
+      call.currentState === call_state_1.TelnyxCallState.RINGING ||
+      call.currentState === call_state_1.TelnyxCallState.CONNECTING ||
+      call.currentState === call_state_1.TelnyxCallState.ACTIVE ||
+      call.currentState === call_state_1.TelnyxCallState.HELD
+    );
   }
   /**
    * Initialize client listeners when the Telnyx client becomes available
@@ -220,6 +255,7 @@ class CallStateController {
       }
     }
     this._callMap.clear();
+    this._activeCallId = null;
     this._calls.next([]);
   }
   /**
@@ -234,6 +270,7 @@ class CallStateController {
     // Dispose of all calls
     this.currentCalls.forEach((call) => call.dispose());
     this._callMap.clear();
+    this._activeCallId = null;
     // CallKit cleanup is now handled by CallKitCoordinator automatically
     this._calls.complete();
   }
@@ -354,6 +391,10 @@ class CallStateController {
    */
   _addCall(call) {
     this._callMap.set(call.callId, call);
+    // Auto-track as active if no active call is currently set
+    if (this._activeCallId === null) {
+      this._activeCallId = call.callId;
+    }
     const currentCalls = this.currentCalls;
     currentCalls.push(call);
     this._calls.next([...currentCalls]);
@@ -401,6 +442,10 @@ class CallStateController {
         state === call_state_1.TelnyxCallState.ENDED ||
         state === call_state_1.TelnyxCallState.FAILED
       ) {
+        // Clear active call ID if the ending call was the tracked active call
+        if (this._activeCallId === call.callId) {
+          this._activeCallId = null;
+        }
         // Clear pending push data so the next app launch isn't mistaken for a push launch
         voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush().catch((e) =>
           console.warn('CallStateController: Failed to clear pending voip push:', e)
