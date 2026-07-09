@@ -189,6 +189,23 @@ export class TelnyxVoipClient {
   }
 
   /**
+   * Explicitly set the active call for multi-call scenarios.
+   * @param callId The ID of the call to mark as active
+   */
+  setActiveCall(callId: string): void {
+    this._throwIfDisposed();
+    this._callStateController.setActiveCall(callId);
+  }
+
+  /**
+   * Clear the explicitly selected active call and return to default selection.
+   */
+  clearActiveCall(): void {
+    this._throwIfDisposed();
+    this._callStateController.clearActiveCall();
+  }
+
+  /**
    * Current session ID (UUID) for this connection.
    */
   get sessionId(): string {
