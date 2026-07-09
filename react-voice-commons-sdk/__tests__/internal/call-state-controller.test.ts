@@ -102,6 +102,23 @@ describe('CallStateController', () => {
       expect(emissions.length).toBe(2);
     });
 
+    it('should re-emit activeCall$ when the active call transitions to CONNECTING', () => {
+      const { call: mockCall, triggerState } = createMockTelnyxCall('call-1');
+      addIncomingCall(mockCall);
+
+      const emissions: (Call | null)[] = [];
+      controller.activeCall$.subscribe((call) => emissions.push(call));
+
+      expect(emissions.length).toBe(1);
+      expect(emissions[0]?.currentState).toBe(TelnyxCallState.RINGING);
+
+      triggerState('connecting');
+
+      expect(emissions.length).toBe(2);
+      expect(emissions[1]?.callId).toBe('call-1');
+      expect(emissions[1]?.currentState).toBe(TelnyxCallState.CONNECTING);
+    });
+
     it('should re-emit calls$ when a tracked call transitions to ACTIVE', () => {
       const { call: mockCall, triggerState } = createMockTelnyxCall('call-1');
       addIncomingCall(mockCall);
