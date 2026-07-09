@@ -63,17 +63,25 @@ class CallStateController {
     return this.calls$.pipe(
       (0, operators_1.map)((calls) => {
         // Find the first call that is not terminated (includes RINGING, CONNECTING, ACTIVE, HELD)
-        return (
+        const call =
           calls.find(
             (call) =>
               call.currentState === call_state_1.TelnyxCallState.RINGING ||
               call.currentState === call_state_1.TelnyxCallState.CONNECTING ||
               call.currentState === call_state_1.TelnyxCallState.ACTIVE ||
               call.currentState === call_state_1.TelnyxCallState.HELD
-          ) || null
-        );
+          ) || null;
+        return {
+          call,
+          callId: call?.callId ?? null,
+          state: call?.currentState ?? null,
+        };
       }),
-      (0, operators_1.distinctUntilChanged)()
+      (0, operators_1.distinctUntilChanged)(
+        (previous, current) =>
+          previous.callId === current.callId && previous.state === current.state
+      ),
+      (0, operators_1.map)(({ call }) => call)
     );
   }
   /**
@@ -383,6 +391,10 @@ class CallStateController {
     call.callState$.subscribe((state) => {
       // CallKitCoordinator automatically updates CallKit via setupWebRTCCallListeners
       console.log('CallStateController: Call state changed to:', state);
+      // Re-emit the call list so calls$/activeCall$ subscribers see state changes.
+      // distinctUntilChanged uses reference equality; without a new array
+      // reference, non-terminal transitions leave activeCall$ stale.
+      this._calls.next([...this.currentCalls]);
       // Clean up when call ends - delay to next tick so external subscribers
       // receive the ENDED/FAILED state before the call is disposed
       if (
