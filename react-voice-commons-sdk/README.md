@@ -79,7 +79,7 @@ const voipClient = createTelnyxVoipClient({
 
 // If you need to tear down and recreate the client (e.g., on logout):
 import { destroyTelnyxVoipClient } from '@telnyx/react-voice-commons-sdk';
-destroyTelnyxVoipClient(); // Disposes the singleton; next createTelnyxVoipClient() call creates a fresh instance
+await destroyTelnyxVoipClient(); // Disposes the singleton; next createTelnyxVoipClient() call creates a fresh instance
 ```
 
 **Configuration Options Explained:**

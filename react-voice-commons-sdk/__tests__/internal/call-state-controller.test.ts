@@ -2,7 +2,6 @@ import { CallStateController } from '../../src/internal/calls/call-state-control
 import { TelnyxCallState } from '../../src/models/call-state';
 import type { Call } from '../../src/models/call';
 
-// Mock callkit-coordinator to avoid CallKit setup during tests
 jest.mock('../../src/callkit/callkit-coordinator', () => ({
   callKitCoordinator: {
     isAvailable: jest.fn(() => false),
@@ -12,7 +11,6 @@ jest.mock('../../src/callkit/callkit-coordinator', () => ({
   },
 }));
 
-// Mock voice-pn-bridge to avoid native module calls during tests
 jest.mock('../../src/internal/voice-pn-bridge', () => ({
   VoicePnBridge: {
     clearPendingVoipPush: jest.fn(() => Promise.resolve()),
@@ -20,7 +18,6 @@ jest.mock('../../src/internal/voice-pn-bridge', () => ({
   },
 }));
 
-// Mock session-manager — CallStateController only needs telnyxClient and useTrickleIce
 jest.mock('../../src/internal/session/session-manager', () => {
   return jest.fn().mockImplementation(() => ({
     telnyxClient: null,
@@ -28,10 +25,6 @@ jest.mock('../../src/internal/session/session-manager', () => {
   }));
 });
 
-/**
- * Helper: create a mock TelnyxCall whose 'telnyx.call.state' callback can be
- * triggered externally to simulate state transitions.
- */
 function createMockTelnyxCall(callId: string) {
   let stateCb: ((call: any, state: any) => void) | null = null;
   const call = {
@@ -55,7 +48,7 @@ function createMockTelnyxCall(callId: string) {
   };
 }
 
-describe('CallStateController — active call selection (VSDK-346)', () => {
+describe('CallStateController', () => {
   let controller: CallStateController;
 
   beforeEach(() => {
@@ -83,33 +76,86 @@ describe('CallStateController — active call selection (VSDK-346)', () => {
     return controller.currentCalls[controller.currentCalls.length - 1];
   }
 
-  describe('backward-compatible first-match (no setActiveCall)', () => {
-    it('should return the first non-terminal call as currentActiveCall', () => {
-      const mock1 = createMockTelnyxCall('call-1');
-      const mock2 = createMockTelnyxCall('call-2');
+  describe('calls$ re-emission on call state change (VSDK-345)', () => {
+    it('should re-emit calls$ when a tracked call transitions to CONNECTING', () => {
+      const { call: mockCall, triggerState } = createMockTelnyxCall('call-1');
+      addIncomingCall(mockCall);
 
-      addIncomingCall(mock1.call);
-      addIncomingCall(mock2.call);
+      const emissions: Call[][] = [];
+      controller.calls$.subscribe((calls) => emissions.push([...calls]));
 
-      // Both RINGING — first-match returns call-1
-      expect(controller.currentActiveCall?.callId).toBe('call-1');
+      expect(emissions.length).toBe(1);
+      expect(emissions[0].length).toBe(1);
+
+      triggerState('connecting');
+
+      expect(emissions.length).toBe(2);
     });
 
-    it('should fall back to the next non-terminal call when the first ends', () => {
+    it('should re-emit activeCall$ when the active call transitions to CONNECTING', () => {
+      const { call: mockCall, triggerState } = createMockTelnyxCall('call-1');
+      addIncomingCall(mockCall);
+
+      const emissions: (Call | null)[] = [];
+      controller.activeCall$.subscribe((call) => emissions.push(call));
+
+      expect(emissions.length).toBe(1);
+      expect(emissions[0]?.currentState).toBe(TelnyxCallState.RINGING);
+
+      triggerState('connecting');
+
+      expect(emissions.length).toBe(2);
+      expect(emissions[1]?.callId).toBe('call-1');
+      expect(emissions[1]?.currentState).toBe(TelnyxCallState.CONNECTING);
+    });
+
+    it('should re-emit calls$ when a tracked call transitions to ACTIVE', () => {
+      const { call: mockCall, triggerState } = createMockTelnyxCall('call-1');
+      addIncomingCall(mockCall);
+
+      const emissions: Call[][] = [];
+      controller.calls$.subscribe((calls) => emissions.push([...calls]));
+
+      expect(emissions.length).toBe(1);
+
+      triggerState('active');
+
+      expect(emissions.length).toBe(2);
+    });
+
+    it('should make activeCall$ emit null immediately when the active call ends', () => {
+      const { call: mockCall, triggerState } = createMockTelnyxCall('call-1');
+      addIncomingCall(mockCall);
+
+      const activeCallValues: (Call | null)[] = [];
+      controller.activeCall$.subscribe((call) => activeCallValues.push(call));
+
+      expect(activeCallValues.length).toBe(1);
+      expect(activeCallValues[0]).not.toBeNull();
+
+      triggerState('ended');
+
+      expect(activeCallValues.length).toBe(2);
+      expect(activeCallValues[1]).toBeNull();
+    });
+
+    it('should switch activeCall$ to the next non-terminal call when the first ends', () => {
       const mock1 = createMockTelnyxCall('call-1');
       const mock2 = createMockTelnyxCall('call-2');
 
       addIncomingCall(mock1.call);
       addIncomingCall(mock2.call);
 
-      expect(controller.currentActiveCall?.callId).toBe('call-1');
+      const activeCallValues: (Call | null)[] = [];
+      controller.activeCall$.subscribe((call) => activeCallValues.push(call));
 
-      // End call-1
+      expect(activeCallValues.length).toBe(1);
+      expect(activeCallValues[0]?.callId).toBe('call-1');
+
       mock1.triggerState('ended');
-      jest.runAllTimers();
 
-      // Should fall back to call-2
-      expect(controller.currentActiveCall?.callId).toBe('call-2');
+      expect(activeCallValues.length).toBe(2);
+      expect(activeCallValues[1]?.callId).toBe('call-2');
     });
   });
 
@@ -121,11 +167,10 @@ describe('CallStateController — active call selection (VSDK-346)', () => {
       addIncomingCall(mock1.call);
       addIncomingCall(mock2.call);
 
-      // Default: first-match returns call-1
       expect(controller.currentActiveCall?.callId).toBe('call-1');
 
-      // Explicitly set call-2 as active
       controller.setActiveCall('call-2');
+
       expect(controller.currentActiveCall?.callId).toBe('call-2');
     });
 
@@ -139,13 +184,10 @@ describe('CallStateController — active call selection (VSDK-346)', () => {
       const activeCallValues: (Call | null)[] = [];
       controller.activeCall$.subscribe((call) => activeCallValues.push(call));
 
-      // Initial: first-match returns call-1
       expect(activeCallValues[activeCallValues.length - 1]?.callId).toBe('call-1');
 
-      // Switch to call-2
       controller.setActiveCall('call-2');
 
-      // activeCall$ should emit call-2
       expect(activeCallValues[activeCallValues.length - 1]?.callId).toBe('call-2');
     });
 
@@ -158,7 +200,6 @@ describe('CallStateController — active call selection (VSDK-346)', () => {
 
       controller.setActiveCall('call-2');
 
-      // Even though call-1 is first and non-terminal, tracked call-2 wins
       expect(controller.currentActiveCall?.callId).toBe('call-2');
     });
 
@@ -172,11 +213,9 @@ describe('CallStateController — active call selection (VSDK-346)', () => {
       controller.setActiveCall('call-1');
       expect(controller.currentActiveCall?.callId).toBe('call-1');
 
-      // End the tracked call
       mock1.triggerState('ended');
       jest.runAllTimers();
 
-      // Should fall back to call-2 (first-match with _activeCallId cleared)
       expect(controller.currentActiveCall?.callId).toBe('call-2');
     });
 
@@ -190,11 +229,9 @@ describe('CallStateController — active call selection (VSDK-346)', () => {
       controller.setActiveCall('call-2');
       expect(controller.currentActiveCall?.callId).toBe('call-2');
 
-      // End call-1 (not the tracked call)
       mock1.triggerState('ended');
       jest.runAllTimers();
 
-      // Tracked call-2 should still be active
       expect(controller.currentActiveCall?.callId).toBe('call-2');
     });
   });
@@ -211,6 +248,7 @@ describe('CallStateController — active call selection (VSDK-346)', () => {
       expect(controller.currentActiveCall?.callId).toBe('call-2');
 
       controller.clearActiveCall();
+
       expect(controller.currentActiveCall?.callId).toBe('call-1');
     });
 
@@ -224,7 +262,6 @@ describe('CallStateController — active call selection (VSDK-346)', () => {
 
       controller.clearActiveCall();
 
-      // No re-emission since _activeCallId was already null
       expect(emissions.length).toBe(countBefore);
     });
   });
@@ -234,7 +271,6 @@ describe('CallStateController — active call selection (VSDK-346)', () => {
       const mock1 = createMockTelnyxCall('call-1');
       addIncomingCall(mock1.call);
 
-      // currentActiveCall should return the auto-tracked call
       expect(controller.currentActiveCall?.callId).toBe('call-1');
     });
 
@@ -242,13 +278,11 @@ describe('CallStateController — active call selection (VSDK-346)', () => {
       const mock1 = createMockTelnyxCall('call-1');
       addIncomingCall(mock1.call);
 
-      // Set call-1 explicitly
       controller.setActiveCall('call-1');
 
       const mock2 = createMockTelnyxCall('call-2');
       addIncomingCall(mock2.call);
 
-      // Active call should still be call-1, not auto-switched to call-2
       expect(controller.currentActiveCall?.callId).toBe('call-1');
     });
   });
@@ -265,8 +299,6 @@ describe('CallStateController — active call selection (VSDK-346)', () => {
         'CallStateController: Cannot set active call - call not found:',
         'nonexistent'
       );
-
-      // Active call unchanged
       expect(controller.currentActiveCall?.callId).toBe('call-1');
 
       warnSpy.mockRestore();
@@ -283,10 +315,8 @@ describe('CallStateController — active call selection (VSDK-346)', () => {
 
       (controller as any).clearAllCalls();
 
-      // After clearing, no active call
       expect(controller.currentActiveCall).toBeNull();
 
-      // Adding a new call should auto-track it (proves _activeCallId was reset)
       const mock2 = createMockTelnyxCall('call-2');
       addIncomingCall(mock2.call);
       expect(controller.currentActiveCall?.callId).toBe('call-2');

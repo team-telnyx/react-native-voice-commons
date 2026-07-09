@@ -441,9 +441,9 @@ This should be called when the user ends from CallKit before the socket connecti
 
 ### dispose()
 
-> **dispose**(): `void`
+> **dispose**(): `Promise`\<`void`\>
 
-Defined in: [telnyx-voip-client.ts:453](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L453)
+Defined in: [telnyx-voip-client.ts:534](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L534)
 
 Dispose of the client and clean up all resources.
 
@@ -453,6 +453,5 @@ disposed after handling push notifications.
 
 ### Returns
 
-`void`
-
+`Promise`\<`void`\>
 

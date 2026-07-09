@@ -458,16 +458,22 @@ class TelnyxVoipClient {
    * This is particularly important for background clients that should be
    * disposed after handling push notifications.
    */
-  dispose() {
-    if (this._disposed) {
-      return;
+  async dispose() {
+    if (this._disposePromise) {
+      return this._disposePromise;
     }
     if (this._options.debug) {
       console.log('TelnyxVoipClient: Disposing client');
     }
     this._disposed = true;
-    this._callStateController.dispose();
-    this._sessionManager.dispose();
+    this._disposePromise = (async () => {
+      try {
+        await this._sessionManager.dispose();
+      } finally {
+        this._callStateController.dispose();
+      }
+    })();
+    return this._disposePromise;
   }
   // ========== Private Methods ==========
   /**
@@ -564,10 +570,11 @@ function createTelnyxVoipClient(options) {
  * Disposes the current singleton so that a subsequent call to
  * `createTelnyxVoipClient()` will create a fresh instance.
  */
-function destroyTelnyxVoipClient() {
-  if (_sharedInstance) {
-    _sharedInstance.dispose();
+async function destroyTelnyxVoipClient() {
+  const sharedInstance = _sharedInstance;
+  if (sharedInstance) {
     _sharedInstance = null;
+    await sharedInstance.dispose();
   }
 }
 /**

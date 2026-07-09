@@ -12,7 +12,7 @@ module.exports = {
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   testEnvironment: 'node',
   moduleNameMapper: {
-    'react-native': '<rootDir>/__mocks__/react-native.js',
-    '@telnyx/react-native-voice-sdk': '<rootDir>/__mocks__/telnyx-sdk.js',
+    '^@telnyx/react-native-voice-sdk$': '<rootDir>/__mocks__/telnyx-sdk.js',
+    '^react-native$': '<rootDir>/__mocks__/react-native.js',
   },
 };

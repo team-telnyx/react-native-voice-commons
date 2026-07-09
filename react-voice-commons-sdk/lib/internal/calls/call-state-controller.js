@@ -62,8 +62,19 @@ class CallStateController {
    */
   get activeCall$() {
     return this.calls$.pipe(
-      (0, operators_1.map)((calls) => this._selectActiveCall(calls)),
-      (0, operators_1.distinctUntilChanged)()
+      (0, operators_1.map)((calls) => {
+        const call = this._selectActiveCall(calls);
+        return {
+          call,
+          callId: call?.callId ?? null,
+          state: call?.currentState ?? null,
+        };
+      }),
+      (0, operators_1.distinctUntilChanged)(
+        (previous, current) =>
+          previous.callId === current.callId && previous.state === current.state
+      ),
+      (0, operators_1.map)(({ call }) => call)
     );
   }
   /**
@@ -421,6 +432,10 @@ class CallStateController {
     call.callState$.subscribe((state) => {
       // CallKitCoordinator automatically updates CallKit via setupWebRTCCallListeners
       console.log('CallStateController: Call state changed to:', state);
+      // Re-emit the call list so calls$/activeCall$ subscribers see state changes.
+      // distinctUntilChanged uses reference equality; without a new array
+      // reference, non-terminal transitions leave activeCall$ stale.
+      this._calls.next([...this.currentCalls]);
       // Clean up when call ends - delay to next tick so external subscribers
       // receive the ENDED/FAILED state before the call is disposed
       if (
