@@ -408,6 +408,8 @@ type AnswerMessage = {
       custom_headers?: { name: string; value: string }[];
     };
     'User-Agent': string;
+    /** Device push token included when push-when-active is enabled */
+    answered_device_token?: string;
   };
 };
 
@@ -419,6 +421,8 @@ type CreateAnswerMessageParams = {
   telnyxSessionId: string;
   telnyxLegId: string;
   customHeaders?: { name: string; value: string }[];
+  /** Device push token to include as answered_device_token (push-when-active) */
+  answeredDeviceToken?: string;
 };
 export function createAnswerMessage({
   dialogParams,
@@ -428,23 +432,28 @@ export function createAnswerMessage({
   telnyxLegId,
   telnyxSessionId,
   customHeaders,
+  answeredDeviceToken,
 }: CreateAnswerMessageParams): AnswerMessage {
+  const params: AnswerMessage['params'] = {
+    sessid: sessionId,
+    sdp,
+    dialogParams: {
+      callID: callId,
+      telnyxLegId,
+      telnyxSessionId,
+      custom_headers: customHeaders || [],
+      ...dialogParams,
+    },
+    'User-Agent': `ReactNative-${SDK_VERSION}`,
+  };
+  if (answeredDeviceToken) {
+    params.answered_device_token = answeredDeviceToken;
+  }
   return {
     id: uuid(),
     jsonrpc: '2.0',
     method: TelnyxRTCMethod.ANSWER,
-    params: {
-      sessid: sessionId,
-      sdp,
-      dialogParams: {
-        callID: callId,
-        telnyxLegId,
-        telnyxSessionId,
-        custom_headers: customHeaders || [],
-        ...dialogParams,
-      },
-      'User-Agent': `ReactNative-${SDK_VERSION}`,
-    },
+    params,
   };
 }
 

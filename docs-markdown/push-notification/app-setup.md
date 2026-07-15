@@ -426,6 +426,48 @@ const voipClient = createTelnyxVoipClient({
 });
 ```
 
+### Push-When-Active (answered_device_token)
+
+When multiple devices are registered for the same user, all devices receive a push notification for an incoming call. The `pushWhenActive` option allows the SDK to include the answering device's push token (`answered_device_token`) in the `telnyx_rtc.answer` signaling message. This enables the Telnyx backend to identify which device answered the call and cancel the push notification on other active devices.
+
+**When to enable:**
+- You have multidevice setups (same user logged in on multiple devices)
+- You want to reduce unnecessary push notifications on devices that didn't answer
+
+**How to enable:**
+
+```tsx
+import { createCredentialConfig } from '@telnyx/react-voice-commons-sdk';
+
+const config = createCredentialConfig('your_sip_username', 'your_sip_password', {
+  debug: true,
+  pushWhenActive: true, // Include answered_device_token in answer messages
+});
+
+await voipClient.login(config);
+```
+
+For token-based authentication:
+
+```tsx
+import { createTokenConfig } from '@telnyx/react-voice-commons-sdk';
+
+const config = createTokenConfig('your_jwt_token', {
+  debug: true,
+  pushWhenActive: true, // Include answered_device_token in answer messages
+});
+
+await voipClient.loginWithToken(config);
+```
+
+**How it works:**
+
+1. When `pushWhenActive` is `true` and a `pushNotificationDeviceToken` is set, the SDK includes the device's push token as `answered_device_token` in the `telnyx_rtc.answer` payload.
+2. The Telnyx backend receives the answer with the `answered_device_token` and uses it to notify other devices that the call has been answered, allowing them to dismiss their incoming call notifications.
+3. If `pushWhenActive` is `false` (default) or no push token is configured, the `answered_device_token` field is omitted from the answer message.
+
+> **Note:** The `pushNotificationDeviceToken` is automatically retrieved and registered by the SDK. You only need to set `pushWhenActive: true` to opt in to this behavior.
+
 **Configuration Options Explained:**
 
 - **`enableAppStateManagement: true`**: Enables automatic background/foreground app state management. When enabled, the library automatically disconnects when the app goes to background (unless there's an active call) and handles reconnection logic.

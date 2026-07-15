@@ -7,6 +7,14 @@ export interface CredentialConfig {
   sipPassword: string;
   debug?: boolean;
   pushNotificationDeviceToken?: string;
+  /**
+   * When true, the SDK includes the device's push notification token
+   * (answered_device_token) in the telnyx_rtc.answer signaling message
+   * so the Telnyx backend can notify other devices when this device
+   * answers an incoming call.
+   * @default false
+   */
+  pushWhenActive?: boolean;
   /** Enable native missed call push notifications. Default: false */
   enableMissedCallNotifications?: boolean;
   /** Enable Trickle ICE. Default: false */
@@ -29,6 +37,12 @@ export interface TokenConfig {
   token: string;
   debug?: boolean;
   pushNotificationDeviceToken?: string;
+  /**
+   * When true, the SDK includes the device's push notification token
+   * (answered_device_token) in the telnyx_rtc.answer signaling message.
+   * @default false
+   */
+  pushWhenActive?: boolean;
   /** Enable native missed call push notifications. Default: false */
   enableMissedCallNotifications?: boolean;
   /** Enable Trickle ICE. Default: false */

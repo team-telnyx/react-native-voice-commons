@@ -35,6 +35,14 @@ export interface ClientOptions {
    */
   pushNotificationDeviceToken?: string;
   /**
+   * Enable push-when-active answered-device handling.
+   * When enabled, the SDK includes `answered_device_token` in the
+   * `telnyx_rtc.answer` payload so the backend knows which device answered
+   * an incoming call and can notify the remaining devices.
+   * @default false
+   */
+  pushWhenActive?: boolean;
+  /**
    * Enable native missed call push notifications.
    * When enabled, the SDK tags the User-Agent with the missed-call notification marker.
    * @default false

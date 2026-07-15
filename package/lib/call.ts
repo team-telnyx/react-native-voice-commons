@@ -64,6 +64,8 @@ type CallConstructorParams = {
   callState?: CallState;
   debug?: boolean;
   callReportConfig?: CallReportConfig;
+  pushWhenActive?: boolean;
+  pushNotificationDeviceToken?: string;
 };
 
 export type CallDirection = 'inbound' | 'outbound';
@@ -81,6 +83,8 @@ export type CreateInboundCall = {
   initialState?: CallState;
   debug?: boolean;
   callReportConfig?: CallReportConfig;
+  pushWhenActive?: boolean;
+  pushNotificationDeviceToken?: string;
 };
 
 // TODO persist customHeaders and clientState
@@ -209,6 +213,8 @@ export class Call extends EventEmitter<CallEvents> {
   private callReportConfig: CallReportConfig;
   private callReportPostingStarted = false;
   private callStartTimestamp: string;
+  private _pushWhenActive: boolean = false;
+  private _pushNotificationDeviceToken: string = '';
 
   constructor({
     connection,
@@ -222,6 +228,8 @@ export class Call extends EventEmitter<CallEvents> {
     callState = 'new',
     debug = false,
     callReportConfig,
+    pushWhenActive = false,
+    pushNotificationDeviceToken = '',
   }: CallConstructorParams) {
     super();
 
@@ -238,6 +246,8 @@ export class Call extends EventEmitter<CallEvents> {
     this.debugEnabled = debug;
     this.callReportConfig = callReportConfig ?? DEFAULT_CALL_REPORT_CONFIG;
     this.callStartTimestamp = new Date().toISOString();
+    this._pushWhenActive = pushWhenActive;
+    this._pushNotificationDeviceToken = pushNotificationDeviceToken || '';
 
     // Initialize call report collector if enabled
     if (this.callReportConfig.enableCallReports) {
@@ -364,6 +374,11 @@ export class Call extends EventEmitter<CallEvents> {
       await this.peer.waitForIceGatheringComplete();
     }
 
+    const answeredDeviceToken =
+      this._pushWhenActive && this._pushNotificationDeviceToken
+        ? this._pushNotificationDeviceToken
+        : undefined;
+
     await this.connection.sendAndWait(
       createAnswerMessage({
         callId: this.callId,
@@ -373,6 +388,7 @@ export class Call extends EventEmitter<CallEvents> {
         telnyxSessionId: this.telnyxSessionId!,
         sessionId: this.sessionId,
         customHeaders,
+        answeredDeviceToken,
       })
     );
 

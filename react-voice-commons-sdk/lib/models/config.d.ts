@@ -7,6 +7,8 @@ export interface CredentialConfig {
   sipPassword: string;
   debug?: boolean;
   pushNotificationDeviceToken?: string;
+    /** When true, includes answered_device_token in answer messages. */
+    pushWhenActive?: boolean;
   /** Enable native missed call push notifications. Default: false */
   enableMissedCallNotifications?: boolean;
   /** Enable Trickle ICE. Default: false */
@@ -28,6 +30,8 @@ export interface TokenConfig {
   token: string;
   debug?: boolean;
   pushNotificationDeviceToken?: string;
+    /** When true, includes answered_device_token in answer messages. */
+    pushWhenActive?: boolean;
   /** Enable native missed call push notifications. Default: false */
   enableMissedCallNotifications?: boolean;
   /** Enable Trickle ICE. Default: false */

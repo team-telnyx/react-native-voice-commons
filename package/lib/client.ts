@@ -95,7 +95,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private tokenSessionConfig: any = null; // Store login token for reconnection
   private reconnectionTimeoutHandle: any = null;
   private reconnectionSessionId: string | null = null; // Store sessionId during reconnection
-  private connectionGeneration: number = 0;
   private static readonly RECONNECT_DELAY = 3000; // 3 seconds
   private static readonly RECONNECT_TIMEOUT = 60000; // 30 seconds
 
@@ -435,6 +434,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       options,
       debug: this.options.debug,
       callReportConfig: this.getCallReportConfig(),
+      pushWhenActive: this.options.pushWhenActive,
+      pushNotificationDeviceToken: this.options.pushNotificationDeviceToken,
     });
 
     // Add to calls tracking (matches iOS SDK behavior)
@@ -647,7 +648,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       return;
     }
 
-    const connectionGeneration = (this.connectionGeneration += 1);
     log.debug('[TelnyxRTC] Starting connection process...');
 
     // Store login configuration for potential reconnection
@@ -667,8 +667,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     } catch (error) {
       log.error('[TelnyxRTC] Failed to load push state before connection:', error);
     }
-
-    this.throwIfConnectCanceled(connectionGeneration);
 
     // Use custom voice_sdk_id for push notifications (matching iOS SDK behavior)
     const pushVoiceSDKId = (this as any)._pushVoiceSDKId;
@@ -787,8 +785,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       });
     }
 
-    this.throwIfConnectCanceled(connectionGeneration);
-
     this.loginHandler = new LoginHandler(this.connection);
     this.keepAliveHandler = new KeepAliveHandler(this.connection);
     this.keepAliveHandler.start();
@@ -810,7 +806,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     );
 
     this.sessionId = await this.loginHandler.login(this.options);
-    this.throwIfConnectCanceled(connectionGeneration);
     if (!this.sessionId) {
       log.error('Login failed. Please check your credentials and try again.');
       throw new Error('Login failed. Please check your credentials and try again.');
@@ -857,7 +852,10 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * ```
    */
   public disconnect(fromReconnection: boolean = false) {
-    this.connectionGeneration += 1;
+    if (!this.connection) {
+      log.warn('No connection exists.');
+      return;
+    }
 
     this.cancelReconnectionTimer();
 
@@ -865,14 +863,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     this.credentialSessionConfig = null;
     this.tokenSessionConfig = null;
 
-    if (!this.connection) {
-      log.warn('No connection exists.');
-    } else {
-      this.loginHandler?.cancelPendingLogin();
-      this.connection.close();
-      this.connection = null;
-    }
-    this.loginHandler = null;
+    this.connection.close();
+    this.connection = null;
 
     if (!fromReconnection) {
       log.debug('[TelnyxRTC] Disconnected due to reconnection process');
@@ -914,12 +906,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
   public get connected() {
     return this.connection !== null && this.connection.isConnected;
-  }
-
-  private throwIfConnectCanceled(connectionGeneration: number) {
-    if (this.connectionGeneration !== connectionGeneration) {
-      throw new Error('TelnyxRTC connection has been canceled');
-    }
   }
 
   /**
@@ -1071,6 +1057,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
         debug: this.options.debug,
         callReportConfig: this.getCallReportConfig(),
+        pushWhenActive: this.options.pushWhenActive,
+        pushNotificationDeviceToken: this.options.pushNotificationDeviceToken,
       });
     } catch (error) {
       log.error('[TelnyxRTC] Failed to create inbound call:', error);
@@ -1206,6 +1194,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       initialState: 'connecting', // Set initial state to connecting
       debug: this.options.debug,
       callReportConfig: this.getCallReportConfig(),
+      pushWhenActive: this.options.pushWhenActive,
+      pushNotificationDeviceToken: this.options.pushNotificationDeviceToken,
     });
 
     // Add to calls tracking (matches iOS SDK behavior)

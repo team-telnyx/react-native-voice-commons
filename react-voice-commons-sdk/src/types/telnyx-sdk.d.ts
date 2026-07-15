@@ -34,6 +34,10 @@ declare module '@telnyx/react-native-voice-sdk' {
     debug?: boolean;
     logLevel?: string;
     pushNotificationDeviceToken?: string;
+    /**
+     * When true, the SDK includes answered_device_token in the answer message.
+     */
+    pushWhenActive?: boolean;
     enableMissedCallNotifications?: boolean;
     useTrickleIce?: boolean;
     enableCallReports?: boolean;
