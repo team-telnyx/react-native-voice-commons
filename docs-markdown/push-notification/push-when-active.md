@@ -147,6 +147,8 @@ export function IncomingCallScreen({ voipClient }: { voipClient: TelnyxVoipClien
 For cases where the call may already be in a terminal state by the time your component mounts (e.g., the push flow already processed the call end), check `call.currentState` before subscribing:
 
 ```tsx
+import React from 'react';
+
 React.useEffect(() => {
   const call = voipClient.currentActiveCall;
   if (call && CallStateHelpers.isTerminated(call.currentState)) {
