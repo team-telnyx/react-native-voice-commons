@@ -472,6 +472,7 @@ For complete API documentation and advanced usage patterns, see the [TelnyxVoice
 ### Guides
 
 - [Push Notification Setup](./push-notification/app-setup.md) — FCM/APNs setup and avoiding double-login on push-launched cold starts.
+- [Push-When-Active & Answered-Elsewhere](./push-notification/push-when-active.md) — multidevice call delivery and dismissing the incoming-call UI when another device answers.
 - [Sending DTMF Tones](./call-features/dtmf.md) — dialpad presses, IVR sequences, and gating on call state.
 - [Error Handling](./error-handling/ErrorHandling.md) — common errors and recovery patterns.
 - [Expo Integration](./expo/ExpoIntegration.md) — Expo-specific setup.
