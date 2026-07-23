@@ -238,6 +238,7 @@ class CallKitCoordinator {
         this.selectCall(call);
         this.pendingPushCallUUIDs.delete(callKitUUID);
         this.isCallFromPush = this.pendingPushCallUUIDs.size > 0;
+        await this.clearMatchingPendingVoipPush(callKitUUID);
         console.log('CallKitCoordinator: CallKit answer success');
       }
 
@@ -1026,7 +1027,7 @@ class CallKitCoordinator {
         await VoicePnBridge.clearPendingVoipPush();
       }
     } catch (error) {
-      console.warn('CallKitCoordinator: Failed to clear rejected call push state', error);
+      console.warn('CallKitCoordinator: Failed to clear matching pending VoIP push', error);
     }
   }
 

@@ -28,6 +28,7 @@ export declare class TelnyxVoipClient {
   private readonly _sessionManager;
   private readonly _callStateController;
   private readonly _options;
+  private readonly _pendingCallKitAnswers;
   private _disposed;
   private _disposePromise?;
   /**
@@ -237,6 +238,13 @@ export declare class TelnyxVoipClient {
    * disposed after handling push notifications.
    */
   dispose(): Promise<void>;
+  /**
+   * Forward answers captured during cold start as soon as SessionManager has
+   * created the TelnyxRTC instance. SessionManager invokes its ready callback
+   * before connect(), so the UUID-keyed action is present when the INVITE
+   * arrives.
+   */
+  private _flushPendingCallKitAnswers;
   /**
    * Prefer an explicitly supplied token, otherwise hydrate it from PushKit's
    * native storage. PushKit registration starts in AppDelegate before React

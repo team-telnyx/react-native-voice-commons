@@ -38,6 +38,7 @@ describe('CallKitCoordinator UUID-targeted call waiting', () => {
   const coordinator = callKitCoordinator as any;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     coordinator.callMap.clear();
     coordinator.processingCalls.clear();
     coordinator.endedCalls.clear();
@@ -123,6 +124,25 @@ describe('CallKitCoordinator UUID-targeted call waiting', () => {
     expect(call.answer).not.toHaveBeenCalled();
     expect(call.hangup).toHaveBeenCalledTimes(1);
     expect(coordinator.callMap.has('callkit-focus')).toBe(false);
+  });
+
+  it('clears the matching persisted push after an in-app answer succeeds', async () => {
+    const call = lowLevelCall('signal-b', 'ringing');
+    (call as any)._callKitUUID = 'callkit-b';
+    coordinator.callMap.set('callkit-b', call);
+    coordinator.pendingPushCallUUIDs.add('callkit-b');
+    (VoicePnBridge.getPendingVoipPush as jest.Mock).mockResolvedValue(
+      JSON.stringify({
+        payload: { metadata: { call_id: 'CALLKIT-B', voice_sdk_id: 'voice-sdk-b' } },
+      })
+    );
+    jest.spyOn(CallKit, 'answerCall').mockResolvedValue(true);
+
+    await expect(callKitCoordinator.answerCallFromUI(call)).resolves.toBe(true);
+
+    expect(call.answer).toHaveBeenCalledTimes(1);
+    expect(VoicePnBridge.clearPendingVoipPush).toHaveBeenCalledTimes(1);
+    expect(coordinator.pendingPushCallUUIDs.has('callkit-b')).toBe(false);
   });
 
   it('selects the exact call after a successful resume', async () => {

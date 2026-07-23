@@ -11,6 +11,12 @@ import { VoicePnBridge } from './internal/voice-pn-bridge';
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
 const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
 const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
+const LEGACY_CALLKIT_ANSWER_KEY = '__legacy_callkit_answer__';
+
+interface PendingCallKitAnswer {
+  callKitUUIDOrHeaders?: string | Record<string, string>;
+  customHeaders: Record<string, string>;
+}
 
 /**
  * Configuration options for TelnyxVoipClient
@@ -41,6 +47,7 @@ export class TelnyxVoipClient {
   private readonly _sessionManager: SessionManager;
   private readonly _callStateController: CallStateController;
   private readonly _options: Required<TelnyxVoipClientOptions>;
+  private readonly _pendingCallKitAnswers = new Map<string, PendingCallKitAnswer>();
   private _disposed = false;
   private _disposePromise?: Promise<void>;
 
@@ -89,6 +96,7 @@ export class TelnyxVoipClient {
       console.log(
         '🔧 TelnyxVoipClient: Client ready, initializing call state controller listeners'
       );
+      this._flushPendingCallKitAnswers();
       this._callStateController.initializeClientListeners();
     });
 
@@ -580,9 +588,18 @@ export class TelnyxVoipClient {
     if (telnyxClient && typeof (telnyxClient as any).queueAnswerFromCallKit === 'function') {
       (telnyxClient as any).queueAnswerFromCallKit(callKitUUIDOrHeaders, customHeaders);
     } else {
-      console.warn(
-        'TelnyxVoipClient: TelnyxRTC client not available or method not found for queueAnswerFromCallKit'
-      );
+      const normalizedUUID =
+        typeof callKitUUIDOrHeaders === 'string' ? callKitUUIDOrHeaders.toLowerCase() : undefined;
+      const actionKey = normalizedUUID ?? LEGACY_CALLKIT_ANSWER_KEY;
+      let retainedUUIDOrHeaders: string | Record<string, string> | undefined = normalizedUUID;
+      if (callKitUUIDOrHeaders && typeof callKitUUIDOrHeaders !== 'string') {
+        retainedUUIDOrHeaders = { ...callKitUUIDOrHeaders };
+      }
+
+      this._pendingCallKitAnswers.set(actionKey, {
+        callKitUUIDOrHeaders: retainedUUIDOrHeaders,
+        customHeaders: { ...customHeaders },
+      });
     }
   }
 
@@ -645,6 +662,7 @@ export class TelnyxVoipClient {
       try {
         await this._sessionManager.dispose();
       } finally {
+        this._pendingCallKitAnswers.clear();
         this._callStateController.dispose();
       }
     })();
@@ -653,6 +671,34 @@ export class TelnyxVoipClient {
   }
 
   // ========== Private Methods ==========
+
+  /**
+   * Forward answers captured during cold start as soon as SessionManager has
+   * created the TelnyxRTC instance. SessionManager invokes its ready callback
+   * before connect(), so the UUID-keyed action is present when the INVITE
+   * arrives.
+   */
+  private _flushPendingCallKitAnswers(): void {
+    const telnyxClient = this._sessionManager.telnyxClient;
+    if (!telnyxClient || typeof (telnyxClient as any).queueAnswerFromCallKit !== 'function') {
+      return;
+    }
+
+    for (const [actionKey, pendingAnswer] of this._pendingCallKitAnswers) {
+      try {
+        (telnyxClient as any).queueAnswerFromCallKit(
+          pendingAnswer.callKitUUIDOrHeaders,
+          pendingAnswer.customHeaders
+        );
+        this._pendingCallKitAnswers.delete(actionKey);
+      } catch (error) {
+        console.error('TelnyxVoipClient: Failed to restore pending CallKit answer', {
+          actionKey,
+          error,
+        });
+      }
+    }
+  }
 
   /**
    * Prefer an explicitly supplied token, otherwise hydrate it from PushKit's
