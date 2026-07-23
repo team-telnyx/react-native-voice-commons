@@ -80,6 +80,7 @@ export declare class SessionManager {
    * Handle push notification (async version)
    */
   handlePushNotification(payload: Record<string, any>): Promise<void>;
+  private _hasActiveOrHeldCall;
   /**
    * Dispose of the session manager and clean up resources
    */

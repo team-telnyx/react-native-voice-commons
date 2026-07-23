@@ -208,6 +208,7 @@ import { createCredentialConfig } from '@telnyx/react-voice-commons-sdk';
 const config = createCredentialConfig('your_sip_username', 'your_sip_password', {
   debug: true,
   pushNotificationDeviceToken: 'your_device_token',
+  pushWhenActive: true,
 });
 
 await voipClient.login(config);
@@ -221,10 +222,13 @@ import { createTokenConfig } from '@telnyx/react-voice-commons-sdk';
 const config = createTokenConfig('your_jwt_token', {
   debug: true,
   pushNotificationDeviceToken: 'your_device_token',
+  pushWhenActive: true,
 });
 
 await voipClient.loginWithToken(config);
 ```
+
+`pushWhenActive` is opt-in and defaults to `false`. Enable it on iOS when the device must receive a second PushKit call while another call is active or held.
 
 ### Automatic Storage & Reconnection
 
@@ -238,6 +242,7 @@ The library uses these AsyncStorage keys internally:
 - `@telnyx_password` - SIP password (credential auth)
 - `@credential_token` - JWT authentication token (token auth)
 - `@push_token` - Push notification device token
+- `@push_when_active` - Whether the device remains eligible for PushKit calls while connected
 
 **Note**: These are managed automatically by the library. You only need to call `login()` once, and the library will handle storage and future reconnections.
 

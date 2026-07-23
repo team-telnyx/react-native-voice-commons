@@ -3,6 +3,7 @@ import { AppState, AppStateStatus, Platform } from 'react-native';
 import { TelnyxVoipClient, createBackgroundTelnyxVoipClient } from './telnyx-voip-client';
 import { TelnyxConnectionState } from './models/connection-state';
 import { Call } from './models/call';
+import { TelnyxCallState } from './models/call-state';
 import { TelnyxVoiceProvider } from './context/TelnyxVoiceContext';
 
 let sharedBackgroundClient: TelnyxVoipClient | null = null;
@@ -461,10 +462,19 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
         // Prevent duplicate processing if already connected or connecting.
         // Since push data is no longer cleared on read, this guard prevents
         // re-processing when checkForInitialPushNotification fires again on app resume.
-        if (
+        const isConnectedOrConnecting =
           voipClient.currentConnectionState === TelnyxConnectionState.CONNECTED ||
-          voipClient.currentConnectionState === TelnyxConnectionState.CONNECTING
-        ) {
+          voipClient.currentConnectionState === TelnyxConnectionState.CONNECTING;
+        const isActiveIOSCallWaitingPush =
+          Platform.OS === 'ios' &&
+          voipClient.currentConnectionState === TelnyxConnectionState.CONNECTED &&
+          voipClient.currentCalls.some(
+            (call) =>
+              call.currentState === TelnyxCallState.ACTIVE ||
+              call.currentState === TelnyxCallState.HELD
+          );
+
+        if (isConnectedOrConnecting && !isActiveIOSCallWaitingPush) {
           log(
             `SKIPPING - Already ${voipClient.currentConnectionState}, preventing duplicate processing`
           );

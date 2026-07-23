@@ -3,6 +3,8 @@ import {
   createTelnyxVoipClient,
   destroyTelnyxVoipClient,
 } from '../src/telnyx-voip-client';
+import { callKitCoordinator } from '../src/callkit/callkit-coordinator';
+import { TelnyxCallState } from '../src/models/call-state';
 
 const flushMicrotasks = async (): Promise<void> => {
   await Promise.resolve();
@@ -89,5 +91,29 @@ describe('TelnyxVoipClient singleton lifecycle', () => {
 
     expect(setActiveCall).toHaveBeenCalledWith('call-2');
     expect(clearActiveCall).toHaveBeenCalledTimes(1);
+  });
+
+  it('coordinates an iOS swap using the current active call and requested held call', async () => {
+    const client = new TelnyxVoipClient();
+    const activeTelnyxCall = { callId: 'active-signal' };
+    const heldTelnyxCall = { callId: 'held-signal' };
+    const activeCall = {
+      callId: 'active',
+      currentState: TelnyxCallState.ACTIVE,
+      telnyxCall: activeTelnyxCall,
+    };
+    const heldCall = {
+      callId: 'held',
+      currentState: TelnyxCallState.HELD,
+      telnyxCall: heldTelnyxCall,
+    };
+    jest.spyOn(client, 'currentActiveCall', 'get').mockReturnValue(activeCall as any);
+    jest.spyOn(client, 'getCall').mockReturnValue(heldCall as any);
+    jest.spyOn(callKitCoordinator, 'isAvailable').mockReturnValue(true);
+    const swap = jest.spyOn(callKitCoordinator, 'swapCallsFromUI').mockResolvedValue(true);
+
+    await client.swapCalls('held');
+
+    expect(swap).toHaveBeenCalledWith(activeTelnyxCall, heldTelnyxCall);
   });
 });

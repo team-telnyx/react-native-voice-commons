@@ -1,5 +1,12 @@
 # CHANGELOG.md
 
+## Unreleased
+
+### Bug Fixing
+
+- Accept the gateway's canonical `holdState: "active"` unhold response so repeated hold/resume cycles do not leave the call stuck in `HELD`.
+- Add opt-in `pushWhenActive` parity with the native iOS SDK. Login sends `push_when_active` and `pn_late_fanout`, and answers include `answered_device_token` when a non-empty PushKit token is configured.
+
 ## [0.4.5](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk-v0.4.5) (2026-04-30)
 
 ### Bug Fixing

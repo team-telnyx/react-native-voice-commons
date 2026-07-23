@@ -109,10 +109,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private pendingTrickleEvents: Map<string, PendingTrickleEvent[]> = new Map();
   private static readonly PENDING_TRICKLE_TTL_MS = 30000;
 
-  // Pending call actions (matching iOS SDK behavior)
-  private pendingAnswerAction: boolean = false;
-  private pendingEndAction: boolean = false;
-  private pendingCustomHeaders: Record<string, string> = {};
+  // Pending CallKit actions are keyed by the app-facing CallKit UUID. A
+  // singleton flag is unsafe once two calls can coexist because it resolves
+  // through `call` (the first non-ended call).
+  private pendingAnswerActions: Map<string, Record<string, string>> = new Map();
+  private pendingEndActions: Set<string> = new Set();
+  private static readonly LEGACY_PENDING_ACTION_KEY = '__legacy_unambiguous_call__';
 
   // AsyncStorage keys for persisting push state
   private static readonly PUSH_STATE_KEY = '@telnyx_push_state';
@@ -197,10 +199,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     this.keepAliveHandler = null;
     // calls Map is initialized in class declaration
 
-    // Initialize pending actions
-    this.pendingAnswerAction = false;
-    this.pendingEndAction = false;
-    this.pendingCustomHeaders = {};
+    // Pending action collections are initialized in their field declarations.
 
     // Force debug logging in development or when explicitly requested
     const shouldDebug = __DEV__ || opts.logLevel === 'debug' || (global as any).__TELNYX_DEBUG__;
@@ -435,6 +434,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       options,
       debug: this.options.debug,
       callReportConfig: this.getCallReportConfig(),
+      pushWhenActive: this.options.pushWhenActive,
+      pushDeviceToken: this.options.pushNotificationDeviceToken,
     });
 
     // Add to calls tracking (matches iOS SDK behavior)
@@ -464,6 +465,14 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     // Extract voice_sdk_id from push notification metadata (matching iOS SDK)
     const metadata = pushNotificationPayload?.metadata || pushNotificationPayload;
+    const pushCallKitUUID = metadata?.call_id || metadata?.callId;
+    if (typeof pushCallKitUUID === 'string' && pushCallKitUUID.length > 0) {
+      // Keep the app-facing PushKit/CallKit identity separate from the
+      // signaling INVITE callID. Call.createInboundCall attaches this UUID to
+      // the new call without changing Call.callId.
+      this.setPushNotificationCallKitUUID(this.normalizeCallIdentity(pushCallKitUUID));
+    }
+
     if (metadata?.voice_sdk_id) {
       const newVoiceSDKId = metadata.voice_sdk_id;
       const currentVoiceSDKId = (this as any)._pushVoiceSDKId;
@@ -503,17 +512,35 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * This should be called when the user answers from CallKit before the socket connection is established
    * @param customHeaders Optional custom headers to include with the answer
    */
-  public queueAnswerFromCallKit(customHeaders: Record<string, string> = {}) {
-    log.debug('[TelnyxRTC] Queuing answer action from CallKit', customHeaders);
-    this.pendingAnswerAction = true;
-    this.pendingCustomHeaders = customHeaders;
+  public queueAnswerFromCallKit(
+    callKitUUIDOrHeaders?: string | Record<string, string>,
+    customHeaders: Record<string, string> = {}
+  ) {
+    const callKitUUID =
+      typeof callKitUUIDOrHeaders === 'string'
+        ? this.normalizeCallIdentity(callKitUUIDOrHeaders)
+        : null;
+    const headers =
+      callKitUUIDOrHeaders && typeof callKitUUIDOrHeaders !== 'string'
+        ? callKitUUIDOrHeaders
+        : customHeaders;
+    const actionKey = callKitUUID ?? TelnyxRTC.LEGACY_PENDING_ACTION_KEY;
+    const targetCall = this.resolveCallKitTarget(callKitUUID, 'ringing');
 
-    // If call already exists, answer immediately
-    if (this.call && this.call.state === 'ringing') {
-      log.debug('[TelnyxRTC] Call exists, answering immediately');
-      this.executePendingAnswer();
+    if (!callKitUUID && !targetCall && this.getActiveCalls().length > 1) {
+      log.warn('[TelnyxRTC] Refusing ambiguous legacy CallKit answer with multiple calls');
+      return;
+    }
+
+    log.debug('[TelnyxRTC] Queuing answer action from CallKit', { callKitUUID, headers });
+    this.pendingEndActions.delete(actionKey);
+    this.pendingAnswerActions.set(actionKey, headers);
+
+    if (targetCall) {
+      log.debug('[TelnyxRTC] Target call exists, answering immediately:', targetCall.callId);
+      void this.executePendingAnswer(targetCall, actionKey);
     } else {
-      log.debug('[TelnyxRTC] Call not yet available, answer will be executed when invite arrives');
+      log.debug('[TelnyxRTC] Target call not yet available; answer remains keyed for its invite');
     }
   }
 
@@ -521,16 +548,25 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * Queue an end action for when the call invite arrives (matching iOS SDK behavior)
    * This should be called when the user ends from CallKit before the socket connection is established
    */
-  public queueEndFromCallKit() {
-    log.debug('[TelnyxRTC] Queuing end action from CallKit');
-    this.pendingEndAction = true;
+  public queueEndFromCallKit(callKitUUID?: string) {
+    const normalizedUUID = callKitUUID ? this.normalizeCallIdentity(callKitUUID) : null;
+    const actionKey = normalizedUUID ?? TelnyxRTC.LEGACY_PENDING_ACTION_KEY;
+    const targetCall = this.resolveCallKitTarget(normalizedUUID);
 
-    // If call already exists, end immediately
-    if (this.call) {
-      log.debug('[TelnyxRTC] Call exists, ending immediately');
-      this.executePendingEnd();
+    if (!normalizedUUID && !targetCall && this.getActiveCalls().length > 1) {
+      log.warn('[TelnyxRTC] Refusing ambiguous legacy CallKit end with multiple calls');
+      return;
+    }
+
+    log.debug('[TelnyxRTC] Queuing end action from CallKit', { callKitUUID: normalizedUUID });
+    this.pendingAnswerActions.delete(actionKey);
+    this.pendingEndActions.add(actionKey);
+
+    if (targetCall) {
+      log.debug('[TelnyxRTC] Target call exists, ending immediately:', targetCall.callId);
+      this.executePendingEnd(targetCall, actionKey);
     } else {
-      log.debug('[TelnyxRTC] Call not yet available, end will be executed when invite arrives');
+      log.debug('[TelnyxRTC] Target call not yet available; end remains keyed for its invite');
     }
   }
 
@@ -556,8 +592,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   /**
    * Execute pending answer action
    */
-  private async executePendingAnswer() {
-    if (!this.pendingAnswerAction || !this.call) {
+  private async executePendingAnswer(targetCall: Call, actionKey: string) {
+    const pendingHeaders = this.pendingAnswerActions.get(actionKey);
+    if (!pendingHeaders) {
       return;
     }
 
@@ -565,37 +602,39 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       log.debug('[TelnyxRTC] Executing pending answer action');
 
       // Convert Record<string, string> to { name: string; value: string }[] format
-      const customHeaders = Object.entries(this.pendingCustomHeaders).map(([name, value]) => ({
+      const customHeaders = Object.entries(pendingHeaders).map(([name, value]) => ({
         name,
         value,
       }));
 
       // Use the answer method with custom headers
-      await this.call.answer(customHeaders);
+      await targetCall.answer(customHeaders);
       log.debug('[TelnyxRTC] Pending answer executed successfully');
     } catch (error) {
       log.error('[TelnyxRTC] Failed to execute pending answer:', error);
     } finally {
-      this.resetPendingActions();
+      this.pendingAnswerActions.delete(actionKey);
+      this.resetPushContextIfActionsComplete();
     }
   }
 
   /**
    * Execute pending end action
    */
-  private executePendingEnd() {
-    if (!this.pendingEndAction || !this.call) {
+  private executePendingEnd(targetCall: Call, actionKey: string) {
+    if (!this.pendingEndActions.has(actionKey)) {
       return;
     }
 
     try {
       log.debug('[TelnyxRTC] Executing pending end action');
-      this.call.hangup();
+      targetCall.hangup();
       log.debug('[TelnyxRTC] Pending end executed successfully');
     } catch (error) {
       log.error('[TelnyxRTC] Failed to execute pending end:', error);
     } finally {
-      this.resetPendingActions();
+      this.pendingEndActions.delete(actionKey);
+      this.resetPushContextIfActionsComplete();
     }
   }
 
@@ -603,15 +642,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * Reset pending action flags (matching iOS SDK resetPushVariables)
    * Also resets push flags so subsequent calls are not auto-answered.
    */
-  private resetPendingActions() {
-    log.debug('[TelnyxRTC] Resetting pending actions');
-    this.pendingAnswerAction = false;
-    this.pendingEndAction = false;
-    this.pendingCustomHeaders = {};
-
-    // Reset push flags after the pending action has been executed
-    // so subsequent calls are not auto-answered
-    if (this.isCallFromPush) {
+  private resetPushContextIfActionsComplete() {
+    if (
+      this.isCallFromPush &&
+      this.pendingAnswerActions.size === 0 &&
+      this.pendingEndActions.size === 0
+    ) {
       log.debug('[TelnyxRTC] Resetting push flags after pending action executed');
       this.isCallFromPush = false;
       this.pushNotificationPayload = null;
@@ -620,6 +656,29 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         log.warn('[TelnyxRTC] Failed to clear push state after pending action:', error);
       });
     }
+  }
+
+  private normalizeCallIdentity(callId: string): string {
+    return callId.toLowerCase();
+  }
+
+  private getCallKitIdentity(call: Call): string {
+    const callKitUUID = (call as any)._callKitUUID;
+    return this.normalizeCallIdentity(callKitUUID || call.callId);
+  }
+
+  private resolveCallKitTarget(callKitUUID: string | null, requiredState?: string): Call | null {
+    const candidates = this.getActiveCalls().filter(
+      (call) => !requiredState || call.state === requiredState
+    );
+
+    if (callKitUUID) {
+      return (
+        candidates.find((call) => this.getCallKitIdentity(call) === callKitUUID) || null
+      );
+    }
+
+    return candidates.length === 1 ? candidates[0] : null;
   }
 
   /**
@@ -1071,6 +1130,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
         debug: this.options.debug,
         callReportConfig: this.getCallReportConfig(),
+        pushWhenActive: this.options.pushWhenActive,
+        pushDeviceToken: this.options.pushNotificationDeviceToken,
       });
     } catch (error) {
       log.error('[TelnyxRTC] Failed to create inbound call:', error);
@@ -1127,25 +1188,35 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
           rejectedByPushAction = true;
         }
         // Reset push flags immediately since the action was handled inline
-        this.resetPendingActions();
-      } else if (this.pendingAnswerAction) {
-        log.debug('[TelnyxRTC] Found pending answer action, executing...');
-        // Execute pending answer asynchronously to allow call setup to complete first
-        // Push flags are reset inside resetPendingActions() after execution
-        setTimeout(() => this.executePendingAnswer(), 100);
-      } else if (this.pendingEndAction) {
-        log.debug('[TelnyxRTC] Found pending end action, executing...');
-        // Execute pending end asynchronously
-        // Push flags are reset inside resetPendingActions() after execution
-        setTimeout(() => this.executePendingEnd(), 100);
-        // Same reasoning as the inline `action === 'reject'` branch above —
-        // we've decided to end this call before the user sees it.
-        rejectedByPushAction = true;
+        this.resetPushContextIfActionsComplete();
       } else {
-        log.debug('[TelnyxRTC] No pending actions to execute for push notification call');
-        // No pending actions yet - keep isCallFromPush alive so that
-        // queueAnswerFromCallKit() can still trigger auto-answer when
-        // the user answers from CallKit after the invite has arrived.
+        const callIdentity = this.getCallKitIdentity(incomingCall);
+        const answerKey = this.pendingAnswerActions.has(callIdentity)
+          ? callIdentity
+          : this.pendingAnswerActions.has(TelnyxRTC.LEGACY_PENDING_ACTION_KEY)
+            ? TelnyxRTC.LEGACY_PENDING_ACTION_KEY
+            : null;
+        const endKey = this.pendingEndActions.has(callIdentity)
+          ? callIdentity
+          : this.pendingEndActions.has(TelnyxRTC.LEGACY_PENDING_ACTION_KEY)
+            ? TelnyxRTC.LEGACY_PENDING_ACTION_KEY
+            : null;
+
+        if (answerKey) {
+          log.debug('[TelnyxRTC] Found pending answer action, executing...');
+          // Execute pending answer asynchronously to allow call setup to complete first
+          setTimeout(() => void this.executePendingAnswer(incomingCall, answerKey), 100);
+        } else if (endKey) {
+          log.debug('[TelnyxRTC] Found pending end action, executing...');
+          setTimeout(() => this.executePendingEnd(incomingCall, endKey), 100);
+          // Same reasoning as the inline `action === 'reject'` branch above —
+          // we've decided to end this call before the user sees it.
+          rejectedByPushAction = true;
+        } else {
+          log.debug('[TelnyxRTC] No pending actions to execute for push notification call');
+          // No pending actions yet - keep isCallFromPush alive so that a
+          // UUID-targeted CallKit action can resolve this call later.
+        }
       }
     } else {
       log.debug('[TelnyxRTC] Not a push notification call, no pending actions to check');
@@ -1164,6 +1235,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       type: 'callUpdate',
       call: incomingCall,
     });
+
+    // The INVITE now owns the durable app-facing UUID. If no pre-INVITE
+    // action is pending, the global push context is no longer needed and
+    // must not leak into the next call.
+    this.resetPushContextIfActionsComplete();
 
     log.debug('[TelnyxRTC] ====== CALL INVITE HANDLING COMPLETE ======');
   };
@@ -1206,6 +1282,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       initialState: 'connecting', // Set initial state to connecting
       debug: this.options.debug,
       callReportConfig: this.getCallReportConfig(),
+      pushWhenActive: this.options.pushWhenActive,
+      pushDeviceToken: this.options.pushNotificationDeviceToken,
     });
 
     // Add to calls tracking (matches iOS SDK behavior)

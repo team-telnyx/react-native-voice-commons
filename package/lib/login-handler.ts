@@ -12,6 +12,7 @@ import { updateCallReportId } from './global';
 import {
   createPasswordLoginMessage,
   createTokenLoginMessage,
+  createLoginUserVariables,
   isLoginSuccessResponse,
 } from './messages/login';
 import { createDeferredPromise } from './promise';
@@ -128,11 +129,12 @@ export class LoginHandler {
   }
 
   private createLoginMessage = (options: ClientOptions) => {
-    const userVariables = {
-      push_device_token: options.pushNotificationDeviceToken,
-      push_notification_provider: Platform.OS,
-      push_notification_environment: __DEV__ ? 'debug' : 'production',
-    };
+    const userVariables = createLoginUserVariables({
+      pushDeviceToken: options.pushNotificationDeviceToken,
+      pushNotificationProvider: Platform.OS,
+      pushNotificationEnvironment: __DEV__ ? 'debug' : 'production',
+      pushWhenActive: options.pushWhenActive,
+    });
 
     // Use stored sessid from previous login response, or from options if provided
     const sessid = (options as any).sessid || this.lastSessionId;

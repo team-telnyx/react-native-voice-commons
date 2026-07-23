@@ -6,7 +6,6 @@ const operators_1 = require('rxjs/operators');
 const call_1 = require('../../models/call');
 const call_state_1 = require('../../models/call-state');
 const callkit_coordinator_1 = require('../../callkit/callkit-coordinator');
-const voice_pn_bridge_1 = require('../voice-pn-bridge');
 /**
  * Central state machine for call management.
  *
@@ -19,6 +18,10 @@ class CallStateController {
     this._calls = new rxjs_1.BehaviorSubject([]);
     this._callMap = new Map();
     this._disposed = false;
+    // Explicitly-tracked active call ID for multi-call scenarios.
+    // When set, activeCall$/currentActiveCall prefer this call over the
+    // first-match heuristic. Cleared automatically when the call reaches
+    // a terminal state, or manually via clearActiveCall().
     this._activeCallId = null;
     this._handleTelnyxIncomingCall = (telnyxCall, msg) => {
       console.log('CallStateController: Incoming call received:', telnyxCall.callId);
@@ -407,7 +410,11 @@ class CallStateController {
         callkit_coordinator_1.callKitCoordinator.getCallKitUUID(telnyxCall);
       if (existingCallKitUUID) {
         console.log(
-          'CallStateController: Call already has CallKit integration, skipping duplicate report:',
+          'CallStateController: Linking push-created CallKit call to its signaling call:',
+          existingCallKitUUID
+        );
+        callkit_coordinator_1.callKitCoordinator.linkExistingCallKitCall(
+          telnyxCall,
           existingCallKitUUID
         );
       } else if (call.isIncoming) {
@@ -446,10 +453,6 @@ class CallStateController {
         if (this._activeCallId === call.callId) {
           this._activeCallId = null;
         }
-        // Clear pending push data so the next app launch isn't mistaken for a push launch
-        voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush().catch((e) =>
-          console.warn('CallStateController: Failed to clear pending voip push:', e)
-        );
         setTimeout(() => this._removeCall(call.callId), 0);
       }
     });

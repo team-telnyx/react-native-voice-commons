@@ -62,6 +62,7 @@ function validateConfig(config) {
  * @param options - Optional configuration settings
  * @param options.debug - Enable debug logging (sets SDK logLevel to 'debug')
  * @param options.pushNotificationDeviceToken - Device token for push notifications
+ * @param options.pushWhenActive - Keep active PushKit devices eligible for incoming calls
  * @returns Complete credential configuration object
  */
 function createCredentialConfig(sipUser, sipPassword, options) {
@@ -79,6 +80,7 @@ function createCredentialConfig(sipUser, sipPassword, options) {
  * @param options - Optional configuration settings
  * @param options.debug - Enable debug logging (sets SDK logLevel to 'debug')
  * @param options.pushNotificationDeviceToken - Device token for push notifications
+ * @param options.pushWhenActive - Keep active PushKit devices eligible for incoming calls
  * @returns Complete token configuration object
  */
 function createTokenConfig(sipToken, options) {

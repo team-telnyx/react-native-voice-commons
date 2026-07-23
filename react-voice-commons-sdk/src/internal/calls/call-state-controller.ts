@@ -5,7 +5,6 @@ import { Call } from '../../models/call';
 import { TelnyxCallState } from '../../models/call-state';
 import { SessionManager } from '../session/session-manager';
 import { callKitCoordinator } from '../../callkit/callkit-coordinator';
-import { VoicePnBridge } from '../voice-pn-bridge';
 
 /**
  * Central state machine for call management.
@@ -488,9 +487,10 @@ export class CallStateController {
 
       if (existingCallKitUUID) {
         console.log(
-          'CallStateController: Call already has CallKit integration, skipping duplicate report:',
+          'CallStateController: Linking push-created CallKit call to its signaling call:',
           existingCallKitUUID
         );
+        callKitCoordinator.linkExistingCallKitCall(telnyxCall, existingCallKitUUID);
       } else if (call.isIncoming) {
         // Handle incoming call with CallKit (only if not already integrated)
         console.log('CallStateController: Reporting incoming call to CallKitCoordinator');
@@ -520,10 +520,6 @@ export class CallStateController {
           this._activeCallId = null;
         }
 
-        // Clear pending push data so the next app launch isn't mistaken for a push launch
-        VoicePnBridge.clearPendingVoipPush().catch((e) =>
-          console.warn('CallStateController: Failed to clear pending voip push:', e)
-        );
         setTimeout(() => this._removeCall(call.callId), 0);
       }
     });

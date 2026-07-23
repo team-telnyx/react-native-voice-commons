@@ -314,6 +314,18 @@ class Call {
       throw new Error(`Cannot hold call in state: ${this.currentState}`);
     }
     try {
+      if (react_native_1.Platform.OS === 'ios') {
+        const { callKitCoordinator } = await Promise.resolve().then(() =>
+          __importStar(require('../callkit/callkit-coordinator'))
+        );
+        if (callKitCoordinator.isAvailable()) {
+          const success = await callKitCoordinator.setHeldFromUI(this._telnyxCall, true);
+          if (!success) {
+            throw new Error('CallKit failed to hold call');
+          }
+          return;
+        }
+      }
       await this._telnyxCall.hold();
     } catch (error) {
       console.error('Failed to hold call:', error);
@@ -328,6 +340,18 @@ class Call {
       throw new Error(`Cannot resume call in state: ${this.currentState}`);
     }
     try {
+      if (react_native_1.Platform.OS === 'ios') {
+        const { callKitCoordinator } = await Promise.resolve().then(() =>
+          __importStar(require('../callkit/callkit-coordinator'))
+        );
+        if (callKitCoordinator.isAvailable()) {
+          const success = await callKitCoordinator.setHeldFromUI(this._telnyxCall, false);
+          if (!success) {
+            throw new Error('CallKit failed to resume call');
+          }
+          return;
+        }
+      }
       await this._telnyxCall.unhold();
     } catch (error) {
       console.error('Failed to resume call:', error);
@@ -422,6 +446,17 @@ class Call {
     this._telnyxCall.on('telnyx.call.state', (call, state) => {
       const telnyxState = this._mapToTelnyxCallState(state);
       this._callState.next(telnyxState);
+      // Keep the dedicated held observable derived from call state. Updating
+      // this only after the low-level SDK emits its successful transition
+      // preserves the previous value when hold/unhold signaling fails.
+      if (telnyxState === call_state_1.TelnyxCallState.HELD) {
+        this._isHeld.next(true);
+      } else if (
+        telnyxState === call_state_1.TelnyxCallState.ACTIVE ||
+        call_state_1.CallStateHelpers.isTerminated(telnyxState)
+      ) {
+        this._isHeld.next(false);
+      }
       // Start duration timer when call becomes active
       if (telnyxState === call_state_1.TelnyxCallState.ACTIVE && !this._startTime) {
         this._startDurationTimer();

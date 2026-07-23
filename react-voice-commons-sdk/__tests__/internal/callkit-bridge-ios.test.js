@@ -5,6 +5,10 @@ const swiftSource = fs.readFileSync(
   path.join(__dirname, '..', '..', 'ios', 'CallKitBridge.swift'),
   'utf8'
 );
+const objectiveCSource = fs.readFileSync(
+  path.join(__dirname, '..', '..', 'ios', 'CallKitBridge.m'),
+  'utf8'
+);
 
 function extractFunction(signature) {
   const start = swiftSource.indexOf(signature);
@@ -53,10 +57,15 @@ function sliceBetween(source, startToken, endToken) {
 
 const reportAndEndWatchdogCall = extractFunction('fileprivate func reportAndEndWatchdogCall(');
 const handleMissedCallPushIfNeeded = extractFunction('public func handleMissedCallPushIfNeeded(');
+const endAction = extractFunction(
+  'public func provider(_ provider: CXProvider, perform action: CXEndCallAction)'
+);
 const handleVoipPush = extractFunction('@objc public func handleVoipPush(');
 const answerAction = extractFunction(
   'public func provider(_ provider: CXProvider, perform action: CXAnswerCallAction)'
 );
+const answerCall = extractFunction('@objc func answerCall(');
+const handleIncomingVoipPush = extractFunction('@objc public func handleVoipPush(');
 
 describe('iOS CallKitBridge PushKit watchdog handling', () => {
   it('reports exactly one placeholder call, ends it, cleans state, then completes', () => {
@@ -86,7 +95,9 @@ describe('iOS CallKitBridge PushKit watchdog handling', () => {
       'guard let callIdString = callId, let callUUID = UUID(uuidString: callIdString) else {',
       'return'
     );
-    const storeIndex = handleVoipPush.indexOf('UserDefaults.standard.set("incoming_call"');
+    const storeIndex = handleVoipPush.indexOf(
+      'self.storePendingVoipPush(payload.dictionaryPayload)'
+    );
     const malformedReturnIndex = handleVoipPush.indexOf(
       'return',
       handleVoipPush.indexOf('source: "malformed_push_watchdog"')
@@ -142,5 +153,90 @@ describe('iOS CallKitBridge PushKit watchdog handling', () => {
     expect(placeholderIndex).toBeGreaterThanOrEqual(0);
     expect(failIndex).toBeGreaterThan(placeholderIndex);
     expect(emitIndex).toBeGreaterThan(failIndex);
+  });
+});
+
+describe('iOS CallKitBridge call waiting contract', () => {
+  it('allows two one-call groups and advertises holding', () => {
+    expect(swiftSource).toContain('configuration.maximumCallGroups = 2');
+    expect(swiftSource).toContain('configuration.maximumCallsPerCallGroup = 1');
+    expect(swiftSource).toContain('callUpdate.supportsHolding = true');
+  });
+
+  it('keeps answer and held actions keyed by UUID', () => {
+    expect(swiftSource).toContain('LockedDictionary<UUID, CXAnswerCallAction>');
+    expect(swiftSource).toContain('LockedDictionary<UUID, CXSetHeldCallAction>');
+    expect(swiftSource).toContain('pendingAnswerActions.removeValue(forKey: uuid)');
+    expect(swiftSource).toContain('pendingHeldActions.removeValue(forKey: uuid)');
+  });
+
+  it('rejects programmatic answers before submitting a transaction for an unknown UUID', () => {
+    const registrationGuard = answerCall.indexOf('guard manager.isCallKitRegistered(uuid)');
+    const transaction = answerCall.indexOf('CXAnswerCallAction(call: uuid)');
+
+    expect(objectiveCSource).toContain('RCT_EXTERN_METHOD(isCallRegistered:');
+    expect(registrationGuard).toBeGreaterThanOrEqual(0);
+    expect(transaction).toBeGreaterThan(registrationGuard);
+    expect(answerAction).toContain('guard isCallKitRegistered(action.callUUID)');
+  });
+
+  it('persists PushKit data only after CallKit accepts incoming registration', () => {
+    const errorBranch = sliceBetween(handleIncomingVoipPush, 'if let error = error {', '} else {');
+    const successStart = handleIncomingVoipPush.indexOf('} else {');
+    const persistIndex = handleIncomingVoipPush.indexOf(
+      'self.storePendingVoipPush(payload.dictionaryPayload)'
+    );
+    const registrationIndex = handleIncomingVoipPush.indexOf(
+      'callKitManager.markCallKitRegistered(callUUID)'
+    );
+
+    expect(errorBranch).toContain('clearPendingPushData(for: callUUID.uuidString)');
+    expect(errorBranch).not.toContain('storePendingVoipPush');
+    expect(registrationIndex).toBeGreaterThan(successStart);
+    expect(persistIndex).toBeGreaterThan(registrationIndex);
+    expect(persistIndex).toBeGreaterThan(successStart);
+  });
+
+  it('emits held actions and waits for explicit JavaScript completion', () => {
+    const heldAction = extractFunction(
+      'public func provider(_ provider: CXProvider, perform action: CXSetHeldCallAction)'
+    );
+    const completion = extractFunction('@objc func completeHeldCallAction(');
+
+    expect(heldAction).toContain('emitHeldCallEvent(');
+    expect(heldAction).not.toContain('action.fulfill()');
+    expect(completion).toContain('action.fulfill()');
+    expect(completion).toContain('action.fail()');
+  });
+
+  it('requests an atomic two-action transaction when swapping calls', () => {
+    const swapCalls = extractFunction('@objc func swapCalls(');
+
+    expect(objectiveCSource).toContain('RCT_EXTERN_METHOD(swapCalls:');
+    expect(swapCalls).toContain('CXSetHeldCallAction(call: activeUUID, onHold: true)');
+    expect(swapCalls).toContain('CXSetHeldCallAction(call: heldUUID, onHold: false)');
+    expect(swapCalls).toContain('CXTransaction(actions: actions)');
+  });
+
+  it('requests a CallKit transaction for app-originated hold changes', () => {
+    const setCallHeld = extractFunction('@objc func setCallHeld(');
+
+    expect(objectiveCSource).toContain('RCT_EXTERN_METHOD(setCallHeld:');
+    expect(setCallHeld).toContain('CXSetHeldCallAction(call: uuid, onHold: isOnHold)');
+    expect(setCallHeld).toContain('CXTransaction(action: action)');
+  });
+
+  it('fails an end action for an unknown UUID before emitting or removing anything', () => {
+    const guardIndex = endAction.indexOf('guard let callData = activeCalls[action.callUUID]');
+    const failIndex = endAction.indexOf('action.fail()');
+    const returnIndex = endAction.indexOf('return', failIndex);
+    const emitIndex = endAction.indexOf('emitCallEvent(');
+    const removeIndex = endAction.indexOf('activeCalls.removeValue(forKey: action.callUUID)');
+
+    expect(guardIndex).toBeGreaterThanOrEqual(0);
+    expect(failIndex).toBeGreaterThan(guardIndex);
+    expect(returnIndex).toBeGreaterThan(failIndex);
+    expect(emitIndex).toBeGreaterThan(returnIndex);
+    expect(removeIndex).toBeGreaterThan(returnIndex);
   });
 });

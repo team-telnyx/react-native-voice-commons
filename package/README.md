@@ -26,6 +26,9 @@ import { TelnyxRTC, ClientOptions } from '@telnyx/react-native-voice-sdk';
 // Initialize the client
 const clientOptions: ClientOptions = {
   login_token: 'your-jwt-token', // Recommended
+  pushNotificationDeviceToken: 'your-ios-voip-token',
+  // Required when this device must receive another PushKit call while active.
+  pushWhenActive: true,
   // OR use login/password
   // login: 'your-sip-username',
   // password: 'your-sip-password',
@@ -102,6 +105,12 @@ Represents an individual voice call.
 ### Push Notifications & Auto-Answer
 
 ```typescript
+const client = new TelnyxRTC({
+  login_token: 'your-jwt-token',
+  pushNotificationDeviceToken: 'your-ios-voip-token',
+  pushWhenActive: true,
+});
+
 // Process push notification
 client.processVoIPNotification(pushPayload);
 

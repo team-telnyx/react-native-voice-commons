@@ -113,6 +113,13 @@ export declare class TelnyxVoipClient {
    */
   clearActiveCall(): void;
   /**
+   * Swap the current active call with a held call.
+   * On iOS this is coordinated through CallKit so native and SDK state stay aligned.
+   *
+   * @param targetCallId ID of the held call to make active
+   */
+  swapCalls(targetCallId: string): Promise<void>;
+  /**
    * Current session ID (UUID) for this connection.
    */
   get sessionId(): string;
@@ -207,12 +214,21 @@ export declare class TelnyxVoipClient {
    * This should be called when the user answers from CallKit before the socket connection is established
    * @param customHeaders Optional custom headers to include with the answer
    */
-  queueAnswerFromCallKit(customHeaders?: Record<string, string>): void;
+  queueAnswerFromCallKit(
+    callKitUUIDOrHeaders?: string | Record<string, string>,
+    customHeaders?: Record<string, string>
+  ): void;
   /**
    * Queue an end action for when the call invite arrives (for CallKit integration)
    * This should be called when the user ends from CallKit before the socket connection is established
    */
-  queueEndFromCallKit(): void;
+  queueEndFromCallKit(callKitUUID?: string): void;
+  /**
+   * Associate the next push-delivered INVITE with its app-facing CallKit UUID.
+   * The underlying signaling call ID remains unchanged.
+   * @internal
+   */
+  setPushNotificationCallKitUUID(callKitUUID: string | null): void;
   /**
    * Dispose of the client and clean up all resources.
    *
@@ -221,6 +237,12 @@ export declare class TelnyxVoipClient {
    * disposed after handling push notifications.
    */
   dispose(): Promise<void>;
+  /**
+   * Prefer an explicitly supplied token, otherwise hydrate it from PushKit's
+   * native storage. PushKit registration starts in AppDelegate before React
+   * mounts, so this removes the race between the JS token event and login.
+   */
+  private _withNativeVoipPushToken;
   /**
    * Store credential configuration for automatic reconnection
    */

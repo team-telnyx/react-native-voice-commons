@@ -1,5 +1,20 @@
 # CHANGELOG.md
 
+## Unreleased
+
+### Bug Fixing
+
+- Hydrate iOS login and reconnect configurations from the current native PushKit token when callers omit one, preventing locked-device inbound calls from being missed when JavaScript login races token delivery.
+- Support two simultaneous iOS CallKit calls with UUID-targeted answer, end, hold, resume, and survivor restoration.
+- Route app hold/resume through CallKit and compensate partial call-swap failures to keep native and WebRTC state aligned.
+- Preserve the active signaling client when a second-call push arrives and avoid duplicate cold-answer actions.
+- Persist and forward the opt-in `pushWhenActive` configuration required for locked/background active-call PushKit delivery.
+- Treat Focus/DND-filtered CallKit registrations as terminal so rejected UUIDs cannot produce follow-up `UnknownCallUUID` answer transactions or ghost signaling calls.
+
+### Enhancement
+
+- Add public `swapCalls(targetCallId)` support and matching demo hold/resume/swap controls.
+
 ## [0.4.3] (2026-04-30)
 
 ### Bug Fixing

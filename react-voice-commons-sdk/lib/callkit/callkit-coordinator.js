@@ -73,15 +73,21 @@ class CallKitCoordinator {
   constructor() {
     // Maps CallKit UUIDs to WebRTC calls
     this.callMap = new Map();
-    // Tracks calls that are being processed to prevent duplicates
+    // Tracks action+UUID pairs so an end action is not dropped merely because
+    // an answer or held action for the same call is still completing.
     this.processingCalls = new Set();
     // Tracks calls that have already been ended in CallKit to prevent duplicate reports
     this.endedCalls = new Set();
     // Tracks calls that have already been reported as connected to prevent duplicate reports
     this.connectedCalls = new Set();
     this.isCallFromPush = false;
-    // Flag to auto-answer the next incoming call (set when answering push notifications via CallKit)
-    this.shouldAutoAnswerNextCall = false;
+    this.pendingPushCallUUIDs = new Set();
+    this.selectedCallKitUUID = null;
+    this.restoreHeldCallPromise = null;
+    this.pendingSwap = null;
+    this.pendingHeldRequests = new Map();
+    // Push answers are keyed so answering B cannot auto-answer another invite.
+    this.autoAnswerCallUUIDs = new Set();
     // Reference to the VoIP client for triggering reconnection when needed
     this.voipClient = null;
     if (react_native_1.Platform.OS === 'ios' && callkit_1.default.isAvailable()) {
@@ -96,6 +102,9 @@ class CallKitCoordinator {
     // Handle CallKit end actions
     callkit_1.default.onEndCall((event) => {
       this.handleCallKitEnd(event.callUUID, event);
+    });
+    callkit_1.default.onHeldCall((event) => {
+      void this.handleCallKitHeld(event.callUUID, Boolean(event.isOnHold));
     });
     // Handle CallKit start actions (for outgoing calls)
     callkit_1.default.onStartCall((event) => {
@@ -114,8 +123,13 @@ class CallKitCoordinator {
     if (react_native_1.Platform.OS !== 'ios' || !callkit_1.default.isAvailable()) {
       return null;
     }
-    // This is a new call - report it to CallKit using the WebRTC call ID as CallKit UUID
-    const callKitUUID = call.callId;
+    const existingCallKitUUID = this.getCallKitUUID(call);
+    if (existingCallKitUUID) {
+      this.linkExistingCallKitCall(call, existingCallKitUUID);
+      return existingCallKitUUID;
+    }
+    // Socket-only incoming calls use their signaling ID as the app-facing ID.
+    const callKitUUID = this.normalizeUUID(call.callId);
     console.log('CallKitCoordinator: Report Called called', {
       callKitUUID,
       webrtcCallId: call.callId,
@@ -140,12 +154,15 @@ class CallKitCoordinator {
           callerName
         );
         if (success) {
+          call._callKitUUID = callKitUUID;
           return callKitUUID;
         }
+        await this.rejectUnregisteredIncomingCall(callKitUUID, call);
       }
       return null;
     } catch (error) {
       console.error('CallKitCoordinator: Failed to report incoming call', error);
+      await this.rejectUnregisteredIncomingCall(callKitUUID, call);
       return null;
     }
   }
@@ -156,7 +173,7 @@ class CallKitCoordinator {
     if (react_native_1.Platform.OS !== 'ios' || !callkit_1.default.isAvailable()) {
       return null;
     }
-    const callKitUUID = call.callId;
+    const callKitUUID = this.normalizeUUID(call.callId);
     console.log('CallKitCoordinator: Starting outgoing call through CallKit', {
       callKitUUID,
       webrtcCallId: call.callId,
@@ -187,30 +204,140 @@ class CallKitCoordinator {
   async answerCallFromUI(call) {
     // Use comprehensive UUID lookup that checks both maps and call properties
     const callKitUUID = this.getCallKitUUID(call);
+    if (!callKitUUID) {
+      console.warn('CallKitCoordinator: Cannot answer call - no CallKit UUID found');
+      return false;
+    }
     console.log(
       'CallKitCoordinator: Answering call from UI using CallKit answer simulation',
       callKitUUID
     );
+    const isRegistered = await callkit_1.default.isCallRegistered(callKitUUID);
+    if (!isRegistered) {
+      console.warn(
+        'CallKitCoordinator: Suppressing answer because CallKit rejected or removed the call',
+        { callKitUUID }
+      );
+      await this.rejectUnregisteredIncomingCall(callKitUUID, call);
+      return false;
+    }
     // Mark as processing to prevent duplicate actions
-    this.processingCalls.add(callKitUUID);
+    const processingKey = this.actionKey('answer', callKitUUID);
+    this.processingCalls.add(processingKey);
     try {
       // Simulate the CallKit answer action, which will trigger our answer handler
       const success = await callkit_1.default.answerCall(callKitUUID);
       if (success) {
-        // If CallKit answer fails, fallback to direct WebRTC answer
-        if (this.isCallFromPush) {
-          call.answer();
-          this.isCallFromPush = false;
+        if (call.direction === 'inbound' && call.state !== 'active') {
+          await call.answer();
         }
+        this.selectCall(call);
+        this.pendingPushCallUUIDs.delete(callKitUUID);
+        this.isCallFromPush = this.pendingPushCallUUIDs.size > 0;
         console.log('CallKitCoordinator: CallKit answer success');
       }
       return success;
     } catch (error) {
       console.error('CallKitCoordinator: Error answering call from UI', error);
+      await callkit_1.default.reportCallEnded(callKitUUID, callkit_1.CallEndReason.Failed);
+      this.cleanupCall(callKitUUID);
       return false;
     } finally {
-      this.processingCalls.delete(callKitUUID);
+      this.processingCalls.delete(processingKey);
     }
+  }
+  /**
+   * Change held state from app UI through CallKit, then wait for signaling and
+   * the corresponding CXSetHeldCallAction to complete.
+   */
+  async setHeldFromUI(call, isOnHold) {
+    const callKitUUID = this.getCallKitUUID(call);
+    if (!callKitUUID) {
+      console.warn('CallKitCoordinator: Cannot change held state without a CallKit UUID');
+      return false;
+    }
+    const desiredState = isOnHold ? 'held' : 'active';
+    if (call.state === desiredState) {
+      if (!isOnHold) {
+        this.selectCall(call);
+      }
+      return true;
+    }
+    const requiredState = isOnHold ? 'active' : 'held';
+    if (call.state !== requiredState || this.pendingSwap) {
+      console.warn('CallKitCoordinator: Cannot change held state in current state', {
+        callKitUUID,
+        currentState: call.state,
+        desiredState,
+        hasPendingSwap: Boolean(this.pendingSwap),
+      });
+      return false;
+    }
+    const requestKey = this.actionKey(isOnHold ? 'hold' : 'unhold', callKitUUID);
+    if (this.pendingHeldRequests.has(requestKey) || this.processingCalls.has(requestKey)) {
+      return false;
+    }
+    let resolveRequest;
+    const completion = new Promise((resolve) => {
+      resolveRequest = resolve;
+    });
+    const timeout = setTimeout(() => {
+      console.error('CallKitCoordinator: Held-state request timed out', {
+        callKitUUID,
+        isOnHold,
+      });
+      this.finishPendingHeldRequest(requestKey, false);
+    }, 12000);
+    this.pendingHeldRequests.set(requestKey, {
+      resolve: resolveRequest,
+      timeout,
+    });
+    const accepted = await callkit_1.default.setCallHeld(callKitUUID, isOnHold);
+    if (!accepted) {
+      this.finishPendingHeldRequest(requestKey, false);
+    }
+    return completion;
+  }
+  /**
+   * Swap an active call with a held call through one CallKit transaction.
+   * The promise settles only after both corresponding WebRTC state changes
+   * have completed and their CallKit actions have been fulfilled.
+   */
+  async swapCallsFromUI(activeCall, heldCall) {
+    const activeCallKitUUID = this.getCallKitUUID(activeCall);
+    const heldCallKitUUID = this.getCallKitUUID(heldCall);
+    if (!activeCallKitUUID || !heldCallKitUUID || activeCallKitUUID === heldCallKitUUID) {
+      console.warn('CallKitCoordinator: Cannot swap calls without two distinct CallKit UUIDs');
+      return false;
+    }
+    if (activeCall.state !== 'active' || heldCall.state !== 'held') {
+      console.warn('CallKitCoordinator: Cannot swap calls in their current states', {
+        activeCallState: activeCall.state,
+        heldCallState: heldCall.state,
+      });
+      return false;
+    }
+    if (this.pendingSwap) {
+      console.warn('CallKitCoordinator: A call swap is already in progress');
+      return false;
+    }
+    let resolveSwap;
+    const swapCompletion = new Promise((resolve) => {
+      resolveSwap = resolve;
+    });
+    this.pendingSwap = this.createPendingSwap({
+      mode: 'swap',
+      originalActiveCallKitUUID: activeCallKitUUID,
+      originalHeldCallKitUUID: heldCallKitUUID,
+      activeCallKitUUID,
+      heldCallKitUUID,
+      resolve: resolveSwap,
+    });
+    const accepted = await callkit_1.default.swapCalls(activeCallKitUUID, heldCallKitUUID);
+    if (!accepted) {
+      await this.beginSwapRollback(this.pendingSwap);
+    }
+    return swapCompletion;
   }
   /**
    * End a call from the app UI (CallKit-first approach)
@@ -224,29 +351,32 @@ class CallKitCoordinator {
       call.hangup();
       return false;
     }
-    console.log(
-      'CallKitCoordinator: Ending call from UI - dismissing CallKit and hanging up WebRTC call',
-      callKitUUID
-    );
-    // Track this call as ended to prevent duplicate end actions
-    this.endedCalls.add(callKitUUID);
+    console.log('CallKitCoordinator: Requesting CallKit end action from app UI', callKitUUID);
     try {
-      // End the call in CallKit - endCall returns false on failure (doesn't throw)
+      // Let the resulting CXEndCallAction drive signaling, cleanup and survivor
+      // restoration. Marking the call ended here would suppress that event.
       const endCallSuccess = await callkit_1.default.endCall(callKitUUID);
-      if (!endCallSuccess) {
-        // Fallback: use reportCallEnded to dismiss CallKit UI when endCall fails
-        // (e.g., unknownCallUUID error from duplicate CXProvider)
-        await callkit_1.default.reportCallEnded(callKitUUID, callkit_1.CallEndReason.RemoteEnded);
+      if (endCallSuccess) {
+        return true;
       }
-      this.isCallFromPush = false;
+      const shouldRestoreRemainingCall = this.isSelectedCall(call);
+      this.endedCalls.add(callKitUUID);
+      await callkit_1.default.reportCallEnded(callKitUUID, callkit_1.CallEndReason.RemoteEnded);
+      this.pendingPushCallUUIDs.delete(callKitUUID);
+      this.isCallFromPush = this.pendingPushCallUUIDs.size > 0;
       call.hangup();
       this.cleanupCall(callKitUUID);
-      return true;
+      if (shouldRestoreRemainingCall) {
+        await this.restoreRemainingHeldCall();
+      }
+      return false;
     } catch (error) {
       console.error('CallKitCoordinator: Error ending call from UI', error);
-      this.isCallFromPush = false;
+      this.pendingPushCallUUIDs.delete(callKitUUID);
+      this.isCallFromPush = this.pendingPushCallUUIDs.size > 0;
       call.hangup();
       this.cleanupCall(callKitUUID);
+      await this.restoreRemainingHeldCall();
       return false;
     }
   }
@@ -254,7 +384,9 @@ class CallKitCoordinator {
    * Handle CallKit answer action (triggered by CallKit)
    */
   async handleCallKitAnswer(callKitUUID, event) {
-    if (this.processingCalls.has(callKitUUID)) {
+    callKitUUID = this.normalizeUUID(callKitUUID);
+    const processingKey = this.actionKey('answer', callKitUUID);
+    if (this.processingCalls.has(processingKey)) {
       console.log('CallKitCoordinator: Answer action already being processed, skipping duplicate');
       return;
     }
@@ -277,9 +409,10 @@ class CallKitCoordinator {
     });
     if (call.state === 'active') {
       console.log('CallKitCoordinator: Call already active, skipping duplicate answer action');
+      this.selectCall(call);
       return;
     }
-    this.processingCalls.add(callKitUUID);
+    this.processingCalls.add(processingKey);
     try {
       if (call.direction === 'inbound') {
         const voipClient = this.getSDKClient();
@@ -289,22 +422,8 @@ class CallKitCoordinator {
           );
           voipClient.setCallConnecting(call.callId);
         }
-        // Report call as connected to CallKit to trigger audio session activation
-        setTimeout(async () => {
-          try {
-            await callkit_1.default.reportCallConnected(callKitUUID);
-            console.log('CallKitCoordinator: Reported call connected to activate audio session');
-            this.connectedCalls.add(callKitUUID);
-          } catch (error) {
-            console.error(
-              'CallKitCoordinator: Error reporting call connected for audio session:',
-              error
-            );
-          }
-        }, 200);
-        setTimeout(() => {
-          call.answer();
-        }, 500);
+        await call.answer();
+        this.selectCall(call);
       } else {
         console.log('CallKitCoordinator: Outgoing call, skipping answer and CONNECTING state');
       }
@@ -324,15 +443,54 @@ class CallKitCoordinator {
         await voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush();
       } catch (_) {}
     } finally {
-      this.processingCalls.delete(callKitUUID);
+      this.processingCalls.delete(processingKey);
+    }
+  }
+  /** Handle a UUID-targeted CallKit hold or resume action. */
+  async handleCallKitHeld(callKitUUID, isOnHold) {
+    callKitUUID = this.normalizeUUID(callKitUUID);
+    const processingKey = this.actionKey(isOnHold ? 'hold' : 'unhold', callKitUUID);
+    if (this.processingCalls.has(processingKey)) {
+      return;
+    }
+    const call = this.callMap.get(callKitUUID);
+    if (!call) {
+      console.warn('CallKitCoordinator: No WebRTC call found for held action', { callKitUUID });
+      await callkit_1.default.completeHeldCallAction(callKitUUID, false);
+      this.finishPendingHeldRequest(processingKey, false);
+      return;
+    }
+    this.processingCalls.add(processingKey);
+    try {
+      if (isOnHold && call.state !== 'held') {
+        await call.hold();
+      } else if (!isOnHold && call.state !== 'active') {
+        await call.unhold();
+      }
+      if (!isOnHold) {
+        this.selectCall(call);
+      }
+      const completed = await callkit_1.default.completeHeldCallAction(callKitUUID, true);
+      this.recordPendingSwapAction(callKitUUID, isOnHold, completed);
+      this.finishPendingHeldRequest(processingKey, completed);
+    } catch (error) {
+      console.error('CallKitCoordinator: Held action failed', { callKitUUID, isOnHold, error });
+      await callkit_1.default.completeHeldCallAction(callKitUUID, false);
+      this.recordPendingSwapAction(callKitUUID, isOnHold, false);
+      this.finishPendingHeldRequest(processingKey, false);
+    } finally {
+      this.processingCalls.delete(processingKey);
     }
   }
   /**
    * Handle CallKit end action (triggered by CallKit)
    */
   async handleCallKitEnd(callKitUUID, event) {
-    this.isCallFromPush = false;
-    if (this.processingCalls.has(callKitUUID)) {
+    callKitUUID = this.normalizeUUID(callKitUUID);
+    const wasPendingPush = this.pendingPushCallUUIDs.delete(callKitUUID);
+    this.isCallFromPush = this.pendingPushCallUUIDs.size > 0;
+    const processingKey = this.actionKey('end', callKitUUID);
+    if (this.processingCalls.has(processingKey)) {
       console.log('CallKitCoordinator: End action already being processed, skipping duplicate');
       return;
     }
@@ -360,19 +518,23 @@ class CallKitCoordinator {
       callKitUUID,
       webrtcCallId: call.callId,
     });
-    this.processingCalls.add(callKitUUID);
+    const shouldRestoreRemainingCall = this.isSelectedCall(call);
+    this.processingCalls.add(processingKey);
     try {
       call.hangup();
     } catch (error) {
       console.error('CallKitCoordinator: Error hanging up WebRTC call', error);
     } finally {
-      this.processingCalls.delete(callKitUUID);
+      this.processingCalls.delete(processingKey);
       this.cleanupCall(callKitUUID);
-      // Clear push data now that end action is fulfilled
-      try {
-        await voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush();
-        console.log('CallKitCoordinator: Cleared pending VoIP push after end fulfilled');
-      } catch (_) {}
+      if (shouldRestoreRemainingCall) {
+        await this.restoreRemainingHeldCall();
+      }
+      if (wasPendingPush) {
+        await voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush().catch((error) => {
+          console.warn('CallKitCoordinator: Failed to clear ended call push data', error);
+        });
+      }
       // Check if app is in background and no more calls - disconnect client
       await this.checkBackgroundDisconnection();
     }
@@ -401,9 +563,19 @@ class CallKitCoordinator {
    * This allows us to coordinate between the push notification and any subsequent WebRTC calls
    */
   async handleCallKitPushReceived(callKitUUID, event) {
-    if (this.isCallFromPush) {
-      this.isCallFromPush = false;
-      console.log('CallKitCoordinator: Ignoring push received event (already processed)');
+    callKitUUID = this.normalizeUUID(callKitUUID);
+    if (this.pendingPushCallUUIDs.has(callKitUUID)) {
+      console.log('CallKitCoordinator: Ignoring duplicate push UUID', callKitUUID);
+      return;
+    }
+    const isRegistered = await callkit_1.default.isCallRegistered(callKitUUID);
+    if (!isRegistered) {
+      console.warn(
+        'CallKitCoordinator: Ignoring push because its CallKit registration was rejected',
+        { callKitUUID }
+      );
+      this.getSDKClient()?.queueEndFromCallKit(callKitUUID);
+      await this.clearMatchingPendingVoipPush(callKitUUID);
       return;
     }
     console.log('CallKitCoordinator: Processing push received event', {
@@ -411,6 +583,7 @@ class CallKitCoordinator {
       source: event?.callData?.source,
     });
     this.isCallFromPush = true;
+    this.pendingPushCallUUIDs.add(callKitUUID);
     console.log('CallKitCoordinator: Processing push received event', {
       callKitUUID,
       source: event?.callData?.source,
@@ -420,36 +593,36 @@ class CallKitCoordinator {
       // Get VoIP client instance
       const voipClient = this.getSDKClient();
       if (!voipClient) {
-        console.error('CallKitCoordinator: VoIP client not available');
-        return;
+        throw new Error('CallKitCoordinator: VoIP client not available');
       }
       // Retrieve pending push data from VoIP bridge
       const pendingPushJson = await voice_pn_bridge_1.VoicePnBridge.getPendingVoipPush();
       if (!pendingPushJson) {
-        console.warn('CallKitCoordinator: No pending push data found');
-        return;
+        throw new Error('CallKitCoordinator: No pending push data found');
       }
       const pendingPush = JSON.parse(pendingPushJson);
       const realPushData = pendingPush?.payload;
       if (!realPushData?.metadata) {
-        console.warn('CallKitCoordinator: Invalid push data structure');
-        return;
+        throw new Error('CallKitCoordinator: Invalid push data structure');
       }
       // Prepare push metadata with CallKit flag
       const enhancedMetadata = {
         ...realPushData.metadata,
         from_callkit: true,
       };
-      // Check if auto-answer is set and add from_notification flag
-      const shouldAddFromNotification = this.shouldAutoAnswerNextCall;
+      // This app-facing UUID is attached to the next inbound Call while the
+      // socket INVITE retains its own signaling callID.
+      voipClient.setPushNotificationCallKitUUID(callKitUUID);
+      // A pre-INVITE CallKit answer is represented only by the UUID-keyed
+      // pending action. Do not also add legacy notification flags.
+      const shouldAddFromNotification = this.autoAnswerCallUUIDs.has(callKitUUID);
       let pushData;
       if (shouldAddFromNotification) {
         pushData = {
           metadata: enhancedMetadata,
-          from_notification: true,
-          action: 'answer',
         };
-        voipClient.queueAnswerFromCallKit();
+        voipClient.queueAnswerFromCallKit(callKitUUID);
+        this.autoAnswerCallUUIDs.delete(callKitUUID);
       } else {
         pushData = {
           metadata: enhancedMetadata,
@@ -459,6 +632,8 @@ class CallKitCoordinator {
       await voipClient.handlePushNotification(pushData);
       console.log('CallKitCoordinator: Push notification processed successfully');
     } catch (error) {
+      this.pendingPushCallUUIDs.delete(callKitUUID);
+      this.isCallFromPush = this.pendingPushCallUUIDs.size > 0;
       console.error('CallKitCoordinator: Error processing push received event:', error);
     }
   }
@@ -474,68 +649,28 @@ class CallKitCoordinator {
       );
       if (react_native_1.Platform.OS === 'ios') {
         console.log('CallKitCoordinator: Processing iOS push notification answer');
-        // Set auto-answer flag so when the WebRTC call comes in, it will be answered automatically
-        this.shouldAutoAnswerNextCall = true;
-        console.log('CallKitCoordinator: ✅ Set auto-answer flag for next incoming call');
+        this.autoAnswerCallUUIDs.add(callKitUUID);
+        console.log('CallKitCoordinator: Set UUID-targeted auto-answer', callKitUUID);
         // Try to get VoIP client - it may not be wired yet if user answered
         // from CallKit before React Native finished initializing
         const voipClient = this.getSDKClient();
         if (!voipClient) {
           // voipClient not ready yet - DON'T fail the call.
-          // shouldAutoAnswerNextCall is already set to true above.
+          // The UUID-targeted auto-answer is already stored above.
           // checkForInitialPushNotification() will run after setVoipClient()
           // and will find the push data still intact, call handleCallKitPushReceived()
-          // which checks shouldAutoAnswerNextCall and queues the auto-answer.
+          // which queues the matching auto-answer.
           return;
         }
-        // voipClient is available - queue the answer action on the TelnyxRTC client
-        // so when the INVITE arrives after WebSocket login, processInvite() sees
-        // pendingAnswerAction=true and auto-answers the call.
-        voipClient.queueAnswerFromCallKit();
-        // Get the real push data that was stored by the VoIP push handler
-        let realPushData = null;
-        try {
-          const pendingPushJson = await voice_pn_bridge_1.VoicePnBridge.getPendingVoipPush();
-          if (pendingPushJson) {
-            const pendingPush = JSON.parse(pendingPushJson);
-            if (pendingPush && pendingPush.payload) {
-              console.log('CallKitCoordinator: ✅ Found real push data');
-              realPushData = pendingPush.payload;
-            }
-          }
-        } catch (error) {
-          console.warn('CallKitCoordinator: Could not get real push data:', error);
+        // Queue one UUID-targeted answer. If the push is already being
+        // processed, its eventual INVITE will consume this action. Otherwise
+        // process the still-persisted VoIP payload now.
+        voipClient.queueAnswerFromCallKit(callKitUUID);
+        if (this.pendingPushCallUUIDs.has(callKitUUID)) {
+          this.autoAnswerCallUUIDs.delete(callKitUUID);
+          return;
         }
-        // Create push notification payload - use real data if available, fallback to placeholder
-        const pushAction = 'incoming_call';
-        let pushMetadata;
-        if (realPushData && realPushData.metadata) {
-          // Use the real push metadata
-          console.log('CallKitCoordinator: 🎯 Using REAL push metadata for immediate handling');
-          pushMetadata = JSON.stringify({
-            ...realPushData.metadata,
-            from_callkit: true, // Add flag to indicate this was answered via CallKit
-          });
-        } else {
-          // Fallback to placeholder (this should rarely happen)
-          console.warn('CallKitCoordinator: ⚠️ No real push data found, using placeholder');
-          pushMetadata = JSON.stringify({
-            call_id: callKitUUID,
-            caller_name: 'Incoming Call',
-            caller_number: 'Unknown',
-            voice_sdk_id: 'unknown',
-            sent_time: new Date().toISOString(),
-            from_callkit: true,
-          });
-        }
-        // Set the pending push action to be handled when app comes to foreground
-        await voice_pn_bridge_1.VoicePnBridge.setPendingPushAction(pushAction, pushMetadata);
-        console.log('CallKitCoordinator: ✅ Set pending push action');
-        // Clear push data now that push notification answer is handled
-        try {
-          await voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush();
-          console.log('CallKitCoordinator: Cleared pending VoIP push after push answer handled');
-        } catch (_) {}
+        await this.handleCallKitPushReceived(callKitUUID, event);
         return;
       }
       // For other platforms (shouldn't happen on iOS)
@@ -560,7 +695,7 @@ class CallKitCoordinator {
       );
       if (react_native_1.Platform.OS === 'ios') {
         console.log('CallKitCoordinator: Processing iOS push notification rejection');
-        this.voipClient.queueEndFromCallKit();
+        this.getSDKClient()?.queueEndFromCallKit(callKitUUID);
         // Clean up push notification state
         await this.cleanupPushNotificationState();
         // Clear push data now that rejection is handled
@@ -591,6 +726,10 @@ class CallKitCoordinator {
       });
       switch (state) {
         case 'active':
+          this.selectCall(call);
+          this.pendingPushCallUUIDs.delete(callKitUUID);
+          this.autoAnswerCallUUIDs.delete(callKitUUID);
+          this.isCallFromPush = this.pendingPushCallUUIDs.size > 0;
           // When WebRTC call becomes active, just report as connected
           // (CallKit call was already answered in answerCallFromUI)
           if (!this.connectedCalls.has(callKitUUID)) {
@@ -604,7 +743,10 @@ class CallKitCoordinator {
           }
           break;
         case 'ended':
-        case 'failed':
+        case 'failed': {
+          const shouldRestoreRemainingCall =
+            this.selectedCallKitUUID === callKitUUID &&
+            !this.processingCalls.has(this.actionKey('end', callKitUUID));
           // Report call ended to CallKit (if not already ended)
           if (!this.endedCalls.has(callKitUUID)) {
             console.log('CallKitCoordinator: Reporting call ended to CallKit');
@@ -617,7 +759,11 @@ class CallKitCoordinator {
           }
           // Clean up the call mapping
           this.cleanupCall(callKitUUID);
+          if (shouldRestoreRemainingCall) {
+            await this.restoreRemainingHeldCall();
+          }
           break;
+        }
         case 'ringing':
           // For outgoing calls, we might want to update CallKit with additional info
           // For incoming calls, CallKit already knows about the call
@@ -634,8 +780,26 @@ class CallKitCoordinator {
    * Clean up call mappings and listeners
    */
   cleanupCall(callKitUUID) {
-    this.processingCalls.delete(callKitUUID);
+    callKitUUID = this.normalizeUUID(callKitUUID);
+    if (
+      this.pendingSwap?.activeCallKitUUID === callKitUUID ||
+      this.pendingSwap?.heldCallKitUUID === callKitUUID
+    ) {
+      this.finishPendingSwap(false);
+    }
+    for (const processingKey of this.processingCalls) {
+      if (processingKey.endsWith(`:${callKitUUID}`)) {
+        this.processingCalls.delete(processingKey);
+      }
+    }
+    for (const requestKey of this.pendingHeldRequests.keys()) {
+      if (requestKey.endsWith(`:${callKitUUID}`)) {
+        this.finishPendingHeldRequest(requestKey, false);
+      }
+    }
     this.connectedCalls.delete(callKitUUID);
+    this.pendingPushCallUUIDs.delete(callKitUUID);
+    this.autoAnswerCallUUIDs.delete(callKitUUID);
     // Get the call before removing it
     const call = this.callMap.get(callKitUUID);
     // Clean up state listeners
@@ -645,21 +809,14 @@ class CallKitCoordinator {
     }
     // Remove from mapping
     this.callMap.delete(callKitUUID);
-    if (call) {
-      // Clean up the stored UUID on the call
-      delete call._callKitUUID;
+    if (this.selectedCallKitUUID === callKitUUID) {
+      this.selectedCallKitUUID = null;
     }
     // Reset flags if no more active calls
     if (this.callMap.size === 0) {
       this.resetFlags();
     }
-    // Clear VoIP push data now that the call is done
-    if (react_native_1.Platform.OS === 'ios') {
-      voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush().catch((error) => {
-        console.warn('CallKitCoordinator: Error clearing VoIP push data on call cleanup:', error);
-      });
-      console.log('CallKitCoordinator: ✅ Cleared VoIP push data after call ended');
-    }
+    this.isCallFromPush = this.pendingPushCallUUIDs.size > 0;
   }
   /**
    * Get CallKit UUID for a WebRTC call
@@ -668,14 +825,16 @@ class CallKitCoordinator {
     // First check if the call has the UUID stored on it
     const storedUUID = call._callKitUUID;
     if (storedUUID) {
-      return storedUUID;
+      return this.normalizeUUID(storedUUID);
     }
     // Search through all call mappings
     for (const [uuid, mappedCall] of this.callMap.entries()) {
       if (mappedCall.callId === call.callId) {
         // Store UUID on the call for faster future lookups
-        call._callKitUUID = uuid;
-        return uuid;
+        if (!call._callKitUUID) {
+          call._callKitUUID = uuid;
+        }
+        return this.normalizeUUID(uuid);
       }
     }
     return null;
@@ -684,23 +843,28 @@ class CallKitCoordinator {
    * Get WebRTC call for a CallKit UUID
    */
   getWebRTCCall(callKitUUID) {
-    return this.callMap.get(callKitUUID) || null;
+    return this.callMap.get(this.normalizeUUID(callKitUUID)) || null;
   }
   /**
    * Link an existing CallKit call (from push notification) with a WebRTC call
    * This should be called when a WebRTC call arrives that corresponds to an existing CallKit call
    */
   linkExistingCallKitCall(call, callKitUUID) {
+    callKitUUID = this.normalizeUUID(callKitUUID);
     console.log('CallKitCoordinator: Linking existing CallKit call with WebRTC call', {
       callKitUUID,
       webrtcCallId: call.callId,
     });
     // Store the mappings
     this.callMap.set(callKitUUID, call);
-    // Store UUID on the call for quick access
-    call._callKitUUID = callKitUUID;
+    // Push-created calls already carry a durable, non-configurable UUID.
+    if (!call._callKitUUID) {
+      call._callKitUUID = callKitUUID;
+    }
     // Set up state listeners
-    this.setupWebRTCCallListeners(call, callKitUUID);
+    if (!call._callKitStateListener) {
+      this.setupWebRTCCallListeners(call, callKitUUID);
+    }
   }
   /**
    * Set the VoIP client reference for triggering reconnection.
@@ -715,14 +879,228 @@ class CallKitCoordinator {
    * Helper method to clean up push notification state
    */
   async cleanupPushNotificationState() {
-    console.log('CallKitCoordinator: ✅ Cleared auto-answer flag');
-    this.shouldAutoAnswerNextCall = false;
+    console.log('CallKitCoordinator: Push notification state cleaned up');
+  }
+  async rejectUnregisteredIncomingCall(callKitUUID, call) {
+    callKitUUID = this.normalizeUUID(callKitUUID);
+    console.warn('CallKitCoordinator: Cleaning up unregistered incoming call', {
+      callKitUUID,
+      webrtcCallId: call.callId,
+    });
+    this.cleanupCall(callKitUUID);
+    try {
+      await call.hangup();
+    } catch (error) {
+      console.warn('CallKitCoordinator: Failed to end unregistered signaling call', error);
+    }
+    await this.clearMatchingPendingVoipPush(callKitUUID);
+  }
+  async clearMatchingPendingVoipPush(callKitUUID) {
+    try {
+      const pendingPushJson = await voice_pn_bridge_1.VoicePnBridge.getPendingVoipPush();
+      if (!pendingPushJson) {
+        return;
+      }
+      const pendingPush = JSON.parse(pendingPushJson);
+      const pendingCallId =
+        pendingPush?.payload?.metadata?.call_id ??
+        pendingPush?.payload?.call_id ??
+        pendingPush?.metadata?.call_id ??
+        pendingPush?.call_id;
+      if (
+        typeof pendingCallId === 'string' &&
+        this.normalizeUUID(pendingCallId) === this.normalizeUUID(callKitUUID)
+      ) {
+        await voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush();
+      }
+    } catch (error) {
+      console.warn('CallKitCoordinator: Failed to clear rejected call push state', error);
+    }
   }
   /**
    * Get reference to the SDK client (for queuing actions when call doesn't exist yet)
    */
   getSDKClient() {
     return this.voipClient;
+  }
+  normalizeUUID(callKitUUID) {
+    return callKitUUID.toLowerCase();
+  }
+  actionKey(action, callKitUUID) {
+    return `${action}:${this.normalizeUUID(callKitUUID)}`;
+  }
+  selectCall(call) {
+    const callKitUUID = this.getCallKitUUID(call);
+    const wrapperCall = this.voipClient?.findCallByTelnyxCall(call);
+    if (!callKitUUID || !wrapperCall || !this.voipClient) {
+      return;
+    }
+    this.selectedCallKitUUID = callKitUUID;
+    this.voipClient.setActiveCall(wrapperCall.callId);
+  }
+  isSelectedCall(call) {
+    const callKitUUID = this.getCallKitUUID(call);
+    return callKitUUID !== null && callKitUUID === this.selectedCallKitUUID;
+  }
+  recordPendingSwapAction(callKitUUID, isOnHold, success) {
+    const pendingSwap = this.pendingSwap;
+    if (!pendingSwap || pendingSwap.mode === 'restoring') {
+      return;
+    }
+    const isExpectedAction =
+      (callKitUUID === pendingSwap.activeCallKitUUID && isOnHold) ||
+      (callKitUUID === pendingSwap.heldCallKitUUID && !isOnHold);
+    if (!isExpectedAction) {
+      return;
+    }
+    pendingSwap.failed || (pendingSwap.failed = !success);
+    pendingSwap.completedCallKitUUIDs.add(callKitUUID);
+    if (pendingSwap.completedCallKitUUIDs.size === 2) {
+      if (pendingSwap.mode === 'swap' && pendingSwap.failed) {
+        void this.beginSwapRollback(pendingSwap);
+      } else {
+        this.finishPendingSwap(pendingSwap.mode === 'swap');
+      }
+    }
+  }
+  createPendingSwap({
+    mode,
+    originalActiveCallKitUUID,
+    originalHeldCallKitUUID,
+    activeCallKitUUID,
+    heldCallKitUUID,
+    resolve,
+  }) {
+    const pendingSwap = {
+      mode,
+      originalActiveCallKitUUID,
+      originalHeldCallKitUUID,
+      activeCallKitUUID,
+      heldCallKitUUID,
+      completedCallKitUUIDs: new Set(),
+      failed: false,
+      resolve,
+      timeout: undefined,
+    };
+    pendingSwap.timeout = setTimeout(() => {
+      if (this.pendingSwap !== pendingSwap) {
+        return;
+      }
+      console.error(`CallKitCoordinator: Call ${mode} timed out`);
+      if (mode === 'swap') {
+        void this.beginSwapRollback(pendingSwap);
+      } else {
+        this.finishPendingSwap(false);
+      }
+    }, 12000);
+    return pendingSwap;
+  }
+  async beginSwapRollback(pendingSwap) {
+    if (!pendingSwap || this.pendingSwap !== pendingSwap || pendingSwap.mode !== 'swap') {
+      return;
+    }
+    clearTimeout(pendingSwap.timeout);
+    // Keep the operation installed while restoring WebRTC state so another
+    // hold or swap cannot enter and have its pending promise overwritten.
+    pendingSwap.mode = 'restoring';
+    await this.restoreOriginalWebRTCStates(
+      pendingSwap.originalActiveCallKitUUID,
+      pendingSwap.originalHeldCallKitUUID
+    );
+    // A call may have ended while restoration was in flight, in which case
+    // cleanup already resolved and removed this operation.
+    if (this.pendingSwap !== pendingSwap) {
+      return;
+    }
+    const rollback = this.createPendingSwap({
+      mode: 'rollback',
+      originalActiveCallKitUUID: pendingSwap.originalActiveCallKitUUID,
+      originalHeldCallKitUUID: pendingSwap.originalHeldCallKitUUID,
+      // A reverse swap requests the original held call to remain held and the
+      // original active call to become active again.
+      activeCallKitUUID: pendingSwap.originalHeldCallKitUUID,
+      heldCallKitUUID: pendingSwap.originalActiveCallKitUUID,
+      resolve: pendingSwap.resolve,
+    });
+    this.pendingSwap = rollback;
+    const accepted = await callkit_1.default.swapCalls(
+      rollback.activeCallKitUUID,
+      rollback.heldCallKitUUID
+    );
+    if (!accepted && this.pendingSwap === rollback) {
+      console.error('CallKitCoordinator: Compensating swap transaction was rejected');
+      this.finishPendingSwap(false);
+    }
+  }
+  async restoreOriginalWebRTCStates(activeCallKitUUID, heldCallKitUUID) {
+    const originalActive = this.callMap.get(activeCallKitUUID);
+    const originalHeld = this.callMap.get(heldCallKitUUID);
+    try {
+      if (originalHeld?.state === 'active') {
+        await originalHeld.hold();
+      }
+      if (originalActive?.state === 'held') {
+        await originalActive.unhold();
+      }
+      if (originalActive?.state === 'active') {
+        this.selectCall(originalActive);
+      }
+    } catch (error) {
+      console.error('CallKitCoordinator: Failed to restore WebRTC state before swap rollback', {
+        activeCallKitUUID,
+        heldCallKitUUID,
+        error,
+      });
+    }
+  }
+  finishPendingSwap(success) {
+    const pendingSwap = this.pendingSwap;
+    if (!pendingSwap) {
+      return;
+    }
+    this.pendingSwap = null;
+    clearTimeout(pendingSwap.timeout);
+    pendingSwap.resolve(success);
+  }
+  finishPendingHeldRequest(requestKey, success) {
+    const request = this.pendingHeldRequests.get(requestKey);
+    if (!request) {
+      return;
+    }
+    this.pendingHeldRequests.delete(requestKey);
+    clearTimeout(request.timeout);
+    request.resolve(success);
+  }
+  async restoreRemainingHeldCall() {
+    if (this.restoreHeldCallPromise) {
+      return this.restoreHeldCallPromise;
+    }
+    this.restoreHeldCallPromise = (async () => {
+      const heldEntry = Array.from(this.callMap.entries()).find(
+        ([, call]) => call.state === 'held'
+      );
+      if (!heldEntry) {
+        return;
+      }
+      const [callKitUUID, heldCall] = heldEntry;
+      try {
+        const restored = await this.setHeldFromUI(heldCall, false);
+        if (!restored) {
+          throw new Error('CallKit rejected survivor resume');
+        }
+        console.log('CallKitCoordinator: Restored remaining held call', callKitUUID);
+      } catch (error) {
+        console.error('CallKitCoordinator: Failed to restore remaining held call', {
+          callKitUUID,
+          error,
+        });
+      }
+    })();
+    try {
+      await this.restoreHeldCallPromise;
+    } finally {
+      this.restoreHeldCallPromise = null;
+    }
   }
   /**
    * Check if app is in background and disconnect client if no active calls
@@ -757,10 +1135,7 @@ class CallKitCoordinator {
    */
   resetFlags() {
     console.log('CallKitCoordinator: Resetting coordinator flags');
-    // Reset push notification flag
-    this.isCallFromPush = false;
-    // Reset auto-answer flag
-    this.shouldAutoAnswerNextCall = false;
+    this.isCallFromPush = this.pendingPushCallUUIDs.size > 0;
     console.log('CallKitCoordinator: ✅ Coordinator flags reset');
   }
   /**

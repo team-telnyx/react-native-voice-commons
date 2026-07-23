@@ -7,6 +7,7 @@ export declare enum CallEndReason {
 }
 export interface CallKitEvent {
   callUUID: string;
+  isOnHold?: boolean;
   [key: string]: any;
 }
 declare class CallKitManager {
@@ -33,7 +34,11 @@ declare class CallKitManager {
   startOutgoingCall(callUUID: string, handle: string, displayName: string): Promise<boolean>;
   reportIncomingCall(callUUID: string, handle: string, displayName: string): Promise<boolean>;
   answerCall(callUUID: string): Promise<boolean>;
+  isCallRegistered(callUUID: string): Promise<boolean>;
   endCall(callUUID: string): Promise<boolean>;
+  completeHeldCallAction(callUUID: string, success: boolean): Promise<boolean>;
+  setCallHeld(callUUID: string, isOnHold: boolean): Promise<boolean>;
+  swapCalls(activeCallUUID: string, heldCallUUID: string): Promise<boolean>;
   reportCallConnected(callUUID: string): Promise<boolean>;
   reportCallEnded(callUUID: string, reason?: CallEndReason): Promise<boolean>;
   updateCall(callUUID: string, displayName: string, handle: string): Promise<boolean>;
@@ -41,7 +46,9 @@ declare class CallKitManager {
   onStartCall(listener: (event: CallKitEvent) => void): () => void;
   onAnswerCall(listener: (event: CallKitEvent) => void): () => void;
   onEndCall(listener: (event: CallKitEvent) => void): () => void;
+  onHeldCall(listener: (event: CallKitEvent) => void): () => void;
   onReceivePush(listener: (event: CallKitEvent) => void): () => void;
+  private addListener;
   generateCallUUID(): string;
   isAvailable(): boolean;
 }
