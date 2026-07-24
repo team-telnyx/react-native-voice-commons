@@ -1,4 +1,4 @@
-import { Call, TelnyxCallState } from '../react-voice-commons-sdk/src';
+import { Call, TelnyxCallState, callKitCoordinator } from '../react-voice-commons-sdk/src';
 import { RingingCall } from './RingingCall';
 import { ActiveCall } from './ActiveCall';
 import { CallConnecting } from './CallConnecting';
@@ -9,10 +9,10 @@ type Props = {
 };
 
 const CurrentCall = ({ call, callState }: Props) => {
-  // Check if this is a push notification call by accessing the underlying Telnyx call's client isCallFromPush flag
-  const isPushNotificationCall = call
-    ? (call as any).telnyxCall?.connection?._client?.isCallFromPush
-    : false;
+  // Use the public callKitCoordinator API to check if the current call originated
+  // from a push notification. This replaces the previous approach of reaching
+  // into SDK internals (call.telnyxCall.connection._client.isCallFromPush).
+  const isPushNotificationCall = call ? callKitCoordinator.getIsCallFromPush() : false;
 
   console.log('CurrentCall: Rendering with', {
     hasCall: !!call,
