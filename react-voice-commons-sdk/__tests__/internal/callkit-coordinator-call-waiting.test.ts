@@ -64,6 +64,8 @@ describe('CallKitCoordinator UUID-targeted call waiting', () => {
     jest.spyOn(CallKit, 'setCallHeld').mockResolvedValue(true);
     jest.spyOn(CallKit, 'swapCalls').mockResolvedValue(true);
     jest.spyOn(CallKit, 'endCall').mockResolvedValue(true);
+    jest.spyOn(CallKit, 'reportCallConnected').mockResolvedValue(true);
+    jest.spyOn(CallKit, 'reportCallEnded').mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -406,5 +408,79 @@ describe('CallKitCoordinator UUID-targeted call waiting', () => {
     expect(voipClient.queueAnswerFromCallKit).toHaveBeenCalledWith('callkit-b');
     expect(voipClient.handlePushNotification).toHaveBeenCalledTimes(1);
     expect(VoicePnBridge.clearPendingVoipPush).not.toHaveBeenCalled();
+  });
+
+  it('returns false when CallKit registration is rejected', async () => {
+    (CallKit.isCallRegistered as jest.Mock).mockResolvedValue(false);
+    (VoicePnBridge.getPendingVoipPush as jest.Mock).mockResolvedValue(
+      JSON.stringify({
+        payload: { metadata: { call_id: 'callkit-rejected', voice_sdk_id: 'voice-sdk-r' } },
+      })
+    );
+    const voipClient = {
+      queueEndFromCallKit: jest.fn(),
+      handlePushNotification: jest.fn().mockResolvedValue(undefined),
+    };
+    coordinator.voipClient = voipClient;
+
+    const result = await callKitCoordinator.handleCallKitPushReceived('CALLKIT-REJECTED');
+
+    expect(result).toBe(false);
+    expect(voipClient.handlePushNotification).not.toHaveBeenCalled();
+  });
+
+  it('returns false for a duplicate push UUID', async () => {
+    coordinator.pendingPushCallUUIDs.add('callkit-dup');
+
+    const result = await callKitCoordinator.handleCallKitPushReceived('callkit-dup');
+
+    expect(result).toBe(false);
+  });
+
+  it('returns true when push notification is processed successfully', async () => {
+    (VoicePnBridge.getPendingVoipPush as jest.Mock).mockResolvedValue(
+      JSON.stringify({
+        payload: { metadata: { call_id: 'callkit-ok', voice_sdk_id: 'voice-sdk-ok' } },
+      })
+    );
+    const voipClient = {
+      setPushNotificationCallKitUUID: jest.fn(),
+      queueAnswerFromCallKit: jest.fn(),
+      handlePushNotification: jest.fn().mockResolvedValue(undefined),
+    };
+    coordinator.voipClient = voipClient;
+
+    const result = await callKitCoordinator.handleCallKitPushReceived('callkit-ok');
+
+    expect(result).toBe(true);
+    expect(voipClient.handlePushNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it('completes the pending CallKit answer action when the call is already active', async () => {
+    const call = lowLevelCall('signal-active', 'active');
+    (call as any)._callKitUUID = 'callkit-active';
+    coordinator.callMap.set('callkit-active', call);
+    coordinator.connectedCalls.clear();
+
+    await callKitCoordinator.handleCallKitAnswer('callkit-active');
+
+    // Should not attempt to answer again
+    expect(call.answer).not.toHaveBeenCalled();
+    // Should report connected to fulfill the pending CXAnswerCallAction
+    expect(CallKit.reportCallConnected).toHaveBeenCalledWith('callkit-active');
+    // Should mark the call as connected to avoid duplicate reports
+    expect(coordinator.connectedCalls.has('callkit-active')).toBe(true);
+  });
+
+  it('does not double-report connected when already-active call was previously connected', async () => {
+    const call = lowLevelCall('signal-active', 'active');
+    (call as any)._callKitUUID = 'callkit-active';
+    coordinator.callMap.set('callkit-active', call);
+    coordinator.connectedCalls.add('callkit-active');
+
+    await callKitCoordinator.handleCallKitAnswer('callkit-active');
+
+    expect(call.answer).not.toHaveBeenCalled();
+    expect(CallKit.reportCallConnected).not.toHaveBeenCalled();
   });
 });
