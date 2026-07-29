@@ -376,10 +376,19 @@ const TelnyxVoiceAppComponent = ({
           if (callId) {
             const { callKitCoordinator } = require('./callkit/callkit-coordinator');
             log('Notifying CallKit coordinator about push notification:', callId);
-            await callKitCoordinator.handleCallKitPushReceived(callId, {
+            const processed = await callKitCoordinator.handleCallKitPushReceived(callId, {
               callData: { source: 'push_notification' },
               pushData: pushData,
             });
+            if (!processed) {
+              // The push was filtered, rejected, or otherwise ignored by
+              // CallKit. Reset the foreground-push lifecycle flags so the
+              // app does not stay in a state that skips background
+              // disconnect/reconnect handling.
+              log('CallKit push was not processed - resetting foreground flags');
+              setIsHandlingForegroundCall(false);
+              backgroundDetectorIgnore.current = false;
+            }
           } else {
             log('No call_id found in push data, falling back to direct handling');
             await voipClient.handlePushNotification(pushData);

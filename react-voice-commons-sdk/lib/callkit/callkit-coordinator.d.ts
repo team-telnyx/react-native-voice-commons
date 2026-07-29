@@ -73,8 +73,13 @@ declare class CallKitCoordinator {
   /**
    * Handle CallKit push received event
    * This allows us to coordinate between the push notification and any subsequent WebRTC calls
+   *
+   * Returns `true` when the push was accepted and call processing was started,
+   * or `false` when the push was filtered, rejected, or otherwise ignored so
+   * that callers can clean up any foreground-push lifecycle flags they set
+   * before calling this method.
    */
-  handleCallKitPushReceived(callKitUUID: string, event?: any): Promise<void>;
+  handleCallKitPushReceived(callKitUUID: string, event?: any): Promise<boolean>;
   /**
    * Handle push notification answer - when user answers from CallKit but we don't have a WebRTC call yet
    * This is the iOS equivalent of the Android FCM handler

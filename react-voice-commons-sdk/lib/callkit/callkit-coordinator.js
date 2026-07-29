@@ -409,8 +409,26 @@ class CallKitCoordinator {
       currentState: call.state,
     });
     if (call.state === 'active') {
-      console.log('CallKitCoordinator: Call already active, skipping duplicate answer action');
+      console.log(
+        'CallKitCoordinator: Call already active, completing pending CallKit answer action'
+      );
       this.selectCall(call);
+      // The native CXAnswerCallAction is fulfilled only after JS reports the
+      // call as connected. If the WebRTC call already reached active before
+      // the CallKit answer event arrived, we must still report connected so
+      // iOS does not time out the pending answer action.
+      if (!this.connectedCalls.has(callKitUUID)) {
+        try {
+          await callkit_1.default.reportCallConnected(callKitUUID);
+          this.connectedCalls.add(callKitUUID);
+          console.log('CallKitCoordinator: Reported call connected for already-active call');
+        } catch (error) {
+          console.error(
+            'CallKitCoordinator: Error reporting connected for already-active call:',
+            error
+          );
+        }
+      }
       return;
     }
     this.processingCalls.add(processingKey);
@@ -562,12 +580,17 @@ class CallKitCoordinator {
   /**
    * Handle CallKit push received event
    * This allows us to coordinate between the push notification and any subsequent WebRTC calls
+   *
+   * Returns `true` when the push was accepted and call processing was started,
+   * or `false` when the push was filtered, rejected, or otherwise ignored so
+   * that callers can clean up any foreground-push lifecycle flags they set
+   * before calling this method.
    */
   async handleCallKitPushReceived(callKitUUID, event) {
     callKitUUID = this.normalizeUUID(callKitUUID);
     if (this.pendingPushCallUUIDs.has(callKitUUID)) {
       console.log('CallKitCoordinator: Ignoring duplicate push UUID', callKitUUID);
-      return;
+      return false;
     }
     const isRegistered = await callkit_1.default.isCallRegistered(callKitUUID);
     if (!isRegistered) {
@@ -577,7 +600,7 @@ class CallKitCoordinator {
       );
       this.getSDKClient()?.queueEndFromCallKit(callKitUUID);
       await this.clearMatchingPendingVoipPush(callKitUUID);
-      return;
+      return false;
     }
     console.log('CallKitCoordinator: Processing push received event', {
       callKitUUID,
@@ -632,10 +655,12 @@ class CallKitCoordinator {
       // Process the push notification
       await voipClient.handlePushNotification(pushData);
       console.log('CallKitCoordinator: Push notification processed successfully');
+      return true;
     } catch (error) {
       this.pendingPushCallUUIDs.delete(callKitUUID);
       this.isCallFromPush = this.pendingPushCallUUIDs.size > 0;
       console.error('CallKitCoordinator: Error processing push received event:', error);
+      return false;
     }
   }
   /**
