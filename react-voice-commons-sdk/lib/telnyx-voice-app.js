@@ -6,6 +6,7 @@ const react_1 = require('react');
 const react_native_1 = require('react-native');
 const telnyx_voip_client_1 = require('./telnyx-voip-client');
 const connection_state_1 = require('./models/connection-state');
+const call_state_1 = require('./models/call-state');
 const TelnyxVoiceContext_1 = require('./context/TelnyxVoiceContext');
 let sharedBackgroundClient = null;
 let sharedBackgroundDisposePromise = null;
@@ -344,11 +345,20 @@ const TelnyxVoiceAppComponent = ({
         // Prevent duplicate processing if already connected or connecting.
         // Since push data is no longer cleared on read, this guard prevents
         // re-processing when checkForInitialPushNotification fires again on app resume.
-        if (
+        const isConnectedOrConnecting =
           voipClient.currentConnectionState ===
             connection_state_1.TelnyxConnectionState.CONNECTED ||
-          voipClient.currentConnectionState === connection_state_1.TelnyxConnectionState.CONNECTING
-        ) {
+          voipClient.currentConnectionState === connection_state_1.TelnyxConnectionState.CONNECTING;
+        const isActiveIOSCallWaitingPush =
+          react_native_1.Platform.OS === 'ios' &&
+          voipClient.currentConnectionState ===
+            connection_state_1.TelnyxConnectionState.CONNECTED &&
+          voipClient.currentCalls.some(
+            (call) =>
+              call.currentState === call_state_1.TelnyxCallState.ACTIVE ||
+              call.currentState === call_state_1.TelnyxCallState.HELD
+          );
+        if (isConnectedOrConnecting && !isActiveIOSCallWaitingPush) {
           log(
             `SKIPPING - Already ${voipClient.currentConnectionState}, preventing duplicate processing`
           );
@@ -366,10 +376,19 @@ const TelnyxVoiceAppComponent = ({
           if (callId) {
             const { callKitCoordinator } = require('./callkit/callkit-coordinator');
             log('Notifying CallKit coordinator about push notification:', callId);
-            await callKitCoordinator.handleCallKitPushReceived(callId, {
+            const processed = await callKitCoordinator.handleCallKitPushReceived(callId, {
               callData: { source: 'push_notification' },
               pushData: pushData,
             });
+            if (!processed) {
+              // The push was filtered, rejected, or otherwise ignored by
+              // CallKit. Reset the foreground-push lifecycle flags so the
+              // app does not stay in a state that skips background
+              // disconnect/reconnect handling.
+              log('CallKit push was not processed - resetting foreground flags');
+              setIsHandlingForegroundCall(false);
+              backgroundDetectorIgnore.current = false;
+            }
           } else {
             log('No call_id found in push data, falling back to direct handling');
             await voipClient.handlePushNotification(pushData);

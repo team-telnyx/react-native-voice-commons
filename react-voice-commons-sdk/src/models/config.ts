@@ -7,6 +7,8 @@ export interface CredentialConfig {
   sipPassword: string;
   debug?: boolean;
   pushNotificationDeviceToken?: string;
+  /** Receive PushKit calls while the WebSocket session is active. Default: false */
+  pushWhenActive?: boolean;
   /** Enable native missed call push notifications. Default: false */
   enableMissedCallNotifications?: boolean;
   /** Enable Trickle ICE. Default: false */
@@ -29,6 +31,8 @@ export interface TokenConfig {
   token: string;
   debug?: boolean;
   pushNotificationDeviceToken?: string;
+  /** Receive PushKit calls while the WebSocket session is active. Default: false */
+  pushWhenActive?: boolean;
   /** Enable native missed call push notifications. Default: false */
   enableMissedCallNotifications?: boolean;
   /** Enable Trickle ICE. Default: false */
@@ -113,6 +117,7 @@ export function validateConfig(config: Config): string[] {
  * @param options - Optional configuration settings
  * @param options.debug - Enable debug logging (sets SDK logLevel to 'debug')
  * @param options.pushNotificationDeviceToken - Device token for push notifications
+ * @param options.pushWhenActive - Keep active PushKit devices eligible for incoming calls
  * @returns Complete credential configuration object
  */
 export function createCredentialConfig(
@@ -135,6 +140,7 @@ export function createCredentialConfig(
  * @param options - Optional configuration settings
  * @param options.debug - Enable debug logging (sets SDK logLevel to 'debug')
  * @param options.pushNotificationDeviceToken - Device token for push notifications
+ * @param options.pushWhenActive - Keep active PushKit devices eligible for incoming calls
  * @returns Complete token configuration object
  */
 export function createTokenConfig(

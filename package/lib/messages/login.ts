@@ -1,6 +1,39 @@
 import uuid from 'uuid-random';
 import { SDK_VERSION } from '../env';
 
+export type LoginUserVariables = {
+  push_device_token?: string;
+  push_notification_provider?: string;
+  push_notification_environment?: string;
+  push_when_active?: 'true';
+  pn_late_fanout?: 'true';
+};
+
+export function createLoginUserVariables({
+  pushDeviceToken,
+  pushNotificationProvider,
+  pushNotificationEnvironment,
+  pushWhenActive = false,
+}: {
+  pushDeviceToken?: string;
+  pushNotificationProvider?: string;
+  pushNotificationEnvironment?: string;
+  pushWhenActive?: boolean;
+}): LoginUserVariables {
+  const userVariables: LoginUserVariables = {
+    push_device_token: pushDeviceToken,
+    push_notification_provider: pushNotificationProvider,
+    push_notification_environment: pushNotificationEnvironment,
+  };
+
+  if (pushWhenActive) {
+    userVariables.push_when_active = 'true';
+    userVariables.pn_late_fanout = 'true';
+  }
+
+  return userVariables;
+}
+
 function userAgent(enableMissedCallNotifications: boolean = false) {
   return `ReactNative${enableMissedCallNotifications ? '-mpn' : ''}-${SDK_VERSION}`;
 }
@@ -12,10 +45,7 @@ export type LoginWithPasswordParams = {
   attachCall?: boolean;
   fromPush?: boolean;
   enableMissedCallNotifications?: boolean;
-  userVariables?: {
-    push_device_token?: string;
-    push_notification_provider?: string;
-  };
+  userVariables?: LoginUserVariables;
   sessid?: string;
 };
 
@@ -25,10 +55,7 @@ export type LoginWithTokenParams = {
   attachCall?: boolean;
   fromPush?: boolean;
   enableMissedCallNotifications?: boolean;
-  userVariables?: {
-    push_device_token?: string;
-    push_notification_provider?: string;
-  };
+  userVariables?: LoginUserVariables;
   sessid?: string;
 };
 

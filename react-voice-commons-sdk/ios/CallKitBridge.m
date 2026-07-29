@@ -15,12 +15,31 @@ RCT_EXTERN_METHOD(reportIncomingCall:(NSString *)callUUID
                   resolver:(RCTPromiseResolveBlock)resolve 
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(isCallRegistered:(NSString *)callUUID
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 RCT_EXTERN_METHOD(answerCall:(NSString *)callUUID 
                   resolver:(RCTPromiseResolveBlock)resolve 
                   rejecter:(RCTPromiseRejectBlock)reject)
 
 RCT_EXTERN_METHOD(endCall:(NSString *)callUUID 
                   resolver:(RCTPromiseResolveBlock)resolve 
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(completeHeldCallAction:(NSString *)callUUID
+                  success:(BOOL)success
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(setCallHeld:(NSString *)callUUID
+                  isOnHold:(BOOL)isOnHold
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(swapCalls:(NSString *)activeCallUUID
+                  heldCallUUID:(NSString *)heldCallUUID
+                  resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
 RCT_EXTERN_METHOD(reportCallConnected:(NSString *)callUUID 

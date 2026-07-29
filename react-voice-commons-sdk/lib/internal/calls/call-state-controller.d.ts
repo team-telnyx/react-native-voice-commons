@@ -65,7 +65,14 @@ export declare class CallStateController {
    * @param telnyxCall The Telnyx call object to find
    */
   findCallByTelnyxCall(telnyxCall: any): Call | null;
+  /**
+   * Select the active call, preferring the explicitly-tracked call ID
+   * over the first-match heuristic.
+   */
   private _selectActiveCall;
+  /**
+   * Check if a call is in a non-terminal (active or connecting) state.
+   */
   private _isNonTerminal;
   /**
    * Initialize client listeners when the Telnyx client becomes available

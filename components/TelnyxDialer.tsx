@@ -36,6 +36,7 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
   const [callerIdName, setCallerIdName] = useState('');
   const [callerIdNumber, setCallerIdNumber] = useState('');
   const [connectionState, setConnectionState] = useState(voipClient.currentConnectionState);
+  const [calls, setCalls] = useState<Call[]>(voipClient.currentCalls);
   const [activeCall, setActiveCall] = useState<Call | null>(voipClient.currentActiveCall);
   const [activeCallState, setActiveCallState] = useState<TelnyxCallState | null>(
     voipClient.currentActiveCall?.currentState || null
@@ -60,6 +61,12 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
     loadProfile();
     return () => connectionSubscription.unsubscribe();
   }, [voipClient, log]);
+
+  useEffect(() => {
+    const callsSubscription = voipClient.calls$.subscribe(setCalls);
+
+    return () => callsSubscription.unsubscribe();
+  }, [voipClient]);
 
   useEffect(() => {
     const activeCallSubscription = voipClient.activeCall$.subscribe((call) => {
@@ -216,63 +223,72 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
           </View>
         </View>
 
-        <View style={styles.segmentedControl}>
-          <TouchableOpacity
-            style={[styles.segment, destinationType === 'sip' && styles.segmentSelected]}
-            onPress={() => setDestinationType('sip')}
-            disabled={!isConnected}
-            testID="sipAddressToggle"
-            accessibilityLabel="SIP address"
-          >
-            <Text
-              style={[styles.segmentText, destinationType === 'sip' && styles.segmentTextSelected]}
+        {!isStartingCall && !activeCall && (
+          <View style={styles.segmentedControl}>
+            <TouchableOpacity
+              style={[styles.segment, destinationType === 'sip' && styles.segmentSelected]}
+              onPress={() => setDestinationType('sip')}
+              disabled={!isConnected}
+              testID="sipAddressToggle"
+              accessibilityLabel="SIP address"
             >
-              SIP address
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.segment, destinationType === 'phone' && styles.segmentSelected]}
-            onPress={() => setDestinationType('phone')}
-            disabled={!isConnected}
-            testID="phoneNumberToggle"
-            accessibilityLabel="Phone number"
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                destinationType === 'phone' && styles.segmentTextSelected,
-              ]}
+              <Text
+                style={[
+                  styles.segmentText,
+                  destinationType === 'sip' && styles.segmentTextSelected,
+                ]}
+              >
+                SIP address
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.segment, destinationType === 'phone' && styles.segmentSelected]}
+              onPress={() => setDestinationType('phone')}
+              disabled={!isConnected}
+              testID="phoneNumberToggle"
+              accessibilityLabel="Phone number"
             >
-              Phone number
-            </Text>
-          </TouchableOpacity>
-        </View>
+              <Text
+                style={[
+                  styles.segmentText,
+                  destinationType === 'phone' && styles.segmentTextSelected,
+                ]}
+              >
+                Phone number
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-        <TextInput
-          style={[styles.callInput, inputFocused && styles.inputFocused]}
-          placeholder={destinationType === 'phone' ? 'Enter phone number' : 'Enter SIP address'}
-          placeholderTextColor="gray"
-          value={destinationNumber}
-          onChangeText={setDestinationNumber}
-          onFocus={() => setInputFocused(true)}
-          onBlur={() => setInputFocused(false)}
-          keyboardType={destinationType === 'phone' ? 'phone-pad' : 'default'}
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={isConnected}
-          testID="numberToCallTextField"
-          accessibilityLabel="Call input"
-        />
+        {!isStartingCall && !activeCall && (
+          <TextInput
+            style={[styles.callInput, inputFocused && styles.inputFocused]}
+            placeholder={destinationType === 'phone' ? 'Enter phone number' : 'Enter SIP address'}
+            placeholderTextColor="gray"
+            value={destinationNumber}
+            onChangeText={setDestinationNumber}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+            keyboardType={destinationType === 'phone' ? 'phone-pad' : 'default'}
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={isConnected}
+            testID="numberToCallTextField"
+            accessibilityLabel="Call input"
+          />
+        )}
 
         <View style={styles.actions}>
           {isStartingCall || activeCall ? (
             <InlineCallControls
               activeCall={activeCall}
+              calls={calls}
               activeCallState={activeCallState}
               destination={destinationNumber}
               isStartingCall={isStartingCall}
               onAnswer={handleAnswerCall}
               onEnd={handleEndCall}
+              onSwap={(heldCall) => voipClient.swapCalls(heldCall.callId)}
             />
           ) : (
             <TouchableOpacity

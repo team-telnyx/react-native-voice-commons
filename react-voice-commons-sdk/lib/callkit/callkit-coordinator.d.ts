@@ -1,5 +1,5 @@
 import { Call } from '@telnyx/react-native-voice-sdk';
-import { TelnyxVoipClient } from '../telnyx-voip-client';
+import type { TelnyxVoipClient } from '../telnyx-voip-client';
 /**
  * CallKit Coordinator - Manages the proper CallKit-first flow for iOS
  *
@@ -14,7 +14,12 @@ declare class CallKitCoordinator {
   private endedCalls;
   private connectedCalls;
   private isCallFromPush;
-  private shouldAutoAnswerNextCall;
+  private pendingPushCallUUIDs;
+  private selectedCallKitUUID;
+  private restoreHeldCallPromise;
+  private pendingSwap;
+  private pendingHeldRequests;
+  private autoAnswerCallUUIDs;
   private voipClient;
   static getInstance(): CallKitCoordinator;
   private constructor();
@@ -37,6 +42,17 @@ declare class CallKitCoordinator {
    */
   answerCallFromUI(call: Call): Promise<boolean>;
   /**
+   * Change held state from app UI through CallKit, then wait for signaling and
+   * the corresponding CXSetHeldCallAction to complete.
+   */
+  setHeldFromUI(call: Call, isOnHold: boolean): Promise<boolean>;
+  /**
+   * Swap an active call with a held call through one CallKit transaction.
+   * The promise settles only after both corresponding WebRTC state changes
+   * have completed and their CallKit actions have been fulfilled.
+   */
+  swapCallsFromUI(activeCall: Call, heldCall: Call): Promise<boolean>;
+  /**
    * End a call from the app UI (CallKit-first approach)
    */
   endCallFromUI(call: Call): Promise<boolean>;
@@ -44,6 +60,8 @@ declare class CallKitCoordinator {
    * Handle CallKit answer action (triggered by CallKit)
    */
   handleCallKitAnswer(callKitUUID: string, event?: any): Promise<void>;
+  /** Handle a UUID-targeted CallKit hold or resume action. */
+  handleCallKitHeld(callKitUUID: string, isOnHold: boolean): Promise<void>;
   /**
    * Handle CallKit end action (triggered by CallKit)
    */
@@ -55,8 +73,13 @@ declare class CallKitCoordinator {
   /**
    * Handle CallKit push received event
    * This allows us to coordinate between the push notification and any subsequent WebRTC calls
+   *
+   * Returns `true` when the push was accepted and call processing was started,
+   * or `false` when the push was filtered, rejected, or otherwise ignored so
+   * that callers can clean up any foreground-push lifecycle flags they set
+   * before calling this method.
    */
-  handleCallKitPushReceived(callKitUUID: string, event?: any): Promise<void>;
+  handleCallKitPushReceived(callKitUUID: string, event?: any): Promise<boolean>;
   /**
    * Handle push notification answer - when user answers from CallKit but we don't have a WebRTC call yet
    * This is the iOS equivalent of the Android FCM handler
@@ -99,10 +122,23 @@ declare class CallKitCoordinator {
    * Helper method to clean up push notification state
    */
   private cleanupPushNotificationState;
+  private rejectUnregisteredIncomingCall;
+  private clearMatchingPendingVoipPush;
   /**
    * Get reference to the SDK client (for queuing actions when call doesn't exist yet)
    */
   private getSDKClient;
+  private normalizeUUID;
+  private actionKey;
+  private selectCall;
+  private isSelectedCall;
+  private recordPendingSwapAction;
+  private createPendingSwap;
+  private beginSwapRollback;
+  private restoreOriginalWebRTCStates;
+  private finishPendingSwap;
+  private finishPendingHeldRequest;
+  private restoreRemainingHeldCall;
   /**
    * Check if app is in background and disconnect client if no active calls
    */

@@ -68,6 +68,11 @@ class CallKitManager {
       console.log('CallKit: Received end call action', normalizedEvent);
       this.notifyListeners('endCall', normalizedEvent);
     });
+    this.eventEmitter.addListener('CallKitDidPerformHeldCallAction', (event) => {
+      const normalizedEvent = this.normalizeEvent(event);
+      console.log('CallKit: Received held call action', normalizedEvent);
+      this.notifyListeners('heldCall', normalizedEvent);
+    });
     this.eventEmitter.addListener('CallKitDidReceivePush', (event) => {
       const normalizedEvent = this.normalizeEvent(event);
       console.log('CallKit: Received push notification event', normalizedEvent);
@@ -75,9 +80,11 @@ class CallKitManager {
     });
   }
   notifyListeners(eventType, event) {
-    const listener = this.listeners.get(eventType);
-    if (listener) {
-      listener(event);
+    const listeners = this.listeners.get(eventType);
+    if (listeners) {
+      for (const listener of listeners) {
+        listener(event);
+      }
     }
   }
   // Public API methods
@@ -140,6 +147,21 @@ class CallKitManager {
       return false;
     }
   }
+  async isCallRegistered(callUUID) {
+    if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
+      return false;
+    }
+    try {
+      const result = await this.bridge.isCallRegistered(this.denormalizeUUID(callUUID));
+      return result.registered;
+    } catch (error) {
+      console.error('CallKit: Failed to check incoming call registration', {
+        callUUID,
+        error,
+      });
+      return false;
+    }
+  }
   async endCall(callUUID) {
     if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
       console.warn('CallKit: Not available on this platform');
@@ -154,6 +176,46 @@ class CallKitManager {
       return result.success;
     } catch (error) {
       console.error('CallKit: Failed to end call', error);
+      return false;
+    }
+  }
+  async completeHeldCallAction(callUUID, success) {
+    if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
+      return false;
+    }
+    try {
+      const uppercaseUUID = this.denormalizeUUID(callUUID);
+      const result = await this.bridge.completeHeldCallAction(uppercaseUUID, success);
+      return result.success;
+    } catch (error) {
+      console.error('CallKit: Failed to complete held call action', error);
+      return false;
+    }
+  }
+  async setCallHeld(callUUID, isOnHold) {
+    if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
+      return false;
+    }
+    try {
+      const result = await this.bridge.setCallHeld(this.denormalizeUUID(callUUID), isOnHold);
+      return result.success;
+    } catch (error) {
+      console.error('CallKit: Failed to change held state', { callUUID, isOnHold, error });
+      return false;
+    }
+  }
+  async swapCalls(activeCallUUID, heldCallUUID) {
+    if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
+      return false;
+    }
+    try {
+      const result = await this.bridge.swapCalls(
+        this.denormalizeUUID(activeCallUUID),
+        this.denormalizeUUID(heldCallUUID)
+      );
+      return result.success;
+    } catch (error) {
+      console.error('CallKit: Failed to swap calls', error);
       return false;
     }
   }
@@ -220,20 +282,30 @@ class CallKitManager {
   }
   // Event listener management
   onStartCall(listener) {
-    this.listeners.set('startCall', listener);
-    return () => this.listeners.delete('startCall');
+    return this.addListener('startCall', listener);
   }
   onAnswerCall(listener) {
-    this.listeners.set('answerCall', listener);
-    return () => this.listeners.delete('answerCall');
+    return this.addListener('answerCall', listener);
   }
   onEndCall(listener) {
-    this.listeners.set('endCall', listener);
-    return () => this.listeners.delete('endCall');
+    return this.addListener('endCall', listener);
+  }
+  onHeldCall(listener) {
+    return this.addListener('heldCall', listener);
   }
   onReceivePush(listener) {
-    this.listeners.set('receivePush', listener);
-    return () => this.listeners.delete('receivePush');
+    return this.addListener('receivePush', listener);
+  }
+  addListener(eventType, listener) {
+    const listeners = this.listeners.get(eventType) ?? new Set();
+    listeners.add(listener);
+    this.listeners.set(eventType, listeners);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) {
+        this.listeners.delete(eventType);
+      }
+    };
   }
   // Utility methods
   generateCallUUID() {

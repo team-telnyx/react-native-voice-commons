@@ -109,6 +109,32 @@ describe('Call Custom Headers', () => {
       });
     });
 
+    it('should include the answering device token when push-when-active is enabled', async () => {
+      const pushCall = new Call({
+        connection: mockConnection,
+        options: mockCallOptions,
+        sessionId: 'test-session-id',
+        direction: 'inbound',
+        telnyxSessionId: 'test-telnyx-session-id',
+        telnyxLegId: 'test-telnyx-leg-id',
+        callId: 'test-call-id',
+        pushWhenActive: true,
+        pushDeviceToken: 'push-token',
+      });
+      (pushCall as any).peer = mockPeer;
+      mockConnection.sendAndWait.mockResolvedValue({});
+      (createAnswerMessage as jest.Mock).mockReturnValue('mock-answer-message');
+
+      await pushCall.answer();
+
+      expect(createAnswerMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pushWhenActive: true,
+          pushDeviceToken: 'push-token',
+        })
+      );
+    });
+
     it('should send the answer message through connection', async () => {
       // Setup
       const mockAnswerMessage = { id: 'test-id', method: 'telnyx_rtc.answer' };
@@ -253,6 +279,7 @@ describe('Call Custom Headers', () => {
       // Verify CallKit UUID was assigned
       expect((inboundCall as any)._callKitUUID).toBe('test-callkit-uuid');
       expect((inboundCall as any)._isPushNotificationCall).toBe(true);
+      expect(inboundCall.callId).toBe('test-call-id');
       expect(mockConnectionWithClient._client.setPushNotificationCallKitUUID).toHaveBeenCalledWith(
         null
       );

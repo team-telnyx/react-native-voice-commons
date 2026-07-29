@@ -34,6 +34,7 @@ declare module '@telnyx/react-native-voice-sdk' {
     debug?: boolean;
     logLevel?: string;
     pushNotificationDeviceToken?: string;
+    pushWhenActive?: boolean;
     enableMissedCallNotifications?: boolean;
     useTrickleIce?: boolean;
     enableCallReports?: boolean;

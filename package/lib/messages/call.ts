@@ -408,6 +408,7 @@ type AnswerMessage = {
       custom_headers?: { name: string; value: string }[];
     };
     'User-Agent': string;
+    answered_device_token?: string;
   };
 };
 
@@ -419,6 +420,8 @@ type CreateAnswerMessageParams = {
   telnyxSessionId: string;
   telnyxLegId: string;
   customHeaders?: { name: string; value: string }[];
+  pushWhenActive?: boolean;
+  pushDeviceToken?: string;
 };
 export function createAnswerMessage({
   dialogParams,
@@ -428,8 +431,10 @@ export function createAnswerMessage({
   telnyxLegId,
   telnyxSessionId,
   customHeaders,
+  pushWhenActive = false,
+  pushDeviceToken,
 }: CreateAnswerMessageParams): AnswerMessage {
-  return {
+  const message: AnswerMessage = {
     id: uuid(),
     jsonrpc: '2.0',
     method: TelnyxRTCMethod.ANSWER,
@@ -446,6 +451,12 @@ export function createAnswerMessage({
       'User-Agent': `ReactNative-${SDK_VERSION}`,
     },
   };
+
+  if (pushWhenActive && pushDeviceToken?.trim()) {
+    message.params.answered_device_token = pushDeviceToken;
+  }
+
+  return message;
 }
 
 type ModifyCallRequest = {
@@ -486,7 +497,9 @@ type ModifyCallAnswer = {
   result: {
     action: 'hold' | 'unhold';
     callID: string;
-    holdState: 'held' | 'unheld';
+    // The gateway reports an unheld call as `active`. Keep accepting the
+    // legacy `unheld` value for compatibility with older deployments.
+    holdState: 'held' | 'active' | 'unheld';
     sessid: string;
   };
   voice_sdk_id: string;
@@ -500,7 +513,9 @@ export function isModifyCallAnswer(msg: unknown): msg is ModifyCallAnswer {
   return (
     Boolean(temp.result?.callID) &&
     Boolean(temp.result?.sessid) &&
-    (temp.result?.holdState === 'held' || temp.result?.holdState === 'unheld')
+    (temp.result?.holdState === 'held' ||
+      temp.result?.holdState === 'active' ||
+      temp.result?.holdState === 'unheld')
   );
 }
 

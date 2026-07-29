@@ -60,6 +60,7 @@ const pkg = __importStar(require('../../../package.json'));
 const connection_state_1 = require('../../models/connection-state');
 const config_1 = require('../../models/config');
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
+const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
 const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
 /**
  * Manages the connection lifecycle to the Telnyx platform.
@@ -205,11 +206,24 @@ class SessionManager {
     );
     // Store the push notification payload for when the client is created
     this._pendingPushPayload = payload;
-    // Each push always rebuilds the TelnyxRTC client. The voice_sdk_id is
-    // baked into the WebSocket URL at socket-open time and can't be mutated
-    // mid-flight; reusing a connection from a previous push means the
-    // gateway routes THIS push's INVITE to a different (correctly-stamped)
-    // client and we sit on the wrong socket forever.
+    // A second-call push must stay on the client that owns the active/held
+    // call. Tearing it down destroys the first signaling session and clears
+    // the call collection before CallKit can complete Hold & Accept.
+    if (this._telnyxClient && this._hasActiveOrHeldCall(this._telnyxClient)) {
+      const actualPayload = this._extractPushPayload(payload);
+      const processVoIPNotification = this._telnyxClient.processVoIPNotification;
+      if (typeof processVoIPNotification !== 'function') {
+        throw new Error('TelnyxRTC client cannot process an active-call VoIP notification');
+      }
+      console.log(
+        'SessionManager: Preserving active client while processing second-call push notification'
+      );
+      processVoIPNotification.call(this._telnyxClient, actualPayload);
+      this._pendingPushPayload = null;
+      return;
+    }
+    // The cold/no-active-call path still rebuilds the client so the socket is
+    // stamped with the push voice_sdk_id before connecting.
     if (this._telnyxClient) {
       await this._disconnectAndForgetClient(
         this._telnyxClient,
@@ -236,10 +250,12 @@ class SessionManager {
         const storedCredentialToken = await AsyncStorage.getItem('@credential_token');
         const storedPushToken = await AsyncStorage.getItem('@push_token');
         const storedUseTrickleIce = await AsyncStorage.getItem(USE_TRICKLE_ICE_STORAGE_KEY);
+        const storedPushWhenActive = await AsyncStorage.getItem(PUSH_WHEN_ACTIVE_STORAGE_KEY);
         const storedMissedCallNotifications = await AsyncStorage.getItem(
           MISSED_CALL_NOTIFICATIONS_STORAGE_KEY
         );
         const useTrickleIce = storedUseTrickleIce === 'true';
+        const pushWhenActive = storedPushWhenActive === 'true';
         const enableMissedCallNotifications = storedMissedCallNotifications === 'true';
         if (this._isTeardownActive()) {
           return;
@@ -251,6 +267,7 @@ class SessionManager {
           this._currentConfig = createCredentialConfig(storedUsername, storedPassword, {
             pushNotificationDeviceToken: storedPushToken,
             useTrickleIce,
+            pushWhenActive,
             enableMissedCallNotifications,
           });
         }
@@ -261,6 +278,7 @@ class SessionManager {
           this._currentConfig = createTokenConfig(storedCredentialToken, {
             pushNotificationDeviceToken: storedPushToken,
             useTrickleIce,
+            pushWhenActive,
             enableMissedCallNotifications,
           });
         }
@@ -351,6 +369,13 @@ class SessionManager {
     }
     console.log('SessionManager: RELEASE DEBUG - Push notification handling complete');
   }
+  _hasActiveOrHeldCall(client) {
+    const calls =
+      typeof client.getActiveCalls === 'function'
+        ? client.getActiveCalls()
+        : Array.from(client.calls?.values?.() || []);
+    return calls.some((call) => call?.state === 'active' || call?.state === 'held');
+  }
   /**
    * Dispose of the session manager and clean up resources
    */
@@ -435,6 +460,7 @@ class SessionManager {
           logLevel: config.debug ? 'debug' : 'warn',
           debug: config.debug ?? false,
           pushNotificationDeviceToken: config.pushNotificationDeviceToken,
+          pushWhenActive: config.pushWhenActive,
           enableMissedCallNotifications: config.enableMissedCallNotifications ?? false,
           useTrickleIce: config.useTrickleIce,
           enableCallReports: config.enableCallReports,
@@ -455,6 +481,7 @@ class SessionManager {
           logLevel: config.debug ? 'debug' : 'warn',
           debug: config.debug ?? false,
           pushNotificationDeviceToken: config.pushNotificationDeviceToken,
+          pushWhenActive: config.pushWhenActive,
           enableMissedCallNotifications: config.enableMissedCallNotifications ?? false,
           useTrickleIce: config.useTrickleIce,
           enableCallReports: config.enableCallReports,
