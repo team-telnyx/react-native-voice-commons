@@ -46,8 +46,6 @@ expo-env.d.ts
 # Documentation markdown linting
 docs-markdown/node_modules/
 docs-markdown/package-lock.json
-
-package-lock.json
 android/app/build/
 android/build/
 android/.gradle/
@@ -63,7 +61,6 @@ drivers/
 
 
 .yarn/
-yarn.lock
 /.lh/
 /.idea/
 .lh/*
