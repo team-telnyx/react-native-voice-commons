@@ -17,7 +17,7 @@ This guide assumes you have completed the [Push Notification App Setup](./app-se
 
 ## Enabling pushWhenActive
 
-Set `pushWhenActive: true` in the options passed to `createCredentialConfig` or `createTokenConfig`. The SDK reuses the already-configured push notification device token — you do not need to pass the token again at answer time.
+Set `pushWhenActive: true` in the options passed to `createCredentialConfig` or `createTokenConfig`. Complete the normal PushKit (iOS) or FCM (Android) setup first and configure its device token with `pushNotificationDeviceToken`. The SDK reuses that configured token — you do not need to pass it again at answer time.
 
 ### Credential-Based Authentication
 
@@ -26,6 +26,7 @@ import { createCredentialConfig } from '@telnyx/react-voice-commons-sdk';
 
 const config = createCredentialConfig('your_sip_username', 'your_sip_password', {
   debug: true,
+  pushNotificationDeviceToken: voipPushToken,
   pushWhenActive: true, // Include answered_device_token in answer messages
 });
 
@@ -39,6 +40,7 @@ import { createTokenConfig } from '@telnyx/react-voice-commons-sdk';
 
 const config = createTokenConfig('your_jwt_token', {
   debug: true,
+  pushNotificationDeviceToken: voipPushToken,
   pushWhenActive: true, // Include answered_device_token in answer messages
 });
 
@@ -51,7 +53,7 @@ await voipClient.loginWithToken(config);
 2. The Telnyx backend receives the answer with the `answered_device_token` and uses it to identify which device answered. It then ends the remaining call attempts on the other devices.
 3. If `pushWhenActive` is `false` (default) or no push token is configured, the `answered_device_token` field is omitted from the answer message.
 
-> **Note:** The `pushNotificationDeviceToken` is automatically retrieved and registered by the SDK during authentication. You only need to set `pushWhenActive: true` to opt in to this behavior. Customers do not pass the push token at answer time — `call.answer()` remains the normal API and the SDK uses the configured token internally.
+> **Note:** `pushWhenActive` does not create a push token. Supply the token through the normal push setup when logging in; customers do not pass it again to `call.answer()`. The SDK uses the configured token internally.
 
 ## Handling Calls Answered on Another Device
 
@@ -68,6 +70,8 @@ When the call ends because another device answered:
 - **End the CallKit / ConnectionService call if one is active** — the SDK handles this internally
 - **Mark the call as ended or answered elsewhere** — update your app state
 - **Do not show an error to the user** — this is expected behavior, not a failure
+
+> The React Voice Commons SDK performs the native CallKit/ConnectionService cleanup internally. Apps integrating the lower-level iOS SDK directly must also end a reported CallKit call with `.answeredElsewhere`; see the [iOS Push Notification App Setup](https://github.com/team-telnyx/telnyx-webrtc-ios/blob/main/docs-markdown/push-notification/app-setup.md#callkit-behavior).
 
 ## Event & State Mapping
 
@@ -102,11 +106,18 @@ export function IncomingCallScreen({ voipClient }: { voipClient: TelnyxVoipClien
   const [callState, setCallState] = React.useState<TelnyxCallState | null>(null);
 
   React.useEffect(() => {
+    let callStateSub: { unsubscribe: () => void } | undefined;
+
     // Subscribe to the active call's state changes
     const callSub = voipClient.activeCall$.subscribe((call) => {
+      // The active call can change (for example, during call waiting), so do
+      // not retain the prior call's state subscription.
+      callStateSub?.unsubscribe();
+      callStateSub = undefined;
+
       if (call) {
         setCallState(call.currentState);
-        const stateSub = call.callState$.subscribe((state) => {
+        callStateSub = call.callState$.subscribe((state) => {
           setCallState(state);
           // When the call ends (answered elsewhere, hung up, or failed),
           // dismiss the incoming-call UI
@@ -116,13 +127,15 @@ export function IncomingCallScreen({ voipClient }: { voipClient: TelnyxVoipClien
             // e.g., navigation.goBack() or navigation.replace('Home')
           }
         });
-        return () => stateSub.unsubscribe();
       } else {
         setCallState(null);
       }
     });
 
-    return () => callSub.unsubscribe();
+    return () => {
+      callStateSub?.unsubscribe();
+      callSub.unsubscribe();
+    };
   }, [voipClient]);
 
   if (callState === null) {
