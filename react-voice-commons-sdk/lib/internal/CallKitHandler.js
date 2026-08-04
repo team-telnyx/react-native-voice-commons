@@ -9,7 +9,6 @@ exports.CallKitHandler = void 0;
 const react_1 = require('react');
 const react_native_1 = require('react-native');
 const async_storage_1 = __importDefault(require('@react-native-async-storage/async-storage'));
-const TelnyxVoiceContext_1 = require('../context/TelnyxVoiceContext');
 // Global flag to ensure only one CallKitHandler is active
 let isCallKitHandlerActive = false;
 /**
@@ -19,30 +18,19 @@ let isCallKitHandlerActive = false;
  * @internal - Users should not use this component directly
  */
 const CallKitHandler = ({ onLoginRequired, onNavigateToDialer, onNavigateBack }) => {
-  const { voipClient } = (0, TelnyxVoiceContext_1.useTelnyxVoice)();
   // Store active calls by CallKit UUID for coordination
   const activeCallsRef = (0, react_1.useRef)(new Map());
-  // Refs that always point at the latest props/context values so the
-  // DeviceEventEmitter listeners (registered once via the empty-deps effect
-  // below) read current callbacks/client instead of the values captured on the
-  // first render. Without these refs the empty dependency array freezes stale
-  // closures: updated callbacks/client passed on later renders are never seen
-  // by the listeners, mirroring the pattern used by `use-callkit.ts`.
-  const voipClientRef = (0, react_1.useRef)(voipClient);
+  // DeviceEventEmitter listeners are registered once below, so read callbacks
+  // from refs that are updated during every render rather than stale closures.
   const onLoginRequiredRef = (0, react_1.useRef)(onLoginRequired);
   const onNavigateToDialerRef = (0, react_1.useRef)(onNavigateToDialer);
   const onNavigateBackRef = (0, react_1.useRef)(onNavigateBack);
-  // Keep the refs in sync with the latest props/context on every render.
-  (0, react_1.useEffect)(() => {
-    voipClientRef.current = voipClient;
-    onLoginRequiredRef.current = onLoginRequired;
-    onNavigateToDialerRef.current = onNavigateToDialer;
-    onNavigateBackRef.current = onNavigateBack;
-  });
+  onLoginRequiredRef.current = onLoginRequired;
+  onNavigateToDialerRef.current = onNavigateToDialer;
+  onNavigateBackRef.current = onNavigateBack;
   const handleIncomingCall = async (eventData) => {
     console.log('CallKitHandler: Handling incoming call', {
       callUUID: eventData.callUUID,
-      hasClient: !!voipClientRef.current,
     });
     // Store the push notification payload
     await async_storage_1.default.setItem(

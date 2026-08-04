@@ -1,8 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Platform, DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useTelnyxVoice } from '../context/TelnyxVoiceContext';
-import { callKitCoordinator } from '../callkit';
 
 // Global flag to ensure only one CallKitHandler is active
 let isCallKitHandlerActive = false;
@@ -35,34 +33,22 @@ export const CallKitHandler: React.FC<CallKitHandlerProps> = ({
   onNavigateToDialer,
   onNavigateBack,
 }) => {
-  const { voipClient } = useTelnyxVoice();
-
   // Store active calls by CallKit UUID for coordination
   const activeCallsRef = useRef<Map<string, any>>(new Map());
 
-  // Refs that always point at the latest props/context values so the
-  // DeviceEventEmitter listeners (registered once via the empty-deps effect
-  // below) read current callbacks/client instead of the values captured on the
-  // first render. Without these refs the empty dependency array freezes stale
-  // closures: updated callbacks/client passed on later renders are never seen
-  // by the listeners, mirroring the pattern used by `use-callkit.ts`.
-  const voipClientRef = useRef(voipClient);
+  // DeviceEventEmitter listeners are registered once below, so read callbacks
+  // from refs that are updated during every render rather than stale closures.
   const onLoginRequiredRef = useRef(onLoginRequired);
   const onNavigateToDialerRef = useRef(onNavigateToDialer);
   const onNavigateBackRef = useRef(onNavigateBack);
 
-  // Keep the refs in sync with the latest props/context on every render.
-  useEffect(() => {
-    voipClientRef.current = voipClient;
-    onLoginRequiredRef.current = onLoginRequired;
-    onNavigateToDialerRef.current = onNavigateToDialer;
-    onNavigateBackRef.current = onNavigateBack;
-  });
+  onLoginRequiredRef.current = onLoginRequired;
+  onNavigateToDialerRef.current = onNavigateToDialer;
+  onNavigateBackRef.current = onNavigateBack;
 
   const handleIncomingCall = async (eventData: CallData) => {
     console.log('CallKitHandler: Handling incoming call', {
       callUUID: eventData.callUUID,
-      hasClient: !!voipClientRef.current,
     });
 
     // Store the push notification payload
