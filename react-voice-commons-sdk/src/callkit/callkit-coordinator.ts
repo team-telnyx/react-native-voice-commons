@@ -707,9 +707,7 @@ class CallKitCoordinator {
       try {
         const pendingAnswer = await VoicePnBridge.getPendingCallKitAnswer();
         if (pendingAnswer && this.normalizeUUID(pendingAnswer) === callKitUUID) {
-          console.log(
-            'CallKitCoordinator: Restoring pending CallKit answer for matching UUID'
-          );
+          console.log('CallKitCoordinator: Restoring pending CallKit answer for matching UUID');
           this.autoAnswerCallUUIDs.add(callKitUUID);
           await VoicePnBridge.clearPendingCallKitAnswer();
         }
