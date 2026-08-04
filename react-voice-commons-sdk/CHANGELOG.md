@@ -4,6 +4,7 @@
 
 ### Bug Fixing
 
+- Preserve an iOS CallKit answer that occurs before React Native event listeners attach during a VoIP-push cold launch.
 - Hydrate iOS login and reconnect configurations from the current native PushKit token when callers omit one, preventing locked-device inbound calls from being missed when JavaScript login races token delivery.
 - Support two simultaneous iOS CallKit calls with UUID-targeted answer, end, hold, resume, and survivor restoration.
 - Route app hold/resume through CallKit and compensate partial call-swap failures to keep native and WebRTC state aligned.

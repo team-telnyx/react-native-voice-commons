@@ -94,8 +94,9 @@ import React
         }
 
         // Direct event emission methods called by TelnyxVoiceAppDelegate
-        public func emitCallEvent(_ eventName: String, callUUID: UUID, callData: [String: Any]?) {
-            guard hasListeners else { return }
+        @discardableResult
+        public func emitCallEvent(_ eventName: String, callUUID: UUID, callData: [String: Any]?) -> Bool {
+            guard hasListeners else { return false }
 
             let eventData: [String: Any] = [
                 "callUUID": callUUID.uuidString,
@@ -103,6 +104,7 @@ import React
             ]
 
             sendEvent(withName: eventName, body: eventData)
+            return true
         }
 
         @discardableResult
@@ -1328,9 +1330,14 @@ import React
                 NSLog("TelnyxVoice: Call already answered in WebRTC, skipping emission")
             } else {
                 // Notify React Native via CallKit bridge (only for user-initiated answers)
-                CallKitBridge.shared?.emitCallEvent(
+                let eventDelivered = CallKitBridge.shared?.emitCallEvent(
                     "CallKitDidPerformAnswerCallAction", callUUID: action.callUUID,
-                    callData: activeCalls[action.callUUID])
+                    callData: activeCalls[action.callUUID]) ?? false
+                if !eventDelivered {
+                    UserDefaults.standard.set(action.callUUID.uuidString, forKey: "pending_callkit_answer")
+                    UserDefaults.standard.synchronize()
+                    NSLog("TelnyxVoice: Stored pending CallKit answer for UUID: \(action.callUUID)")
+                }
             }
 
             // Defer action.fulfill() until reportCallConnected when peer connection is ready
@@ -1386,6 +1393,10 @@ import React
                 NSLog("TelnyxVoice: Failing end action for unknown UUID: \(action.callUUID)")
                 action.fail()
                 return
+            }
+            if UserDefaults.standard.string(forKey: "pending_callkit_answer") == action.callUUID.uuidString {
+                UserDefaults.standard.removeObject(forKey: "pending_callkit_answer")
+                UserDefaults.standard.synchronize()
             }
 
             // Notify React Native via CallKit bridge

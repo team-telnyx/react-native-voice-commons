@@ -637,6 +637,18 @@ class CallKitCoordinator {
       // This app-facing UUID is attached to the next inbound Call while the
       // socket INVITE retains its own signaling callID.
       voipClient.setPushNotificationCallKitUUID(callKitUUID);
+      // Restore an answer that native CallKit received before React Native had
+      // attached listeners. Never apply an answer UUID to a different incoming call.
+      try {
+        const pendingAnswer = await voice_pn_bridge_1.VoicePnBridge.getPendingCallKitAnswer();
+        if (pendingAnswer && this.normalizeUUID(pendingAnswer) === callKitUUID) {
+          console.log('CallKitCoordinator: Restoring pending CallKit answer for matching UUID');
+          this.autoAnswerCallUUIDs.add(callKitUUID);
+          await voice_pn_bridge_1.VoicePnBridge.clearPendingCallKitAnswer();
+        }
+      } catch {
+        // The bridge method is unavailable on older native builds.
+      }
       // A pre-INVITE CallKit answer is represented only by the UUID-keyed
       // pending action. Do not also add legacy notification flags.
       const shouldAddFromNotification = this.autoAnswerCallUUIDs.has(callKitUUID);
