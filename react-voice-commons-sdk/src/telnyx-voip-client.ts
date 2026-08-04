@@ -5,7 +5,7 @@ import { Call } from './models/call';
 import { TelnyxCallState } from './models/call-state';
 import { Config, CredentialConfig, TokenConfig, validateConfig } from './models/config';
 import { SessionManager } from './internal/session/session-manager';
-import { CallStateController } from './internal/calls/call-state-controller';
+import { CallStateController, type CustomHeaders } from './internal/calls/call-state-controller';
 import { VoicePnBridge } from './internal/voice-pn-bridge';
 
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
@@ -473,7 +473,7 @@ export class TelnyxVoipClient {
     destination: string,
     callerName?: string,
     callerNumber?: string,
-    customHeaders?: Record<string, string>
+    customHeaders?: CustomHeaders
   ): Promise<Call> {
     this._throwIfDisposed();
 

@@ -2,6 +2,7 @@ import { Observable } from 'rxjs';
 import { TelnyxConnectionState } from './models/connection-state';
 import { Call } from './models/call';
 import { CredentialConfig, TokenConfig } from './models/config';
+import { type CustomHeaders } from './internal/calls/call-state-controller';
 /**
  * Configuration options for TelnyxVoipClient
  */
@@ -179,7 +180,7 @@ export declare class TelnyxVoipClient {
     destination: string,
     callerName?: string,
     callerNumber?: string,
-    customHeaders?: Record<string, string>
+    customHeaders?: CustomHeaders
   ): Promise<Call>;
   /**
    * Handle push notification payload.

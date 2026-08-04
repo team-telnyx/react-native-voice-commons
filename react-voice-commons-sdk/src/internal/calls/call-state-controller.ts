@@ -6,6 +6,9 @@ import { TelnyxCallState } from '../../models/call-state';
 import { SessionManager } from '../session/session-manager';
 import { callKitCoordinator } from '../../callkit/callkit-coordinator';
 
+export type CustomHeader = { name: string; value: string };
+export type CustomHeaders = Record<string, string> | CustomHeader[];
+
 /**
  * Central state machine for call management.
  *
@@ -190,7 +193,7 @@ export class CallStateController {
     destination: string,
     callerName?: string,
     callerNumber?: string,
-    customHeaders?: Record<string, string>
+    customHeaders?: CustomHeaders
   ): Promise<Call> {
     if (this._disposed) {
       throw new Error('CallStateController has been disposed');
@@ -206,7 +209,7 @@ export class CallStateController {
         destinationNumber: destination,
         callerIdName: callerName,
         callerIdNumber: callerNumber,
-        customHeaders,
+        customHeaders: this._normalizeCustomHeaders(customHeaders),
         peerConnectionOptions: {
           useTrickleIce: this._sessionManager.useTrickleIce,
         },
@@ -232,6 +235,21 @@ export class CallStateController {
       console.error('Failed to create new call:', error);
       throw error;
     }
+  }
+
+  /**
+   * Normalize public custom headers into the format expected by the underlying SDK.
+   */
+  private _normalizeCustomHeaders(customHeaders?: CustomHeaders): CustomHeader[] | undefined {
+    if (!customHeaders) {
+      return undefined;
+    }
+
+    if (Array.isArray(customHeaders)) {
+      return customHeaders;
+    }
+
+    return Object.entries(customHeaders).map(([name, value]) => ({ name, value }));
   }
 
   /**
