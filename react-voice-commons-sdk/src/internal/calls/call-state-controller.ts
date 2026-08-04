@@ -190,7 +190,8 @@ export class CallStateController {
     destination: string,
     callerName?: string,
     callerNumber?: string,
-    customHeaders?: Record<string, string>
+    customHeaders?: Record<string, string>,
+    clientState?: string
   ): Promise<Call> {
     if (this._disposed) {
       throw new Error('CallStateController has been disposed');
@@ -207,6 +208,7 @@ export class CallStateController {
         callerIdName: callerName,
         callerIdNumber: callerNumber,
         customHeaders,
+        clientState,
         peerConnectionOptions: {
           useTrickleIce: this._sessionManager.useTrickleIce,
         },

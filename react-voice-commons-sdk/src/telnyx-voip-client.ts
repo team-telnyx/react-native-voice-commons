@@ -465,6 +465,7 @@ export class TelnyxVoipClient {
    * @param callerName Optional caller name to display
    * @param callerNumber Optional caller ID number
    * @param customHeaders Optional custom headers to include with the call
+   * @param clientState Optional client state to pass custom data through webhooks
    * @returns A Promise that completes with the Call object once the invitation has been sent
    *
    * The call's state can be monitored through the returned Call object's streams.
@@ -473,7 +474,8 @@ export class TelnyxVoipClient {
     destination: string,
     callerName?: string,
     callerNumber?: string,
-    customHeaders?: Record<string, string>
+    customHeaders?: Record<string, string>,
+    clientState?: string
   ): Promise<Call> {
     this._throwIfDisposed();
 
@@ -493,7 +495,8 @@ export class TelnyxVoipClient {
       destination,
       callerName,
       callerNumber,
-      customHeaders
+      customHeaders,
+      clientState
     );
   }
 
