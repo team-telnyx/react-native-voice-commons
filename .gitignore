@@ -61,6 +61,7 @@ drivers/
 
 
 .yarn/
+yarn.lock
 /.lh/
 /.idea/
 .lh/*

@@ -19,6 +19,7 @@ react-voice-commons-sdk/   ← THE LIBRARY (published to npm)
     hooks/                  React hooks for VoIP state
     internal/               Internal implementation
     models/                 Type definitions
+    types/                  Ambient type declarations (telnyx-sdk.d.ts)
   __tests__/        Jest tests
   lib/              Build output (tsc → CommonJS)
   android/          Android native module
@@ -71,25 +72,38 @@ npm run lint          # ESLint (src only, .ts/.tsx)
 - Legacy ESLint config (`.eslintrc.js`): `eslint:recommended` + `@typescript-eslint`
 - `no-console` is a warning (allowed: `warn`, `error`)
 
+### Other Library Scripts
+
+```bash
+npm run docs           # TypeDoc HTML → docs/
+npm run docs:watch     # TypeDoc in watch mode
+npm run docs:markdown  # TypeDoc markdown → docs-markdown/
+npm run docs:all       # HTML + markdown docs
+npm run android        # expo run:android (native build)
+npm run ios            # expo run:ios (native build)
+npm run prepublishOnly # Switch to published SDK + install
+npm run postpublish    # Switch back to local SDK + install
+```
+
 ## Demo App (repo root)
 
 ### Build & Dev
 
 ```bash
-# Install
-npm install
+# Install (uses --legacy-peer-deps due to RN ecosystem)
+npm install --legacy-peer-deps
 
-# Prebuild native projects
+# Prebuild native projects (Expo CLI, not a package.json script)
 npx expo prebuild
 
 # Install iOS pods
 cd ios && pod install && cd ..
 
-# Start Metro bundler
+# Start Expo dev server (wraps Metro)
 npm run dev
 
-# Run on device/simulator
-npm run ios      # iOS
+# Start Expo dev server with platform flag
+npm run ios       # iOS
 npm run android   # Android
 ```
 
