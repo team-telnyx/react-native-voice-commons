@@ -1,8 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Platform, DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useTelnyxVoice } from '../context/TelnyxVoiceContext';
-import { callKitCoordinator } from '../callkit';
 
 // Global flag to ensure only one CallKitHandler is active
 let isCallKitHandlerActive = false;
@@ -35,10 +33,64 @@ export const CallKitHandler: React.FC<CallKitHandlerProps> = ({
   onNavigateToDialer,
   onNavigateBack,
 }) => {
-  const { voipClient } = useTelnyxVoice();
-
   // Store active calls by CallKit UUID for coordination
   const activeCallsRef = useRef<Map<string, any>>(new Map());
+
+  // DeviceEventEmitter listeners are registered once below, so read callbacks
+  // from refs that are updated during every render rather than stale closures.
+  const onLoginRequiredRef = useRef(onLoginRequired);
+  const onNavigateToDialerRef = useRef(onNavigateToDialer);
+  const onNavigateBackRef = useRef(onNavigateBack);
+
+  onLoginRequiredRef.current = onLoginRequired;
+  onNavigateToDialerRef.current = onNavigateToDialer;
+  onNavigateBackRef.current = onNavigateBack;
+
+  const handleIncomingCall = async (eventData: CallData) => {
+    console.log('CallKitHandler: Handling incoming call', {
+      callUUID: eventData.callUUID,
+    });
+
+    // Store the push notification payload
+    await AsyncStorage.setItem('@push_notification_payload', JSON.stringify(eventData.payload));
+
+    // Mark this call as being processed
+    activeCallsRef.current.set(eventData.callUUID, {
+      processing: true,
+      timestamp: Date.now(),
+    });
+
+    // Trigger login required callback if provided
+    if (onLoginRequiredRef.current) {
+      onLoginRequiredRef.current(eventData.payload);
+    }
+  };
+
+  const handleAnswerCall = async (eventData: CallData) => {
+    console.log('CallKitHandler: User answered call via CallKit', {
+      callUUID: eventData.callUUID,
+      isTrackedCall: activeCallsRef.current.has(eventData.callUUID),
+    });
+
+    if (onNavigateToDialerRef.current) {
+      onNavigateToDialerRef.current();
+    }
+  };
+
+  const handleEndCall = async (eventData: CallData) => {
+    console.log('CallKitHandler: User ended call via CallKit', {
+      callUUID: eventData.callUUID,
+      isTrackedCall: activeCallsRef.current.has(eventData.callUUID),
+    });
+
+    // Clean up our local tracking info
+    activeCallsRef.current.delete(eventData.callUUID);
+    await AsyncStorage.removeItem('@push_notification_payload');
+
+    if (onNavigateBackRef.current) {
+      onNavigateBackRef.current();
+    }
+  };
 
   useEffect(() => {
     if (Platform.OS !== 'ios') return;
@@ -88,53 +140,6 @@ export const CallKitHandler: React.FC<CallKitHandlerProps> = ({
       isCallKitHandlerActive = false;
     };
   }, []);
-
-  const handleIncomingCall = async (eventData: CallData) => {
-    console.log('CallKitHandler: Handling incoming call', {
-      callUUID: eventData.callUUID,
-      hasClient: !!voipClient,
-    });
-
-    // Store the push notification payload
-    await AsyncStorage.setItem('@push_notification_payload', JSON.stringify(eventData.payload));
-
-    // Mark this call as being processed
-    activeCallsRef.current.set(eventData.callUUID, {
-      processing: true,
-      timestamp: Date.now(),
-    });
-
-    // Trigger login required callback if provided
-    if (onLoginRequired) {
-      onLoginRequired(eventData.payload);
-    }
-  };
-
-  const handleAnswerCall = async (eventData: CallData) => {
-    console.log('CallKitHandler: User answered call via CallKit', {
-      callUUID: eventData.callUUID,
-      isTrackedCall: activeCallsRef.current.has(eventData.callUUID),
-    });
-
-    if (onNavigateToDialer) {
-      onNavigateToDialer();
-    }
-  };
-
-  const handleEndCall = async (eventData: CallData) => {
-    console.log('CallKitHandler: User ended call via CallKit', {
-      callUUID: eventData.callUUID,
-      isTrackedCall: activeCallsRef.current.has(eventData.callUUID),
-    });
-
-    // Clean up our local tracking info
-    activeCallsRef.current.delete(eventData.callUUID);
-    await AsyncStorage.removeItem('@push_notification_payload');
-
-    if (onNavigateBack) {
-      onNavigateBack();
-    }
-  };
 
   // This component doesn't render anything, it just handles events
   return null;
