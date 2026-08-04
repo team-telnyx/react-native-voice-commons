@@ -555,6 +555,7 @@ For complete API documentation and advanced usage patterns, see:
 - **[API Reference](https://developers.telnyx.com/development/webrtc/react-native-sdk)** - Auto-generated TypeDoc documentation
 - **[TelnyxVoiceApp Documentation](https://developers.telnyx.com/development/webrtc/react-native-sdk)** - Detailed component guide
 - **[Trickle ICE Guide](./docs-markdown/call-features/trickle-ice.md)** - Enabling and disabling Trickle ICE for faster call setup
+- **[Push-When-Active Guide](./docs-markdown/push-notification/push-when-active.md)** - Multidevice call delivery and answered-elsewhere handling
 
 ## License
 
