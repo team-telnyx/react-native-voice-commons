@@ -2,7 +2,7 @@
 
 ## Overview
 
-By default, a device with an active WebSocket connection is not kept eligible for another incoming VoIP push. Enable `pushWhenActive` when a user may have an active or held call and must still receive a subsequent incoming call on the same device.
+By default, when another client for the same user has an active WebSocket connection, the backend can prioritize that connected client and not send this device a VoIP push. Enable `pushWhenActive` to keep this device eligible for incoming VoIP pushes even while another device or client is connected.
 
 This is useful for call waiting and multi-device calling. It is disabled by default.
 
