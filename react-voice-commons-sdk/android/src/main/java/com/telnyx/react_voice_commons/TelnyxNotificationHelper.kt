@@ -11,6 +11,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -22,8 +24,12 @@ import androidx.core.content.ContextCompat
  */
 class TelnyxNotificationHelper(private val context: Context) {
     companion object {
-        const val CHANNEL_ID = "telnyx_voice_calls"
-        const val CHANNEL_NAME = "Telnyx Voice Calls"
+        const val INCOMING_CALL_CHANNEL_ID = "telnyx_voice_incoming_calls_v2"
+        const val ONGOING_CALL_CHANNEL_ID = "telnyx_voice_ongoing_calls"
+        const val MISSED_CALL_CHANNEL_ID = "telnyx_voice_missed_calls"
+        const val INCOMING_CALL_CHANNEL_NAME = "Incoming Telnyx Voice Calls"
+        const val ONGOING_CALL_CHANNEL_NAME = "Ongoing Telnyx Voice Calls"
+        const val MISSED_CALL_CHANNEL_NAME = "Missed Telnyx Voice Calls"
         const val NOTIFICATION_ID = 1001
         const val ONGOING_CALL_NOTIFICATION_ID = 1002
         private const val TAG = "TelnyxNotifications"
@@ -52,10 +58,10 @@ class TelnyxNotificationHelper(private val context: Context) {
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     init {
-        createNotificationChannel()
+        createNotificationChannels()
     }
 
-    private fun getNotificationBlockReason(): String? {
+    private fun getNotificationBlockReason(channelId: String): String? {
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -68,7 +74,7 @@ class TelnyxNotificationHelper(private val context: Context) {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = notificationManager.getNotificationChannel(CHANNEL_ID)
+            val channel = notificationManager.getNotificationChannel(channelId)
             if (channel?.importance == NotificationManager.IMPORTANCE_NONE) {
                 return "incoming-call notification channel is blocked"
             }
@@ -86,8 +92,12 @@ class TelnyxNotificationHelper(private val context: Context) {
     }
 
     @SuppressLint("MissingPermission")
-    private fun notifyIfPermitted(notificationId: Int, notification: Notification): String? {
-        val blockReason = getNotificationBlockReason()
+    private fun notifyIfPermitted(
+        notificationId: Int,
+        notification: Notification,
+        channelId: String,
+    ): String? {
+        val blockReason = getNotificationBlockReason(channelId)
         if (blockReason != null) {
             Log.w(TAG, "Skipping notification $notificationId because $blockReason")
             return blockReason
@@ -147,21 +157,46 @@ class TelnyxNotificationHelper(private val context: Context) {
         }
     }
 
-    private fun createNotificationChannel() {
+    private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
+            // New ID: Android preserves a channel's sound after it is created, so the
+            // prior silent channel cannot be updated for existing installations.
+            val incomingCallChannel = NotificationChannel(
+                INCOMING_CALL_CHANNEL_ID,
+                INCOMING_CALL_CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Notifications for incoming Telnyx voice calls"
                 enableLights(true)
                 lightColor = Color.GREEN
                 enableVibration(true)
-                setSound(null, null) // Disable sound, CallKit will handle audio
+                setSound(
+                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
+                    AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                        .build()
+                )
             }
-            notificationManager.createNotificationChannel(channel)
-            Log.d(TAG, "Created notification channel: $CHANNEL_ID")
+            val ongoingCallChannel = NotificationChannel(
+                ONGOING_CALL_CHANNEL_ID,
+                ONGOING_CALL_CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Notifications for ongoing Telnyx voice calls"
+            }
+            val missedCallChannel = NotificationChannel(
+                MISSED_CALL_CHANNEL_ID,
+                MISSED_CALL_CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Notifications for missed Telnyx voice calls"
+            }
+
+            notificationManager.createNotificationChannels(
+                listOf(incomingCallChannel, ongoingCallChannel, missedCallChannel)
+            )
+            Log.d(TAG, "Created Telnyx voice notification channels")
         }
     }
 
@@ -203,7 +238,7 @@ class TelnyxNotificationHelper(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, INCOMING_CALL_CHANNEL_ID)
             .setContentTitle("Incoming Call")
             .setContentText("$displayName")
             .setSmallIcon(android.R.drawable.ic_menu_call)
@@ -261,7 +296,11 @@ class TelnyxNotificationHelper(private val context: Context) {
         hideIncomingCallNotification()
         
         val notification = createIncomingCallNotification(callerName, callerNumber, callId,metadata, mainActivityClass)
-        val blockReason = notifyIfPermitted(NOTIFICATION_ID, notification)
+        val blockReason = notifyIfPermitted(
+            NOTIFICATION_ID,
+            notification,
+            INCOMING_CALL_CHANNEL_ID,
+        )
         if (blockReason == null) {
             Log.d(TAG, "Showed incoming call notification for: $callerName ($callerNumber)")
         } else {
@@ -280,7 +319,7 @@ class TelnyxNotificationHelper(private val context: Context) {
         val displayName = callerName ?: callerNumber ?: "Unknown Caller"
         val displayNumber = if (callerName != null && callerNumber != null) callerNumber else ""
         
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(context, MISSED_CALL_CHANNEL_ID)
             .setContentTitle("Missed Call")
             .setContentText("$displayName${if (displayNumber.isNotEmpty()) "\n$displayNumber" else ""}")
             .setSmallIcon(android.R.drawable.ic_menu_call)
@@ -291,7 +330,11 @@ class TelnyxNotificationHelper(private val context: Context) {
             .setColor(Color.RED)
             .build()
             
-        val blockReason = notifyIfPermitted(NOTIFICATION_ID, notification)
+        val blockReason = notifyIfPermitted(
+            NOTIFICATION_ID,
+            notification,
+            MISSED_CALL_CHANNEL_ID,
+        )
         if (blockReason == null) {
             Log.d(TAG, "Showed missed call notification for: $callerName ($callerNumber)")
         } else {
@@ -306,7 +349,11 @@ class TelnyxNotificationHelper(private val context: Context) {
         mainActivityClass: Class<*>? = null
     ) {
         val notification = createOngoingCallNotification(callerName, callerNumber, callId, mainActivityClass)
-        val blockReason = notifyIfPermitted(ONGOING_CALL_NOTIFICATION_ID, notification)
+        val blockReason = notifyIfPermitted(
+            ONGOING_CALL_NOTIFICATION_ID,
+            notification,
+            ONGOING_CALL_CHANNEL_ID,
+        )
         if (blockReason == null) {
             Log.d(TAG, "Showed ongoing call notification for: $callerName ($callerNumber)")
         } else {
@@ -364,7 +411,7 @@ class TelnyxNotificationHelper(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(context, CHANNEL_ID)
+        return NotificationCompat.Builder(context, ONGOING_CALL_CHANNEL_ID)
             .setContentTitle("Ongoing Call")
             .setContentText("$displayName${if (displayNumber.isNotEmpty()) " ($displayNumber)" else ""}")
             .setSmallIcon(android.R.drawable.ic_menu_call)
