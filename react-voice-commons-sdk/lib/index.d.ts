@@ -40,6 +40,7 @@ export {
 } from './models/config';
 export type { Config, CredentialConfig, TokenConfig } from './models/config';
 export type { Call as TelnyxCall } from '@telnyx/react-native-voice-sdk';
+export type { StatsInterval } from '@telnyx/react-native-voice-sdk';
 export * from './callkit';
 export { VoicePnBridge } from './internal/voice-pn-bridge';
 export { useAppReadyNotifier } from './hooks/useAppReadyNotifier';
