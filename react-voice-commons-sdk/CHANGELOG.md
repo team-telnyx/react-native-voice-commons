@@ -16,6 +16,16 @@
 
 - Add public `swapCalls(targetCallId)` support and matching demo hold/resume/swap controls.
 
+## [1.1.0] (2026-08-07)
+
+### Enhancement
+
+- Add Android `incomingCallRingtone` configuration. Apps can provide the name of an audio resource bundled in `android/app/src/main/res/raw`; the setting is retained for incoming FCM calls.
+
+### Bug Fixing
+
+- Play and loop the Android incoming-call ringtone until the call is answered, rejected, ended, or dismissed. The SDK now falls back to the device's selected phone ringtone when no valid app resource is configured.
+
 ## [0.4.3] (2026-04-30)
 
 ### Bug Fixing

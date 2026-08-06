@@ -232,6 +232,18 @@ await voipClient.loginWithToken(config);
 
 `pushWhenActive` is opt-in and defaults to `false`. Enable it on iOS when the device must receive a second PushKit call while another call is active or held.
 
+### Android Incoming Ringtone
+
+Android uses the device's selected phone ringtone by default. To use an app-bundled sound instead, add a supported audio file such as `my_ringtone.wav` to `android/app/src/main/res/raw/` and pass its resource name without the extension when logging in:
+
+```tsx
+const config = createCredentialConfig('your_sip_username', 'your_sip_password', {
+  incomingCallRingtone: 'my_ringtone',
+});
+```
+
+The SDK persists this setting for incoming FCM pushes. If the resource is missing or the option is omitted, it falls back to the device ringtone.
+
 ### Automatic Storage & Reconnection
 
 The library automatically stores authentication data securely for seamless reconnection. **You don't need to manually manage these storage keys** - the library handles everything internally.

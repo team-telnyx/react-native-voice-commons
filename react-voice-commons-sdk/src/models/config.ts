@@ -11,6 +11,8 @@ export interface CredentialConfig {
   pushWhenActive?: boolean;
   /** Enable native missed call push notifications. Default: false */
   enableMissedCallNotifications?: boolean;
+  /** Android only: name of a bundled `res/raw` ringtone (without its file extension). Falls back to the device ringtone. */
+  incomingCallRingtone?: string;
   /** Enable Trickle ICE. Default: false */
   useTrickleIce?: boolean;
   /** Enable automatic call quality reporting. Default: true */
@@ -35,6 +37,8 @@ export interface TokenConfig {
   pushWhenActive?: boolean;
   /** Enable native missed call push notifications. Default: false */
   enableMissedCallNotifications?: boolean;
+  /** Android only: name of a bundled `res/raw` ringtone (without its file extension). Falls back to the device ringtone. */
+  incomingCallRingtone?: string;
   /** Enable Trickle ICE. Default: false */
   useTrickleIce?: boolean;
   /** Enable automatic call quality reporting. Default: true */

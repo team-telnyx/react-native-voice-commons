@@ -226,6 +226,21 @@ class VoicePnBridgeModule(reactContext: ReactApplicationContext) : ReactContextB
     }
 
     @ReactMethod
+    fun setIncomingCallRingtone(resourceName: String?, promise: Promise) {
+        try {
+            promise.resolve(
+                VoicePnManager.setIncomingCallRingtoneResource(
+                    reactApplicationContext,
+                    resourceName?.trim()?.takeIf { it.isNotEmpty() }
+                )
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting incoming call ringtone", e)
+            promise.reject("SET_INCOMING_CALL_RINGTONE_ERROR", e.message, e)
+        }
+    }
+
+    @ReactMethod
     fun setMissedCallNotificationsEnabled(enabled: Boolean, promise: Promise) {
         try {
             val result = VoicePnManager.setMissedCallNotificationsEnabled(

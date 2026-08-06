@@ -15,6 +15,7 @@ import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -41,16 +42,17 @@ class TelnyxNotificationHelper(private val context: Context) {
         /**
          * Notifications can produce only a short alert (and some OEMs suppress it when
          * a full-screen call notification immediately launches the app). Keep the
-         * device's selected phone ringtone playing until the incoming call is handled.
+         * configured app ringtone, or the device's selected phone ringtone, playing
+         * until the incoming call is handled.
          */
         private fun startIncomingCallRingtone(context: Context) {
             synchronized(ringtoneLock) {
                 if (incomingCallRingtone?.isPlaying == true) return
 
-                val ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                val ringtoneUri = getIncomingCallRingtoneUri(context)
                 val ringtone = RingtoneManager.getRingtone(context.applicationContext, ringtoneUri)
                 if (ringtone == null) {
-                    Log.w(TAG, "No default phone ringtone is configured")
+                    Log.w(TAG, "No incoming call ringtone is configured")
                     return
                 }
 
@@ -70,6 +72,23 @@ class TelnyxNotificationHelper(private val context: Context) {
                     ringtone.stop()
                 }
             }
+        }
+
+        private fun getIncomingCallRingtoneUri(context: Context): Uri {
+            val resourceName = VoicePnManager.getIncomingCallRingtoneResource(context)
+            if (!resourceName.isNullOrBlank()) {
+                val resourceId = context.resources.getIdentifier(
+                    resourceName,
+                    "raw",
+                    context.packageName
+                )
+                if (resourceId != 0) {
+                    return Uri.parse("android.resource://${context.packageName}/$resourceId")
+                }
+                Log.w(TAG, "Incoming ringtone resource '$resourceName' was not found; using the device ringtone")
+            }
+
+            return RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
         }
 
         private fun stopIncomingCallRingtone() {
