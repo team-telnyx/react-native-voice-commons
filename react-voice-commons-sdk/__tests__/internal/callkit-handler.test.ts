@@ -1,5 +1,6 @@
 const mockListeners = new Map<string, (event: any) => Promise<void>>();
 const mockRefs: Array<{ current: any }> = [];
+const mockRemoveAllListeners = jest.fn();
 let mockHookIndex = 0;
 let mockSetupEffect: (() => (() => void) | void) | undefined;
 
@@ -26,7 +27,7 @@ jest.mock('react-native', () => ({
       mockListeners.set(eventName, listener);
       return { remove: jest.fn(() => mockListeners.delete(eventName)) };
     }),
-    removeAllListeners: jest.fn(),
+    removeAllListeners: mockRemoveAllListeners,
   },
 }));
 
@@ -64,6 +65,8 @@ describe('CallKitHandler callbacks', () => {
       onNavigateBack: initialBack,
     });
     const cleanup = mockSetupEffect?.();
+
+    expect(mockRemoveAllListeners).not.toHaveBeenCalled();
 
     mockHookIndex = 0;
     CallKitHandler({

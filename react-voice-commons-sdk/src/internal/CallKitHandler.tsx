@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Platform, DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Global flag to ensure only one CallKitHandler is active
+// Global flag to ensure only one CallKitHandler is active.
 let isCallKitHandlerActive = false;
 
 interface CallData {
@@ -25,6 +25,9 @@ interface CallKitHandlerProps {
 /**
  * Internal CallKit handler for iOS push notifications
  * This component is automatically included in TelnyxVoiceApp
+ *
+ * The active instance removes only its own DeviceEventEmitter subscriptions on
+ * unmount via each listener's `.remove()` method.
  *
  * @internal - Users should not use this component directly
  */
@@ -102,9 +105,6 @@ export const CallKitHandler: React.FC<CallKitHandlerProps> = ({
 
     isCallKitHandlerActive = true;
     console.log('CallKitHandler: Setting up DeviceEventEmitter listeners (singleton instance)...');
-
-    DeviceEventEmitter.removeAllListeners('incomingVoIPCall');
-    DeviceEventEmitter.removeAllListeners('callKitAction');
 
     const incomingCallListener = DeviceEventEmitter.addListener(
       'incomingVoIPCall',
