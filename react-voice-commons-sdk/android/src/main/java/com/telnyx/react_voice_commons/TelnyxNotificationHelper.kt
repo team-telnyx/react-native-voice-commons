@@ -12,6 +12,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.RingtoneManager
 import android.os.Build
 import android.util.Log
@@ -56,6 +57,7 @@ class TelnyxNotificationHelper(private val context: Context) {
     }
 
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    private val defaultRingtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
 
     init {
         createNotificationChannels()
@@ -171,7 +173,7 @@ class TelnyxNotificationHelper(private val context: Context) {
                 lightColor = Color.GREEN
                 enableVibration(true)
                 setSound(
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
+                    defaultRingtoneUri,
                     AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
@@ -249,6 +251,13 @@ class TelnyxNotificationHelper(private val context: Context) {
             .setFullScreenIntent(appPendingIntent, true)
             .setContentIntent(appPendingIntent)
             .setColor(Color.GREEN)
+
+        // Android 21-25 has no notification channels, so configure the
+        // ringtone directly on the incoming-call notification.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            @Suppress("DEPRECATION")
+            builder.setSound(defaultRingtoneUri, AudioManager.STREAM_RING)
+        }
 
         // Add action buttons - use direct activity PendingIntents to avoid trampoline restrictions
         // Answer action - direct activity launch to avoid BAL restrictions
