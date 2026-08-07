@@ -2,29 +2,26 @@
 
 ## Unreleased
 
-### Bug Fixing
-
-- Preserve an iOS CallKit answer that occurs before React Native event listeners attach during a VoIP-push cold launch.
-- Hydrate iOS login and reconnect configurations from the current native PushKit token when callers omit one, preventing locked-device inbound calls from being missed when JavaScript login races token delivery.
-- Support two simultaneous iOS CallKit calls with UUID-targeted answer, end, hold, resume, and survivor restoration.
-- Route app hold/resume through CallKit and compensate partial call-swap failures to keep native and WebRTC state aligned.
-- Preserve the active signaling client when a second-call push arrives and avoid duplicate cold-answer actions.
-- Persist and forward the opt-in `pushWhenActive` configuration required for locked/background active-call PushKit delivery.
-- Treat Focus/DND-filtered CallKit registrations as terminal so rejected UUIDs cannot produce follow-up `UnknownCallUUID` answer transactions or ghost signaling calls.
-
-### Enhancement
-
-- Add public `swapCalls(targetCallId)` support and matching demo hold/resume/swap controls.
-
 ## [1.1.0] (2026-08-07)
 
 ### Enhancement
 
+- Add and persist opt-in `pushWhenActive` support so push routing remains available when an active WebSocket connection would otherwise be prioritized.
 - Add Android `incomingCallRingtone` configuration. Apps can provide the name of an audio resource bundled in `android/app/src/main/res/raw`; the setting is retained for incoming FCM calls.
+- Add iOS call-waiting support, including UUID-targeted answer, end, hold, resume, and `swapCalls(targetCallId)` operations for two simultaneous CallKit calls.
+- Expose the explicitly selected active call through the public client API and re-emit call collections when a tracked call changes state.
+- Forward custom SIP headers supplied to `newCall()` in the React Native SDK's expected format.
+- Add Android push-notification fallbacks when call notifications are unavailable, and declare the required foreground-service type for active calls.
+- Add documentation for `pushWhenActive`, answered-elsewhere handling, Trickle ICE, and Android custom incoming ringtones.
 
 ### Bug Fixing
 
-- Play and loop the Android incoming-call ringtone until the call is answered, rejected, ended, or dismissed. The SDK now falls back to the device's selected phone ringtone when no valid app resource is configured.
+- Play and loop the Android incoming-call ringtone until the call is answered, rejected, ended, or dismissed. The SDK falls back to the device's selected phone ringtone when no valid app resource is configured.
+- Preserve iOS CallKit answers that occur before React Native listeners attach during a VoIP-push cold launch, including the case where the app omits a PushKit token while the native token is already available.
+- Prevent stale CallKit callbacks and subscription leaks after React re-renders or the active call changes.
+- Handle repeated holds, call swaps, rejected pushes, malformed PushKit payloads, Focus/DND-filtered CallKit registrations, and a second incoming call without leaving ghost calls or stuck foreground flags.
+- Harden session teardown and reconnection by serializing disposal, cancelling pending connection work, and waiting for socket cleanup before continuing.
+- Clear stale fallback push actions and keep incoming-call handling available when notifications are disabled.
 
 ## [0.4.3] (2026-04-30)
 
