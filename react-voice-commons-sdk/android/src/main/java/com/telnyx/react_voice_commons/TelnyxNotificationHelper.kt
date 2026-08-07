@@ -27,7 +27,7 @@ import androidx.core.content.ContextCompat
  */
 class TelnyxNotificationHelper(private val context: Context) {
     companion object {
-        const val INCOMING_CALL_CHANNEL_ID = "telnyx_voice_incoming_calls_v2"
+        private const val INCOMING_CALL_CHANNEL_PREFIX = "telnyx_voice_incoming_calls_v3"
         const val ONGOING_CALL_CHANNEL_ID = "telnyx_voice_ongoing_calls"
         const val MISSED_CALL_CHANNEL_ID = "telnyx_voice_missed_calls"
         const val INCOMING_CALL_CHANNEL_NAME = "Incoming Telnyx Voice Calls"
@@ -49,7 +49,7 @@ class TelnyxNotificationHelper(private val context: Context) {
             synchronized(ringtoneLock) {
                 if (incomingCallRingtone?.isPlaying == true) return
 
-                val ringtoneUri = getIncomingCallRingtoneUri(context)
+                val ringtoneUri = getIncomingCallRingtoneUriForPlayback(context) ?: return
                 val ringtone = RingtoneManager.getRingtone(context.applicationContext, ringtoneUri)
                 if (ringtone == null) {
                     Log.w(TAG, "No incoming call ringtone is configured")
@@ -74,7 +74,7 @@ class TelnyxNotificationHelper(private val context: Context) {
             }
         }
 
-        private fun getIncomingCallRingtoneUri(context: Context): Uri {
+        private fun getConfiguredIncomingCallRingtoneUri(context: Context): Uri {
             val resourceName = VoicePnManager.getIncomingCallRingtoneResource(context)
             if (!resourceName.isNullOrBlank()) {
                 val resourceId = context.resources.getIdentifier(
@@ -89,6 +89,32 @@ class TelnyxNotificationHelper(private val context: Context) {
             }
 
             return RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+        }
+
+        private fun getIncomingCallChannelId(context: Context): String {
+            val resourceName = VoicePnManager.getIncomingCallRingtoneResource(context)
+            if (resourceName.isNullOrBlank()) return "${INCOMING_CALL_CHANNEL_PREFIX}_default"
+
+            val resourceId = context.resources.getIdentifier(resourceName, "raw", context.packageName)
+            return if (resourceId == 0) {
+                "${INCOMING_CALL_CHANNEL_PREFIX}_default"
+            } else {
+                "${INCOMING_CALL_CHANNEL_PREFIX}_${Integer.toUnsignedString(resourceName.hashCode(), 16)}"
+            }
+        }
+
+        private fun getIncomingCallRingtoneUriForPlayback(context: Context): Uri? {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                return getConfiguredIncomingCallRingtoneUri(context)
+            }
+
+            val channel = (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .getNotificationChannel(getIncomingCallChannelId(context))
+            if (channel?.sound == null) {
+                Log.d(TAG, "Incoming call ringtone is disabled in notification settings")
+                return null
+            }
+            return channel.sound
         }
 
         private fun stopIncomingCallRingtone() {
@@ -127,8 +153,6 @@ class TelnyxNotificationHelper(private val context: Context) {
     }
 
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    private val defaultRingtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-
     init {
         createNotificationChannels()
     }
@@ -234,7 +258,7 @@ class TelnyxNotificationHelper(private val context: Context) {
             // New ID: Android preserves a channel's sound after it is created, so the
             // prior silent channel cannot be updated for existing installations.
             val incomingCallChannel = NotificationChannel(
-                INCOMING_CALL_CHANNEL_ID,
+                getIncomingCallChannelId(context),
                 INCOMING_CALL_CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
@@ -243,7 +267,7 @@ class TelnyxNotificationHelper(private val context: Context) {
                 lightColor = Color.GREEN
                 enableVibration(true)
                 setSound(
-                    defaultRingtoneUri,
+                    getConfiguredIncomingCallRingtoneUri(context),
                     AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
@@ -310,7 +334,7 @@ class TelnyxNotificationHelper(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val builder = NotificationCompat.Builder(context, INCOMING_CALL_CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, getIncomingCallChannelId(context))
             .setContentTitle("Incoming Call")
             .setContentText("$displayName")
             .setSmallIcon(android.R.drawable.ic_menu_call)
@@ -326,7 +350,7 @@ class TelnyxNotificationHelper(private val context: Context) {
         // ringtone directly on the incoming-call notification.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             @Suppress("DEPRECATION")
-            builder.setSound(defaultRingtoneUri, AudioManager.STREAM_RING)
+            builder.setSound(getConfiguredIncomingCallRingtoneUri(context), AudioManager.STREAM_RING)
         }
 
         // Add action buttons - use direct activity PendingIntents to avoid trampoline restrictions
@@ -378,7 +402,7 @@ class TelnyxNotificationHelper(private val context: Context) {
         val blockReason = notifyIfPermitted(
             NOTIFICATION_ID,
             notification,
-            INCOMING_CALL_CHANNEL_ID,
+            getIncomingCallChannelId(context),
         )
         if (blockReason == null) {
             startIncomingCallRingtone(context)
