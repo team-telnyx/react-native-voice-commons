@@ -306,6 +306,8 @@ export class TelnyxVoipClient {
       useTrickleIce: config.useTrickleIce ?? this._options.useTrickleIce,
     });
 
+    await VoicePnBridge.setIncomingCallRingtone(loginConfig.incomingCallRingtone);
+
     // Store credentials for future reconnection
     await this._storeCredentials(loginConfig);
 
@@ -337,6 +339,8 @@ export class TelnyxVoipClient {
       ...config,
       useTrickleIce: config.useTrickleIce ?? this._options.useTrickleIce,
     });
+
+    await VoicePnBridge.setIncomingCallRingtone(loginConfig.incomingCallRingtone);
 
     // Store token for future reconnection
     await this._storeToken(loginConfig);

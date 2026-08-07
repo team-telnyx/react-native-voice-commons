@@ -13,7 +13,10 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.media.AudioAttributes
 import android.media.AudioManager
+import android.media.MediaPlayer
+import android.media.Ringtone
 import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -25,7 +28,7 @@ import androidx.core.content.ContextCompat
  */
 class TelnyxNotificationHelper(private val context: Context) {
     companion object {
-        const val INCOMING_CALL_CHANNEL_ID = "telnyx_voice_incoming_calls_v2"
+        private const val INCOMING_CALL_CHANNEL_PREFIX = "telnyx_voice_incoming_calls_v3"
         const val ONGOING_CALL_CHANNEL_ID = "telnyx_voice_ongoing_calls"
         const val MISSED_CALL_CHANNEL_ID = "telnyx_voice_missed_calls"
         const val INCOMING_CALL_CHANNEL_NAME = "Incoming Telnyx Voice Calls"
@@ -34,6 +37,154 @@ class TelnyxNotificationHelper(private val context: Context) {
         const val NOTIFICATION_ID = 1001
         const val ONGOING_CALL_NOTIFICATION_ID = 1002
         private const val TAG = "TelnyxNotifications"
+        private val ringtoneLock = Any()
+        private var incomingCallRingtone: Ringtone? = null
+        private var incomingCallMediaPlayer: MediaPlayer? = null
+
+        /**
+         * Notifications can produce only a short alert (and some OEMs suppress it when
+         * a full-screen call notification immediately launches the app). Keep the
+         * configured app ringtone, or the device's selected phone ringtone, playing
+         * until the incoming call is handled.
+         */
+        private fun startIncomingCallRingtone(context: Context) {
+            synchronized(ringtoneLock) {
+                if (
+                    incomingCallRingtone?.isPlaying == true ||
+                    incomingCallMediaPlayer?.isPlaying == true
+                ) {
+                    return
+                }
+
+                val ringtoneUri = getIncomingCallRingtoneUriForPlayback(context) ?: return
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+                    startLegacyIncomingCallRingtone(context, ringtoneUri)
+                    return
+                }
+
+                val ringtone = RingtoneManager.getRingtone(context.applicationContext, ringtoneUri)
+                if (ringtone == null) {
+                    Log.w(TAG, "No incoming call ringtone is configured")
+                    return
+                }
+
+                try {
+                    ringtone.audioAttributes = AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                        .build()
+                    ringtone.isLooping = true
+                    ringtone.play()
+                    incomingCallRingtone = ringtone
+                    Log.d(TAG, "Started incoming call ringtone")
+                } catch (e: RuntimeException) {
+                    Log.e(TAG, "Failed to start incoming call ringtone", e)
+                    ringtone.stop()
+                }
+            }
+        }
+
+        private fun startLegacyIncomingCallRingtone(context: Context, ringtoneUri: Uri) {
+            try {
+                val mediaPlayer = MediaPlayer().apply {
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                            .build()
+                    )
+                    setDataSource(context.applicationContext, ringtoneUri)
+                    isLooping = true
+                    setOnPreparedListener { player ->
+                        synchronized(ringtoneLock) {
+                            if (incomingCallMediaPlayer === player) {
+                                player.start()
+                            } else {
+                                player.release()
+                            }
+                        }
+                    }
+                    setOnErrorListener { player, _, _ ->
+                        Log.e(TAG, "Failed to play incoming call ringtone")
+                        if (incomingCallMediaPlayer === player) {
+                            incomingCallMediaPlayer = null
+                        }
+                        player.release()
+                        true
+                    }
+                }
+                incomingCallMediaPlayer = mediaPlayer
+                mediaPlayer.prepareAsync()
+                Log.d(TAG, "Preparing incoming call ringtone")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start incoming call ringtone", e)
+            }
+        }
+
+        private fun getConfiguredIncomingCallRingtoneUri(context: Context): Uri {
+            val resourceName = VoicePnManager.getIncomingCallRingtoneResource(context)
+            if (!resourceName.isNullOrBlank()) {
+                val resourceId = context.resources.getIdentifier(
+                    resourceName,
+                    "raw",
+                    context.packageName
+                )
+                if (resourceId != 0) {
+                    return Uri.parse("android.resource://${context.packageName}/$resourceId")
+                }
+                Log.w(TAG, "Incoming ringtone resource '$resourceName' was not found; using the device ringtone")
+            }
+
+            return RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+        }
+
+        private fun getIncomingCallChannelId(context: Context): String {
+            val resourceName = VoicePnManager.getIncomingCallRingtoneResource(context)
+            if (resourceName.isNullOrBlank()) return "${INCOMING_CALL_CHANNEL_PREFIX}_default"
+
+            val resourceId = context.resources.getIdentifier(resourceName, "raw", context.packageName)
+            return if (resourceId == 0) {
+                "${INCOMING_CALL_CHANNEL_PREFIX}_default"
+            } else {
+                "${INCOMING_CALL_CHANNEL_PREFIX}_${Integer.toUnsignedString(resourceName.hashCode(), 16)}"
+            }
+        }
+
+        private fun getIncomingCallRingtoneUriForPlayback(context: Context): Uri? {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                return getConfiguredIncomingCallRingtoneUri(context)
+            }
+
+            val channel = (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .getNotificationChannel(getIncomingCallChannelId(context))
+            if (channel?.sound == null) {
+                Log.d(TAG, "Incoming call ringtone is disabled in notification settings")
+                return null
+            }
+            return channel.sound
+        }
+
+        private fun stopIncomingCallRingtone() {
+            synchronized(ringtoneLock) {
+                incomingCallRingtone?.let { ringtone ->
+                    try {
+                        ringtone.stop()
+                    } catch (e: RuntimeException) {
+                        Log.w(TAG, "Failed to stop incoming call ringtone", e)
+                    }
+                }
+                incomingCallRingtone = null
+                incomingCallMediaPlayer?.let { mediaPlayer ->
+                    try {
+                        mediaPlayer.stop()
+                    } catch (_: IllegalStateException) {
+                        // The player may still be preparing.
+                    }
+                    mediaPlayer.release()
+                }
+                incomingCallMediaPlayer = null
+            }
+        }
         
         /**
          * Static method to hide notifications from anywhere in the app
@@ -42,6 +193,7 @@ class TelnyxNotificationHelper(private val context: Context) {
         fun hideNotificationFromContext(context: Context) {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.cancel(NOTIFICATION_ID)
+            stopIncomingCallRingtone()
             Log.d(TAG, "Dismissed Telnyx notification from static context")
         }
         
@@ -57,8 +209,6 @@ class TelnyxNotificationHelper(private val context: Context) {
     }
 
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    private val defaultRingtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-
     init {
         createNotificationChannels()
     }
@@ -164,7 +314,7 @@ class TelnyxNotificationHelper(private val context: Context) {
             // New ID: Android preserves a channel's sound after it is created, so the
             // prior silent channel cannot be updated for existing installations.
             val incomingCallChannel = NotificationChannel(
-                INCOMING_CALL_CHANNEL_ID,
+                getIncomingCallChannelId(context),
                 INCOMING_CALL_CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
@@ -173,7 +323,7 @@ class TelnyxNotificationHelper(private val context: Context) {
                 lightColor = Color.GREEN
                 enableVibration(true)
                 setSound(
-                    defaultRingtoneUri,
+                    getConfiguredIncomingCallRingtoneUri(context),
                     AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
@@ -240,7 +390,7 @@ class TelnyxNotificationHelper(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val builder = NotificationCompat.Builder(context, INCOMING_CALL_CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, getIncomingCallChannelId(context))
             .setContentTitle("Incoming Call")
             .setContentText("$displayName")
             .setSmallIcon(android.R.drawable.ic_menu_call)
@@ -256,7 +406,7 @@ class TelnyxNotificationHelper(private val context: Context) {
         // ringtone directly on the incoming-call notification.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             @Suppress("DEPRECATION")
-            builder.setSound(defaultRingtoneUri, AudioManager.STREAM_RING)
+            builder.setSound(getConfiguredIncomingCallRingtoneUri(context), AudioManager.STREAM_RING)
         }
 
         // Add action buttons - use direct activity PendingIntents to avoid trampoline restrictions
@@ -308,9 +458,10 @@ class TelnyxNotificationHelper(private val context: Context) {
         val blockReason = notifyIfPermitted(
             NOTIFICATION_ID,
             notification,
-            INCOMING_CALL_CHANNEL_ID,
+            getIncomingCallChannelId(context),
         )
         if (blockReason == null) {
+            startIncomingCallRingtone(context)
             Log.d(TAG, "Showed incoming call notification for: $callerName ($callerNumber)")
         } else {
             launchFullScreenIntentFallback(notification, callId, metadata, blockReason)
@@ -436,6 +587,7 @@ class TelnyxNotificationHelper(private val context: Context) {
 
     fun hideIncomingCallNotification() {
         notificationManager.cancel(NOTIFICATION_ID)
+        stopIncomingCallRingtone()
         Log.d(TAG, "Hid incoming call notification")
     }
 

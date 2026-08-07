@@ -125,6 +125,19 @@ class VoicePnBridge {
     }
   }
   /**
+   * Configure Android's incoming-call ringtone using an app resource in `res/raw`.
+   * Pass no value to use the device's default phone ringtone.
+   */
+  static async setIncomingCallRingtone(resourceName) {
+    if (react_native_1.Platform.OS !== 'android') return true;
+    try {
+      return await NativeBridge.setIncomingCallRingtone(resourceName?.trim() || null);
+    } catch (error) {
+      console.error('VoicePnBridge: Error setting incoming call ringtone:', error);
+      return false;
+    }
+  }
+  /**
    * Get pending CallKit answer UUID from native storage (iOS only).
    * When the user answers a CallKit call before JS listeners are ready,
    * the native side persists the answer UUID in UserDefaults so JS can detect it.

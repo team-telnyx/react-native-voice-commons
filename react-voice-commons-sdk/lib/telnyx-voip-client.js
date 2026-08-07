@@ -309,6 +309,7 @@ class TelnyxVoipClient {
       ...config,
       useTrickleIce: config.useTrickleIce ?? this._options.useTrickleIce,
     });
+    await voice_pn_bridge_1.VoicePnBridge.setIncomingCallRingtone(loginConfig.incomingCallRingtone);
     // Store credentials for future reconnection
     await this._storeCredentials(loginConfig);
     await this._sessionManager.connectWithCredential(loginConfig);
@@ -335,6 +336,7 @@ class TelnyxVoipClient {
       ...config,
       useTrickleIce: config.useTrickleIce ?? this._options.useTrickleIce,
     });
+    await voice_pn_bridge_1.VoicePnBridge.setIncomingCallRingtone(loginConfig.incomingCallRingtone);
     // Store token for future reconnection
     await this._storeToken(loginConfig);
     await this._sessionManager.connectWithToken(loginConfig);
