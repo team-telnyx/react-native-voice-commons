@@ -13,6 +13,7 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.media.AudioAttributes
 import android.media.AudioManager
+import android.media.MediaPlayer
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.net.Uri
@@ -38,6 +39,7 @@ class TelnyxNotificationHelper(private val context: Context) {
         private const val TAG = "TelnyxNotifications"
         private val ringtoneLock = Any()
         private var incomingCallRingtone: Ringtone? = null
+        private var incomingCallMediaPlayer: MediaPlayer? = null
 
         /**
          * Notifications can produce only a short alert (and some OEMs suppress it when
@@ -47,9 +49,19 @@ class TelnyxNotificationHelper(private val context: Context) {
          */
         private fun startIncomingCallRingtone(context: Context) {
             synchronized(ringtoneLock) {
-                if (incomingCallRingtone?.isPlaying == true) return
+                if (
+                    incomingCallRingtone?.isPlaying == true ||
+                    incomingCallMediaPlayer?.isPlaying == true
+                ) {
+                    return
+                }
 
                 val ringtoneUri = getIncomingCallRingtoneUriForPlayback(context) ?: return
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+                    startLegacyIncomingCallRingtone(context, ringtoneUri)
+                    return
+                }
+
                 val ringtone = RingtoneManager.getRingtone(context.applicationContext, ringtoneUri)
                 if (ringtone == null) {
                     Log.w(TAG, "No incoming call ringtone is configured")
@@ -61,9 +73,7 @@ class TelnyxNotificationHelper(private val context: Context) {
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
                         .build()
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                        ringtone.isLooping = true
-                    }
+                    ringtone.isLooping = true
                     ringtone.play()
                     incomingCallRingtone = ringtone
                     Log.d(TAG, "Started incoming call ringtone")
@@ -71,6 +81,43 @@ class TelnyxNotificationHelper(private val context: Context) {
                     Log.e(TAG, "Failed to start incoming call ringtone", e)
                     ringtone.stop()
                 }
+            }
+        }
+
+        private fun startLegacyIncomingCallRingtone(context: Context, ringtoneUri: Uri) {
+            try {
+                val mediaPlayer = MediaPlayer().apply {
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                            .build()
+                    )
+                    setDataSource(context.applicationContext, ringtoneUri)
+                    isLooping = true
+                    setOnPreparedListener { player ->
+                        synchronized(ringtoneLock) {
+                            if (incomingCallMediaPlayer === player) {
+                                player.start()
+                            } else {
+                                player.release()
+                            }
+                        }
+                    }
+                    setOnErrorListener { player, _, _ ->
+                        Log.e(TAG, "Failed to play incoming call ringtone")
+                        if (incomingCallMediaPlayer === player) {
+                            incomingCallMediaPlayer = null
+                        }
+                        player.release()
+                        true
+                    }
+                }
+                incomingCallMediaPlayer = mediaPlayer
+                mediaPlayer.prepareAsync()
+                Log.d(TAG, "Preparing incoming call ringtone")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start incoming call ringtone", e)
             }
         }
 
@@ -127,6 +174,15 @@ class TelnyxNotificationHelper(private val context: Context) {
                     }
                 }
                 incomingCallRingtone = null
+                incomingCallMediaPlayer?.let { mediaPlayer ->
+                    try {
+                        mediaPlayer.stop()
+                    } catch (_: IllegalStateException) {
+                        // The player may still be preparing.
+                    }
+                    mediaPlayer.release()
+                }
+                incomingCallMediaPlayer = null
             }
         }
         
