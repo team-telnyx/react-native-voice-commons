@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Rewrites this package's `@telnyx/react-native-voice-sdk` dependency
-// constraint to ">=<sibling version>" right before publishing.
+// constraint to "^<sibling version>" right before publishing. This ensures
+// Commons receives the primitive SDK features it was built against without
+// accepting a future breaking major version automatically.
 //
 // Used by the `dev:published` npm script. Implemented in Node (not POSIX
 // shell substitution) so it works on both POSIX runners and Windows, where
@@ -28,7 +30,7 @@ if (typeof version !== 'string' || version.length === 0) {
   process.exit(1);
 }
 
-const range = `>=${version}`;
+const range = `^${version}`;
 console.log(`[set-voice-sdk-floor] Setting @telnyx/react-native-voice-sdk to "${range}"`);
 
 execSync(`npm pkg set "dependencies.@telnyx/react-native-voice-sdk"="${range}"`, {
