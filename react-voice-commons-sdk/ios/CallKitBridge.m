@@ -60,4 +60,11 @@ RCT_EXTERN_METHOD(updateCall:(NSString *)callUUID
 RCT_EXTERN_METHOD(getActiveCalls:(RCTPromiseResolveBlock)resolve 
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+#if DEBUG
+RCT_EXTERN_METHOD(simulateAudioSetupRace:(NSString *)callUUID
+                  delayMilliseconds:(nonnull NSNumber *)delayMilliseconds
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+#endif
+
 @end

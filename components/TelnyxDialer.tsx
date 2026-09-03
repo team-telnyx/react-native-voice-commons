@@ -8,6 +8,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  NativeModules,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -28,6 +29,8 @@ interface TelnyxDialerProps {
 
 type DestinationType = 'sip' | 'phone';
 const telnyxLogo = require('../assets/images/telnyx_logo.png');
+// Change by hand for VSUP-226 validation. The native method only exists in DEBUG builds.
+const enableAudioRaceDebug = false;
 
 export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => {
   const { voipClient } = useTelnyxVoice();
@@ -177,6 +180,21 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
     }
   };
 
+  const handleAudioRaceDebug = async () => {
+    try {
+      if (!activeCall || !NativeModules.CallKitBridge?.simulateAudioSetupRace) {
+        throw new Error('Audio race debug bridge is unavailable');
+      }
+      await NativeModules.CallKitBridge.simulateAudioSetupRace(activeCall.callId, 250);
+      Alert.alert(
+        'Audio race scheduled',
+        'A late audio reset will run in 250 ms. Check Xcode logs.'
+      );
+    } catch (error) {
+      Alert.alert('Audio race failed', String(error));
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
@@ -279,6 +297,15 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
         )}
 
         <View style={styles.actions}>
+          {enableAudioRaceDebug && activeCall && (
+            <TouchableOpacity
+              style={styles.disconnectButton}
+              onPress={handleAudioRaceDebug}
+              testID="audioRaceDebugButton"
+            >
+              <Text style={styles.disconnectButtonText}>Inject audio setup race</Text>
+            </TouchableOpacity>
+          )}
           {isStartingCall || activeCall ? (
             <InlineCallControls
               activeCall={activeCall}
