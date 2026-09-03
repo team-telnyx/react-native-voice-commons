@@ -855,13 +855,20 @@ import React
             webRTCConfig.categoryOptions = [.duckOthers, .allowBluetooth]
             do {
                 try rtcAudioSession.setConfiguration(webRTCConfig)
-                try rtcAudioSession.setActive(true)
             } catch {
-                NSLog("TelnyxVoice: activateWebRTCAudio (\(reason)) error: \(error)")
+                NSLog("TelnyxVoice: activateWebRTCAudio configuration (\(reason)) error: \(error)")
             }
-            rtcAudioSession.isAudioEnabled = true
+
+            var activationSucceeded = false
+            do {
+                try rtcAudioSession.setActive(true)
+                activationSucceeded = true
+            } catch {
+                NSLog("TelnyxVoice: activateWebRTCAudio activation (\(reason)) error: \(error)")
+            }
+            rtcAudioSession.isAudioEnabled = activationSucceeded
             rtcAudioSession.unlockForConfiguration()
-            if !wasAudioEnabled {
+            if activationSucceeded && !wasAudioEnabled {
                 rtcAudioSession.audioSessionDidActivate(audioSession)
             }
         }
