@@ -79,16 +79,17 @@ describe('iOS CallKitBridge audio lifecycle', () => {
     expect(initialDisable).toBeGreaterThan(providerGuard);
   });
 
-  it('verifies audio after every connected call path', () => {
+  it('verifies audio only when no deferred answer action was fulfilled', () => {
     expect(reportCallConnected).toContain('manager.verifyAudioAfterConnection(for: uuid)');
-    expect(reportCallConnected).not.toContain(
-      '} else {\n                // Fallback: ensure audio'
+    expect(reportCallConnected).toContain(
+      '} else {\n                manager.verifyAudioAfterConnection(for: uuid)'
     );
   });
 
   it('does not report audio enabled when activation fails', () => {
     expect(activateWebRTCAudio).toContain('var activationSucceeded = false');
-    expect(activateWebRTCAudio).toContain('rtcAudioSession.isAudioEnabled = activationSucceeded');
+    expect(activateWebRTCAudio).toContain('if activationSucceeded {');
+    expect(activateWebRTCAudio).toContain('} else if !wasAudioEnabled {');
     expect(activateWebRTCAudio).toContain('if activationSucceeded && !wasAudioEnabled');
   });
 });
