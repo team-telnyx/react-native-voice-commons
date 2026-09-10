@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Dependencies
+
+- Require `@telnyx/react-native-voice-sdk ^1.1.0` when publishing. This
+  includes the primitive SDK support required by Commons, such as
+  `pushWhenActive`, while staying within the compatible 1.x line.
+- Remove the unused direct `expo` dependency. Commons does not require Expo,
+  so this avoids installing Expo SDK 53 alongside an application's Expo SDK.
+
 ## [1.1.0] (2026-08-07)
 
 ### Enhancement

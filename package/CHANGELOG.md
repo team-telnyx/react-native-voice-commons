@@ -7,6 +7,18 @@
 - Accept the gateway's canonical `holdState: "active"` unhold response so repeated hold/resume cycles do not leave the call stuck in `HELD`.
 - Add opt-in `pushWhenActive` parity with the native iOS SDK. Login sends `push_when_active` and `pn_late_fanout`, and answers include `answered_device_token` when a non-empty PushKit token is configured.
 
+## [1.0.0](https://www.npmjs.com/package/@telnyx/react-native-voice-sdk/v/1.0.0) (2026-06-14)
+
+### Enhancement
+
+- Add opt-in Trickle ICE support for faster call setup. It is disabled by default, preserving the previous complete-ICE-gathering behavior. The internal `sdp-utils.ts` module adds the Trickle ICE capability to SDP and removes candidates that are sent separately over signaling.
+- Add opt-in native missed-call push notifications through `enableMissedCallNotifications`; it is disabled by default.
+- Expand call-quality reports with ICE candidate-pair, transport, local audio, and interval data to align the report payload with the JavaScript SDK.
+
+### Compatibility
+
+- No intentional breaking API or default-behavior change from `0.4.5`. Both new call-setup and missed-call-push behavior require explicit opt-in.
+
 ## [0.4.5](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk-v0.4.5) (2026-04-30)
 
 ### Bug Fixing
