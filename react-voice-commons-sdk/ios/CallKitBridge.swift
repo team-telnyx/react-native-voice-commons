@@ -440,28 +440,30 @@ import React
                 NSLog("TelnyxVoice: reportCallConnected - fulfilling deferred CXAnswerCallAction")
                 pendingAction.fulfill()
             } else {
-                // Fallback: ensure audio is enabled for non-push or already-fulfilled cases
-                let rtcAudioSession = RTCAudioSession.sharedInstance()
-                rtcAudioSession.lockForConfiguration()
-                let webRTCConfig = RTCAudioSessionConfiguration.webRTC()
-                webRTCConfig.categoryOptions = [.duckOthers, .allowBluetooth]
-                do {
-                    try rtcAudioSession.setConfiguration(webRTCConfig)
-                } catch {
-                    NSLog("TelnyxVoice: reportCallConnected - setConfiguration error: \(error)")
-                }
-                do {
-                    try rtcAudioSession.setActive(true)
-                } catch {
-                    NSLog("TelnyxVoice: reportCallConnected - setActive error: \(error)")
-                }
-                rtcAudioSession.isAudioEnabled = true
-                rtcAudioSession.unlockForConfiguration()
-                rtcAudioSession.audioSessionDidActivate(AVAudioSession.sharedInstance())
+                manager.verifyAudioAfterConnection(for: uuid)
             }
 
             resolve(["success": true])
         }
+
+        #if DEBUG
+            @objc func simulateAudioSetupRace(
+                _ callUUID: String,
+                delayMilliseconds: NSNumber,
+                resolver resolve: @escaping RCTPromiseResolveBlock,
+                rejecter reject: @escaping RCTPromiseRejectBlock
+            ) {
+                guard let uuid = UUID(uuidString: callUUID) else {
+                    reject("INVALID_UUID", "Invalid UUID format", nil)
+                    return
+                }
+                getCallKitManager().simulateAudioSetupRace(
+                    for: uuid,
+                    delay: delayMilliseconds.doubleValue / 1_000
+                )
+                resolve(["scheduled": true, "delayMilliseconds": delayMilliseconds])
+            }
+        #endif
 
         @objc func reportCallEnded(
             _ callUUID: String, reason: NSNumber,
@@ -744,6 +746,20 @@ import React
             lock: stateLock)
         public lazy var pendingHeldActions = LockedDictionary<UUID, CXSetHeldCallAction>(
             lock: stateLock)
+        private var audioLifecycleGeneration = 0
+
+        private func advanceAudioLifecycleGeneration() -> Int {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            audioLifecycleGeneration += 1
+            return audioLifecycleGeneration
+        }
+
+        private func currentAudioLifecycleGeneration() -> Int {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            return audioLifecycleGeneration
+        }
 
         fileprivate func markCallKitRegistered(_ callUUID: UUID) {
             guard var callData = activeCalls[callUUID] else {
@@ -825,10 +841,6 @@ import React
         }
 
         private func setupCallKit() {
-            // ALWAYS configure WebRTC audio, even if provider already exists
-            RTCAudioSession.sharedInstance().useManualAudio = true
-            RTCAudioSession.sharedInstance().isAudioEnabled = false
-
             // Guard against duplicate provider creation (async setupAutomatically can overwrite
             // the provider created by setupSynchronously for VoIP push)
             guard callKitProvider == nil else {
@@ -836,8 +848,83 @@ import React
                 return
             }
 
+            // Set the initial state only when installing the provider. Re-running setup after
+            // CallKit activation must never disable a live WebRTC audio device.
+            RTCAudioSession.sharedInstance().useManualAudio = true
+            RTCAudioSession.sharedInstance().isAudioEnabled = false
+
             _ = installCallKitProvider()
         }
+
+        fileprivate func activateWebRTCAudio(
+            _ audioSession: AVAudioSession = AVAudioSession.sharedInstance(),
+            reason: String
+        ) {
+            let rtcAudioSession = RTCAudioSession.sharedInstance()
+            rtcAudioSession.lockForConfiguration()
+            let wasAudioEnabled = rtcAudioSession.isAudioEnabled
+            NSLog("TelnyxVoice: activating WebRTC audio (\(reason)); enabled=\(wasAudioEnabled)")
+            let webRTCConfig = RTCAudioSessionConfiguration.webRTC()
+            webRTCConfig.categoryOptions = [.duckOthers, .allowBluetooth]
+            do {
+                try rtcAudioSession.setConfiguration(webRTCConfig)
+            } catch {
+                NSLog("TelnyxVoice: activateWebRTCAudio configuration (\(reason)) error: \(error)")
+            }
+
+            var activationSucceeded = false
+            do {
+                try rtcAudioSession.setActive(true)
+                activationSucceeded = true
+            } catch {
+                NSLog("TelnyxVoice: activateWebRTCAudio activation (\(reason)) error: \(error)")
+            }
+            if activationSucceeded {
+                rtcAudioSession.isAudioEnabled = true
+            } else if !wasAudioEnabled {
+                rtcAudioSession.isAudioEnabled = false
+            }
+            rtcAudioSession.unlockForConfiguration()
+            if activationSucceeded && !wasAudioEnabled {
+                rtcAudioSession.audioSessionDidActivate(audioSession)
+            }
+        }
+
+        fileprivate func verifyAudioAfterConnection(for callUUID: UUID) {
+            // didActivate is asynchronous after CXAnswerCallAction.fulfill(). Verify shortly
+            // afterwards so either callback ordering converges on the same idempotent state.
+            let verificationGeneration = currentAudioLifecycleGeneration()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self] in
+                guard let self,
+                    self.currentAudioLifecycleGeneration() == verificationGeneration,
+                    self.activeCalls[callUUID] != nil
+                else { return }
+                let rtcAudioSession = RTCAudioSession.sharedInstance()
+                rtcAudioSession.lockForConfiguration()
+                let isAudioEnabled = rtcAudioSession.isAudioEnabled
+                rtcAudioSession.unlockForConfiguration()
+                if isAudioEnabled {
+                    NSLog("TelnyxVoice: audio verification passed for \(callUUID)")
+                } else if AVAudioSession.sharedInstance().category != .playAndRecord {
+                    NSLog("TelnyxVoice: audio verification skipped for inactive CallKit session \(callUUID)")
+                } else {
+                    NSLog("TelnyxVoice: audio verification recovering disabled audio for \(callUUID)")
+                    self.activateWebRTCAudio(reason: "connected-call verification")
+                }
+            }
+        }
+
+        #if DEBUG
+            fileprivate func simulateAudioSetupRace(for callUUID: UUID, delay: TimeInterval) {
+                NSLog("TelnyxVoice: [VSUP-226] scheduling late audio reset in \(delay)s")
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    let rtcAudioSession = RTCAudioSession.sharedInstance()
+                    rtcAudioSession.isAudioEnabled = false
+                    NSLog("TelnyxVoice: [VSUP-226] injected late setup reset; enabled=false")
+                    self?.verifyAudioAfterConnection(for: callUUID)
+                }
+            }
+        #endif
 
         private func installCallKitProvider() -> CXProvider {
             // Use the localizedName from the app's bundle display name or fallback
@@ -1404,6 +1491,7 @@ import React
                 "CallKitDidPerformEndCallAction", callUUID: action.callUUID,
                 callData: callData)
 
+            _ = advanceAudioLifecycleGeneration()
             activeCalls.removeValue(forKey: action.callUUID)
             pendingAnswerActions.removeValue(forKey: action.callUUID)?.fail()
             pendingHeldActions.removeValue(forKey: action.callUUID)?.fail()
@@ -1442,31 +1530,8 @@ import React
 
         public func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
             NSLog("TelnyxVoice: Audio session activated by CallKit")
-
-            let rtcAudioSession = RTCAudioSession.sharedInstance()
-
-            // Step 1: Configure (matches native iOS SDK setupCorrectAudioConfiguration)
-            rtcAudioSession.lockForConfiguration()
-            let webRTCConfig = RTCAudioSessionConfiguration.webRTC()
-            webRTCConfig.categoryOptions = [.duckOthers, .allowBluetooth]
-            do {
-                try rtcAudioSession.setConfiguration(webRTCConfig)
-            } catch {
-                NSLog("TelnyxVoice: didActivateAudioSession - setConfiguration error: \(error)")
-            }
-            rtcAudioSession.unlockForConfiguration()
-
-            // Step 2: Activate (matches native iOS SDK setAudioSessionActive)
-            rtcAudioSession.lockForConfiguration()
-            do {
-                try rtcAudioSession.setActive(true)
-            } catch {
-                NSLog("TelnyxVoice: didActivateAudioSession - setActive error: \(error)")
-            }
-            rtcAudioSession.isAudioEnabled = true
-            rtcAudioSession.unlockForConfiguration()
-
-            rtcAudioSession.audioSessionDidActivate(audioSession)
+            _ = advanceAudioLifecycleGeneration()
+            activateWebRTCAudio(audioSession, reason: "CallKit didActivate")
 
             // Emit audio session activated event to React Native
             CallKitBridge.shared?.emitAudioSessionEvent(
@@ -1480,6 +1545,7 @@ import React
 
         public func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
             NSLog("TelnyxVoice: Audio session deactivated by CallKit")
+            _ = advanceAudioLifecycleGeneration()
 
             let rtcAudioSession = RTCAudioSession.sharedInstance()
 

@@ -66,6 +66,33 @@ const answerAction = extractFunction(
 );
 const answerCall = extractFunction('@objc func answerCall(');
 const handleIncomingVoipPush = extractFunction('@objc public func handleVoipPush(');
+const setupCallKit = extractFunction('private func setupCallKit()');
+const reportCallConnected = extractFunction('@objc func reportCallConnected(');
+const activateWebRTCAudio = extractFunction('fileprivate func activateWebRTCAudio(');
+
+describe('iOS CallKitBridge audio lifecycle', () => {
+  it('does not reset audio when CallKit is already installed', () => {
+    const providerGuard = setupCallKit.indexOf('guard callKitProvider == nil');
+    const initialDisable = setupCallKit.indexOf('isAudioEnabled = false');
+
+    expect(providerGuard).toBeGreaterThanOrEqual(0);
+    expect(initialDisable).toBeGreaterThan(providerGuard);
+  });
+
+  it('verifies audio only when no deferred answer action was fulfilled', () => {
+    expect(reportCallConnected).toContain('manager.verifyAudioAfterConnection(for: uuid)');
+    expect(reportCallConnected).toContain(
+      '} else {\n                manager.verifyAudioAfterConnection(for: uuid)'
+    );
+  });
+
+  it('does not report audio enabled when activation fails', () => {
+    expect(activateWebRTCAudio).toContain('var activationSucceeded = false');
+    expect(activateWebRTCAudio).toContain('if activationSucceeded {');
+    expect(activateWebRTCAudio).toContain('} else if !wasAudioEnabled {');
+    expect(activateWebRTCAudio).toContain('if activationSucceeded && !wasAudioEnabled');
+  });
+});
 
 describe('iOS CallKitBridge PushKit watchdog handling', () => {
   it('reports exactly one placeholder call, ends it, cleans state, then completes', () => {
