@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## [1.1.1] (2026-09-11)
+
+### Bug Fixing
+
+- Improve iOS CallKit audio reliability by routing activation and connected-call verification through a single idempotent recovery path.
+- Recover connected calls when CallKit owns an active play-and-record audio session but the WebRTC audio device remains disabled.
+- Prevent duplicate CallKit setup from disabling WebRTC audio after a call is already active, and harden failure handling when audio recovery does not succeed.
+
+### Dependencies
+
+- Continues to require `@telnyx/react-native-voice-sdk >= 1.1.0`; no new base Voice SDK release is required.
+
 ## [1.1.0] (2026-08-07)
 
 ### Enhancement
