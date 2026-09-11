@@ -156,7 +156,7 @@ class Call {
   /**
    * Custom headers received from the WebRTC INVITE message.
    * These headers are passed during call initiation and can contain application-specific information.
-   * Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+   * Format: `[{"name": "X-Header-Name", "value": "Value"}]`; header names must start with `X-`.
    */
   get inviteCustomHeaders() {
     return this._telnyxCall.inviteCustomHeaders;
@@ -164,7 +164,7 @@ class Call {
   /**
    * Custom headers received from the WebRTC ANSWER message.
    * These headers are passed during call acceptance and can contain application-specific information.
-   * Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+   * Format: `[{"name": "X-Header-Name", "value": "Value"}]`; header names must start with `X-`.
    */
   get answerCustomHeaders() {
     return this._telnyxCall.answerCustomHeaders;

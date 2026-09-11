@@ -372,7 +372,7 @@ export class TelnyxVoipClient {
    * This method is used for auto-reconnection scenarios where the app
    * comes back to the foreground and needs to restore the connection.
    *
-   * @returns Promise<boolean> - true if reconnection was successful, false otherwise
+   * @returns Whether reconnection was successful.
    */
   async loginFromStoredConfig(): Promise<boolean> {
     this._throwIfDisposed();

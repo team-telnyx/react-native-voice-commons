@@ -85,6 +85,10 @@ npm run prepublishOnly # Switch to published SDK + install
 npm run postpublish    # Switch back to local SDK + install
 ```
 
+### Release Checklist
+
+- Update the relevant package `CHANGELOG.md` before creating the GitHub release or publishing to npm. The automated release workflows bump `package.json`, generate docs, create the GitHub release, and publish the package, but they do not update changelogs.
+
 ## Demo App (repo root)
 
 ### Build & Dev
