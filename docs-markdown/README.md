@@ -2,7 +2,7 @@
 
 A high-level, state-agnostic, drop-in module for the Telnyx React Native SDK that simplifies WebRTC voice calling integration. This library provides a comprehensive solution for building VoIP applications with native call UI support, push notifications, and seamless background handling.
 
-## Key Features
+### Key Features
 
 - **TelnyxVoiceApp Integration**: Automatic lifecycle management and push notification handling
 - **Native Call UI**: CallKit (iOS) and ConnectionService (Android) integration
@@ -11,6 +11,7 @@ A high-level, state-agnostic, drop-in module for the Telnyx React Native SDK tha
 - **Reactive State Management**: RxJS-based state streams for real-time UI updates
 - **TypeScript Support**: Full TypeScript definitions for better developer experience
 - **Cross-Platform**: Built for both iOS and Android with React Native
+- **Framework-agnostic**: Works in both Expo and bare React Native projects. See the [bare RN reference demo](https://github.com/team-telnyx/telnyx-react-native-bare-demo) for non-Expo integration.
 
 ## About @telnyx/react-voice-commons-sdk
 
@@ -32,15 +33,30 @@ The `@telnyx/react-voice-commons-sdk` library provides:
 Integrate the library using the `TelnyxVoiceApp` component for automatic lifecycle management:
 
 ```tsx
-import { TelnyxVoiceApp, createTelnyxVoipClient } from '@telnyx/react-voice-commons-sdk';
+import {
+  TelnyxVoiceApp,
+  TelnyxVoipClient,
+  createTelnyxVoipClient,
+} from '@telnyx/react-voice-commons-sdk';
 
-// Create the VoIP client instance
+// Create the VoIP client instance (singleton — safe to call inside a component body)
 const voipClient = createTelnyxVoipClient({
   enableAppStateManagement: true, // Optional: Enable automatic app state management (default: true)
   debug: true, // Optional: Enable debug logging
 });
 
 export default function App() {
+  // Skip auto-login if the app was launched from a push notification —
+  // the SDK handles login internally via the push notification flow.
+  React.useEffect(() => {
+    TelnyxVoipClient.isLaunchedFromPushNotification().then((isFromPush) => {
+      if (!isFromPush) {
+        // Safe to auto-login
+        voipClient.loginFromStoredConfig();
+      }
+    });
+  }, []);
+
   return (
     <TelnyxVoiceApp voipClient={voipClient} enableAutoReconnect={false} debug={true}>
       <YourAppContent />
@@ -54,16 +70,22 @@ export default function App() {
 ### 1. VoIP Client Configuration
 
 ```tsx
+// createTelnyxVoipClient is a singleton — repeated calls return the same instance.
+// This makes it safe to call inside a React component body without re-creating on every render.
 const voipClient = createTelnyxVoipClient({
   enableAppStateManagement: true, // Optional: Enable automatic app state management (default: true)
   debug: true, // Optional: Enable debug logging
 });
+
+// If you need to tear down and recreate the client (e.g., on logout):
+import { destroyTelnyxVoipClient } from '@telnyx/react-voice-commons-sdk';
+await destroyTelnyxVoipClient(); // Disposes the singleton; next createTelnyxVoipClient() call creates a fresh instance
 ```
 
 **Configuration Options Explained:**
 
 - **`enableAppStateManagement: true`** - **Optional (default: true)**: Enables automatic background/foreground app state management. When enabled, the library automatically disconnects when the app goes to background (unless there's an active call) and handles reconnection logic. Set to `false` if you want to handle app lifecycle manually.
-- **`debug: true`** - **Optional**: Enables detailed logging for connection states, call transitions, and push notification processing. Useful for development and troubleshooting.
+- **`debug: true`** - **Optional (default: false)**: Enables detailed logging for connection states, call transitions, and push notification processing. Useful for development and troubleshooting.
 
 ### 2. TelnyxVoiceApp Wrapper
 
@@ -73,6 +95,7 @@ The `TelnyxVoiceApp` component handles:
 - Push notification processing from terminated state
 - Login state management with automatic reconnection
 - Background client management for push notifications
+- **Automatic CallKit coordinator wiring** — the `voipClient` is set on the CallKit coordinator on mount, so you don't need to call `setVoipClient()` manually
 
 ### 3. Reactive State Management
 
@@ -93,6 +116,79 @@ call.callState$.subscribe((state) => {
 });
 ```
 
+### Navigation
+
+As of **v0.3.0**, the SDK no longer navigates the host app. Routing on state transitions (e.g. redirecting to a login screen on disconnect, surfacing an in-call screen when a call arrives via push) is entirely the host app's responsibility. Subscribe to the observables below and invoke your own navigator.
+
+> In the snippets below, `voipClient` is the instance returned by `createTelnyxVoipClient()` (see [Basic Setup](#basic-setup)). It is a singleton, so it's safe to reference the same module-level value from any component, or to read it from context.
+
+**What to observe:**
+
+| Observable                    | Emits                                                                                        | Use it for                                                                                                                                                                |
+| ----------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `voipClient.connectionState$` | `TelnyxConnectionState` (`CONNECTING`, `CONNECTED`, `RECONNECTING`, `DISCONNECTED`, `ERROR`) | Redirect to login on `DISCONNECTED`; gate outbound-call UI on `CONNECTED`. There is no separate `loginState$` — `CONNECTED` means the socket is up **and** authenticated. |
+| `voipClient.activeCall$`      | `Call \| null`                                                                               | Emits the `Call` once the SDK has processed the push and the call has arrived. Navigate to your in-call screen here. Fires for push-launched, foreground, and outbound.   |
+| `voipClient.calls$`           | `Call[]`                                                                                     | Multi-call UIs (call waiting, conference).                                                                                                                                |
+| `call.callState$`             | `TelnyxCallState`                                                                            | Per-call transitions (ringing / active / held / ended).                                                                                                                   |
+
+#### Redirect to login on disconnect
+
+```tsx
+import { router } from 'expo-router';
+import { useEffect } from 'react';
+import { TelnyxConnectionState } from '@telnyx/react-voice-commons-sdk';
+
+useEffect(() => {
+  const sub = voipClient.connectionState$.subscribe((state) => {
+    if (state === TelnyxConnectionState.DISCONNECTED) {
+      router.replace('/');
+    }
+  });
+  return () => sub.unsubscribe();
+}, []);
+```
+
+#### Navigate to in-call screen when a call arrives (push-launched or otherwise)
+
+This is the piece that pairs with the push flow: after `isLaunchedFromPushNotification()` tells you to skip manual login, the SDK drives login internally and the call shows up on `activeCall$`. The same subscription handles foreground pushes and outbound calls, so you only need one:
+
+```tsx
+import { router } from 'expo-router';
+import { useEffect } from 'react';
+
+useEffect(() => {
+  // Handle the cold-start race: if the call was already delivered before this
+  // component mounted (common on push-launched cold starts), read it synchronously.
+  if (voipClient.currentActiveCall) {
+    router.replace('/call');
+  }
+
+  const sub = voipClient.activeCall$.subscribe((call) => {
+    if (call) router.replace('/call');
+    else router.replace('/dialer');
+  });
+  return () => sub.unsubscribe();
+}, []);
+```
+
+**Note on CallKit / ConnectionService:** the native call UI (ringtone, answer/decline) is shown by the OS regardless — your RN screen is only visible once the user taps into the app. If you only need native UI, you can skip the navigation step entirely.
+
+#### Optional: gate outbound-call UI on CONNECTED
+
+`canMakeCalls(state)` is a small helper that returns `true` only when `state === TelnyxConnectionState.CONNECTED`. It exists purely to keep the check readable — you can inline the comparison if you prefer.
+
+```tsx
+import { canMakeCalls } from '@telnyx/react-voice-commons-sdk';
+
+const [canCall, setCanCall] = useState(false);
+useEffect(() => {
+  const sub = voipClient.connectionState$.subscribe((s) => setCanCall(canMakeCalls(s)));
+  return () => sub.unsubscribe();
+}, []);
+```
+
+The same pattern works with `react-navigation`, React Router, or any other navigator — the SDK is agnostic.
+
 ### 4. Call Management
 
 ```tsx
@@ -106,7 +202,63 @@ await call.answer();
 await call.mute();
 await call.hold();
 await call.hangup();
+
+// Send DTMF tones (for IVRs, conference pins, etc.)
+await call.dtmf('1'); // single digit
+await call.dtmf('1234#'); // whole string
 ```
+
+**DTMF:** `call.dtmf(digits)` sends each character as a Verto `INFO` message to the Telnyx platform. Valid characters are `0-9`, `A-D`, `*`, and `#`; any other characters are silently dropped by the underlying SDK. The call must be in the `ACTIVE` state — calling `dtmf()` in any other state throws. Safe to call with a single digit for dialpad presses or with a whole string for pre-recorded sequences.
+
+### Push Notification Flow
+
+You do not wire push handlers in JS. The native layer does the work:
+
+- **Android**: `TelnyxFirebaseMessagingService` receives the FCM message, posts the call notification, and launches `TelnyxMainActivity` with the intent on Answer/Decline.
+- **iOS**: `TelnyxVoipPushHandler` receives the PushKit payload and reports the call to CallKit.
+
+The SDK then connects the socket and restores the call internally. You observe `voipClient.calls$` to render UI.
+
+#### Detecting a Push-Launched Cold Start
+
+When the OS wakes the app from a terminated state to deliver a call, the SDK is already handling login via the push flow. If your app _also_ triggers a login on mount, you get two competing sessions (double-login), which causes the call to fail or the socket to churn.
+
+Use the static `TelnyxVoipClient.isLaunchedFromPushNotification()` to guard your login:
+
+```tsx
+import { TelnyxVoipClient } from '@telnyx/react-voice-commons-sdk';
+
+React.useEffect(() => {
+  TelnyxVoipClient.isLaunchedFromPushNotification().then((isFromPush) => {
+    if (isFromPush) return; // SDK is handling login via the push flow
+    voipClient.loginFromStoredConfig(); // Normal cold start
+  });
+}, []);
+```
+
+Returns `true` when a pending FCM intent (Android) or PushKit payload (iOS) has not yet been consumed.
+
+#### Common Mistake: Manual or Automatic Login on Push
+
+The single most common integration bug is re-logging in while the SDK is already handling a push:
+
+```tsx
+// WRONG — runs on every mount, including push-launched cold starts
+React.useEffect(() => {
+  voipClient.login(config); // or loginFromStoredConfig(), or loginWithToken()
+}, []);
+```
+
+```tsx
+// Right — guard the login on push-launched cold starts
+React.useEffect(() => {
+  TelnyxVoipClient.isLaunchedFromPushNotification().then((isFromPush) => {
+    if (!isFromPush) voipClient.loginFromStoredConfig();
+  });
+}, []);
+```
+
+Symptoms of getting this wrong: the incoming call rings briefly then disappears, the socket disconnects mid-call, or CallKit shows a call that immediately ends.
 
 ### Authentication & Persistent Storage
 
@@ -122,6 +274,7 @@ import { createCredentialConfig } from '@telnyx/react-voice-commons-sdk';
 const config = createCredentialConfig('your_sip_username', 'your_sip_password', {
   debug: true,
   pushNotificationDeviceToken: 'your_device_token',
+  pushWhenActive: true,
 });
 
 await voipClient.login(config);
@@ -135,10 +288,25 @@ import { createTokenConfig } from '@telnyx/react-voice-commons-sdk';
 const config = createTokenConfig('your_jwt_token', {
   debug: true,
   pushNotificationDeviceToken: 'your_device_token',
+  pushWhenActive: true,
 });
 
 await voipClient.loginWithToken(config);
 ```
+
+`pushWhenActive` is opt-in and defaults to `false`. Enable it on iOS when the device must receive a second PushKit call while another call is active or held.
+
+### Android Incoming Ringtone
+
+Android uses the device's selected phone ringtone by default. To use an app-bundled sound instead, add a supported audio file such as `my_ringtone.wav` to `android/app/src/main/res/raw/` and pass its resource name without the extension when logging in:
+
+```tsx
+const config = createCredentialConfig('your_sip_username', 'your_sip_password', {
+  incomingCallRingtone: 'my_ringtone',
+});
+```
+
+The SDK persists this setting for incoming FCM pushes. If the resource is missing or the option is omitted, it falls back to the device ringtone.
 
 ### Automatic Storage & Reconnection
 
@@ -152,6 +320,7 @@ The library uses these AsyncStorage keys internally:
 - `@telnyx_password` - SIP password (credential auth)
 - `@credential_token` - JWT authentication token (token auth)
 - `@push_token` - Push notification device token
+- `@push_when_active` - Whether the device remains eligible for PushKit calls while connected
 
 **Note**: These are managed automatically by the library. You only need to call `login()` once, and the library will handle storage and future reconnections.
 
@@ -228,11 +397,11 @@ The `TelnyxMainActivity` provides:
 ### 2. Push Notification Setup
 
 1. Place `google-services.json` in the project root.
-2. Create an FCM service that extends `TelnyxFirebaseMessagingService` and a notification action receiver that extends `TelnyxNotificationActionReceiver`, then register both in `AndroidManifest.xml`. See [push-notification/app-setup.md](./push-notification/app-setup.md) for the full boilerplate.
+2. Create an FCM service that extends `TelnyxFirebaseMessagingService` and a notification action receiver that extends `TelnyxNotificationActionReceiver`, then register both in `AndroidManifest.xml`. See the [push notification app setup guide](_media/app-setup.md) for the full boilerplate.
 
 > **Do not** register `messaging().setBackgroundMessageHandler(...)` from JS. Android push is handled entirely by the native `TelnyxFirebaseMessagingService` — adding a JS handler will fight the native layer and can double-process calls. There is no `TelnyxVoiceApp.handleBackgroundPush` step required on Android.
->
-> To avoid double-login when the app is cold-started from a push, guard your auto-login with `TelnyxVoipClient.isLaunchedFromPushNotification()`. See [push-notification/app-setup.md → Step 3](./push-notification/app-setup.md#step-3-detect-push-launched-cold-starts-avoid-double-login).
+
+See [Push Notification Flow](#push-notification-flow) below for how to detect push-launched cold starts and avoid double-login.
 
 ### iOS Integration
 
@@ -383,16 +552,6 @@ This provides detailed logging for:
 - Push notification processing
 - Background lifecycle events
 
-## Debugging & Call Quality
-
-For comprehensive documentation on call quality monitoring and debugging tools, see the [Call Quality Reporting & Debug Stats Guide](./debugging/CallQualityReporting.md).
-
-The SDK provides two systems:
-- **Call Reports**: Post-call quality data (WebRTC stats + structured logs) sent via HTTP
-- **Debug Stats**: Real-time WebRTC event streaming over WebSocket
-
-Both are disabled by default. See the guide for configuration options and usage examples.
-
 ## Troubleshooting
 
 ### iOS Connection Issues (First Run)
@@ -421,9 +580,18 @@ npx expo run:ios
 
 ### Common Integration Issues
 
-### Double Login
+### Double Login on Cold-Start
 
-Ensure you're not calling login methods manually when using `TelnyxVoiceApp` with auto-reconnection enabled.
+When the app is launched from a push notification, the SDK handles login internally. If your app also auto-logs in on mount, both will race and the push flow breaks. Use `isLaunchedFromPushNotification()` to guard your auto-login:
+
+```tsx
+const isFromPush = await TelnyxVoipClient.isLaunchedFromPushNotification();
+if (!isFromPush) {
+  voipClient.loginFromStoredConfig();
+}
+```
+
+Also ensure you're not calling login methods manually when using `TelnyxVoiceApp` with auto-reconnection enabled.
 
 ### Background Disconnection
 
@@ -462,25 +630,12 @@ useEffect(() => {
   const subscription = voipClient.connectionState$.subscribe(handleStateChange);
   return () => subscription.unsubscribe();
 }, []);
-}, []);
 ```
 
 ## Documentation
 
 For complete API documentation and advanced usage patterns, see the [TelnyxVoiceApp Documentation](./react-voice-commons-sdk/TELNYX_VOICE_APP.md).
 
-### Guides
-
-- [Push Notification Setup](./push-notification/app-setup.md) — FCM/APNs setup and avoiding double-login on push-launched cold starts.
-- [Push-When-Active & Answered-Elsewhere](./push-notification/push-when-active.md) — multidevice call delivery and dismissing the incoming-call UI when another device answers.
-- [Sending DTMF Tones](./call-features/dtmf.md) — dialpad presses, IVR sequences, and gating on call state.
-- [Error Handling](./error-handling/ErrorHandling.md) — common errors and recovery patterns.
-- [Expo Integration](./expo/ExpoIntegration.md) — Expo-specific setup.
-- [Trickle ICE](./call-features/trickle-ice.md) — enabling and disabling Trickle ICE for faster call setup.
-
 ## License
 
 MIT License - see LICENSE file for details.
-
-
-

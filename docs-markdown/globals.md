@@ -8,6 +8,7 @@
 
 ## Classes
 
+- [VoicePnBridge](classes/VoicePnBridge.md)
 - [Call](classes/Call.md)
 - [TelnyxVoipClient](classes/TelnyxVoipClient.md)
 
@@ -52,4 +53,5 @@
 - [isConnected](functions/isConnected.md)
 - [isTransitioning](functions/isTransitioning.md)
 - [createTelnyxVoipClient](functions/createTelnyxVoipClient.md)
+- [destroyTelnyxVoipClient](functions/destroyTelnyxVoipClient.md)
 - [createBackgroundTelnyxVoipClient](functions/createBackgroundTelnyxVoipClient.md)

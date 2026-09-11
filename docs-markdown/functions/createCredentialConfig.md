@@ -2,7 +2,7 @@
 
 > **createCredentialConfig**(`sipUser`, `sipPassword`, `options?`): [`CredentialConfig`](../interfaces/CredentialConfig.md)
 
-Defined in: [models/config.ts:94](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/config.ts#L94)
+Defined in: [models/config.ts:127](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/models/config.ts#L127)
 
 Creates a credential configuration
 

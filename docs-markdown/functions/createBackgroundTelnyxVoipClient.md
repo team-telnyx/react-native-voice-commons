@@ -2,9 +2,12 @@
 
 > **createBackgroundTelnyxVoipClient**(`options?`): [`TelnyxVoipClient`](../classes/TelnyxVoipClient.md)
 
-Defined in: [telnyx-voip-client.ts:547](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L547)
+Defined in: [telnyx-voip-client.ts:862](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L862)
 
-Create a new TelnyxVoipClient instance for background push notification handling
+Create a new TelnyxVoipClient instance for background push notification handling.
+
+Unlike `createTelnyxVoipClient`, this always creates a new instance because
+background isolates need their own independent client.
 
 ## Parameters
 
