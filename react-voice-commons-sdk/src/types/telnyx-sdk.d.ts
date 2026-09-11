@@ -67,14 +67,14 @@ declare module '@telnyx/react-native-voice-sdk' {
     /**
      * Custom headers received from the WebRTC INVITE message.
      * These headers are passed during call initiation and can contain application-specific information.
-     * Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+     * Format: `[{"name": "X-Header-Name", "value": "Value"}]`; header names must start with `X-`.
      */
     inviteCustomHeaders: { name: string; value: string }[] | null;
 
     /**
      * Custom headers received from the WebRTC ANSWER message.
      * These headers are passed during call acceptance and can contain application-specific information.
-     * Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+     * Format: `[{"name": "X-Header-Name", "value": "Value"}]`; header names must start with `X-`.
      */
     answerCustomHeaders: { name: string; value: string }[] | null;
 
