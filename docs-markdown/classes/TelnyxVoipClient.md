@@ -1,6 +1,6 @@
 # Class: TelnyxVoipClient
 
-Defined in: [telnyx-voip-client.ts:30](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L30)
+Defined in: [telnyx-voip-client.ts:46](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L46)
 
 The main public interface for the react-voice-commons module.
 
@@ -16,21 +16,21 @@ into their chosen state management solution naturally.
 
 ### Constructor
 
-> **new TelnyxVoipClient**(`options`): `TelnyxVoipClient`
+> **new TelnyxVoipClient**(`options?`): `TelnyxVoipClient`
 
-Defined in: [telnyx-voip-client.ts:41](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L41)
+Defined in: [telnyx-voip-client.ts:82](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L82)
 
 Creates a new TelnyxVoipClient instance.
 
-### Parameters
+#### Parameters
 
-### options
+##### options?
 
 [`TelnyxVoipClientOptions`](../interfaces/TelnyxVoipClientOptions.md) = `{}`
 
 Configuration options for the client
 
-### Returns
+#### Returns
 
 `TelnyxVoipClient`
 
@@ -38,11 +38,11 @@ Configuration options for the client
 
 ### connectionState$
 
-### Get Signature
+#### Get Signature
 
 > **get** **connectionState$**(): `Observable`\<[`TelnyxConnectionState`](../enumerations/TelnyxConnectionState.md)\>
 
-Defined in: [telnyx-voip-client.ts:74](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L74)
+Defined in: [telnyx-voip-client.ts:123](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L123)
 
 Stream of connection state changes.
 
@@ -50,7 +50,7 @@ Emits the current status of the connection to the Telnyx backend.
 Values include connecting, connected, disconnected, and error states.
 Listen to this to show connection indicators in your UI.
 
-### Returns
+##### Returns
 
 `Observable`\<[`TelnyxConnectionState`](../enumerations/TelnyxConnectionState.md)\>
 
@@ -58,11 +58,11 @@ Listen to this to show connection indicators in your UI.
 
 ### calls$
 
-### Get Signature
+#### Get Signature
 
-> **get** **calls$**(): `Observable`\<[`Call`](Call.md)\>
+> **get** **calls$**(): `Observable`\<[`Call`](Call.md)[]\>
 
-Defined in: [telnyx-voip-client.ts:85](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L85)
+Defined in: [telnyx-voip-client.ts:134](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L134)
 
 Stream of all current calls.
 
@@ -70,19 +70,19 @@ Emits a list of all current Call objects. Use this for applications
 that need to support multiple simultaneous calls (e.g., call waiting,
 conference calls).
 
-### Returns
+##### Returns
 
-`Observable`\<[`Call`](Call.md)\>
+`Observable`\<[`Call`](Call.md)[]\>
 
 ***
 
 ### activeCall$
 
-### Get Signature
+#### Get Signature
 
 > **get** **activeCall$**(): `Observable`\<[`Call`](Call.md)\>
 
-Defined in: [telnyx-voip-client.ts:96](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L96)
+Defined in: [telnyx-voip-client.ts:145](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L145)
 
 Stream of the currently active call.
 
@@ -90,7 +90,7 @@ A convenience stream that emits the currently active Call object.
 It emits null when no call is in progress. Ideal for applications
 that only handle a single call at a time.
 
-### Returns
+##### Returns
 
 `Observable`\<[`Call`](Call.md)\>
 
@@ -98,15 +98,15 @@ that only handle a single call at a time.
 
 ### currentConnectionState
 
-### Get Signature
+#### Get Signature
 
 > **get** **currentConnectionState**(): [`TelnyxConnectionState`](../enumerations/TelnyxConnectionState.md)
 
-Defined in: [telnyx-voip-client.ts:105](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L105)
+Defined in: [telnyx-voip-client.ts:154](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L154)
 
 Current connection state (synchronous access).
 
-### Returns
+##### Returns
 
 [`TelnyxConnectionState`](../enumerations/TelnyxConnectionState.md)
 
@@ -114,47 +114,64 @@ Current connection state (synchronous access).
 
 ### currentCalls
 
-### Get Signature
+#### Get Signature
 
-> **get** **currentCalls**(): [`Call`](Call.md)
+> **get** **currentCalls**(): [`Call`](Call.md)[]
 
-Defined in: [telnyx-voip-client.ts:112](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L112)
+Defined in: [telnyx-voip-client.ts:161](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L161)
 
 Current list of calls (synchronous access).
 
-### Returns
+##### Returns
 
-[`Call`](Call.md)
+[`Call`](Call.md)[]
 
 ***
 
 ### currentActiveCall
 
-### Get Signature
+#### Get Signature
 
 > **get** **currentActiveCall**(): [`Call`](Call.md)
 
-Defined in: [telnyx-voip-client.ts:119](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L119)
+Defined in: [telnyx-voip-client.ts:168](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L168)
 
 Current active call (synchronous access).
 
-### Returns
+##### Returns
 
 [`Call`](Call.md)
 
 ***
 
+### hasActiveCalls
+
+#### Get Signature
+
+> **get** **hasActiveCalls**(): `boolean`
+
+Defined in: [telnyx-voip-client.ts:176](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L176)
+
+Check if there are any active calls (not in ENDED or FAILED state).
+Matches TelnyxRTC `hasActiveCalls` property for multi-call support.
+
+##### Returns
+
+`boolean`
+
+***
+
 ### sessionId
 
-### Get Signature
+#### Get Signature
 
 > **get** **sessionId**(): `string`
 
-Defined in: [telnyx-voip-client.ts:126](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L126)
+Defined in: [telnyx-voip-client.ts:270](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L270)
 
 Current session ID (UUID) for this connection.
 
-### Returns
+##### Returns
 
 `string`
 
@@ -162,37 +179,151 @@ Current session ID (UUID) for this connection.
 
 ### options
 
-### Get Signature
+#### Get Signature
 
 > **get** **options**(): `Required`\<[`TelnyxVoipClientOptions`](../interfaces/TelnyxVoipClientOptions.md)\>
 
-Defined in: [telnyx-voip-client.ts:133](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L133)
+Defined in: [telnyx-voip-client.ts:277](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L277)
 
 Configuration options for this client instance.
 
-### Returns
+##### Returns
 
 `Required`\<[`TelnyxVoipClientOptions`](../interfaces/TelnyxVoipClientOptions.md)\>
 
 ## Methods
 
+### isLaunchedFromPushNotification()
+
+> `static` **isLaunchedFromPushNotification**(): `Promise`\<`boolean`\>
+
+Defined in: [telnyx-voip-client.ts:63](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L63)
+
+Check if the app was launched from a push notification.
+
+Use this to avoid double-login on cold start. When true, the SDK will
+handle login internally via the push notification flow, so you should
+skip your normal auto-login.
+
+#### Returns
+
+`Promise`\<`boolean`\>
+
+true if there is pending push notification data indicating a push-launched app
+
+***
+
+### getCall()
+
+> **getCall**(`callId`): [`Call`](Call.md)
+
+Defined in: [telnyx-voip-client.ts:198](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L198)
+
+Access any active call tracked by the client.
+A call will be accessible until it has ended (transitioned to the ENDED state).
+This matches the TelnyxRTC `getCall(callId)` method for multi-call support.
+
+#### Parameters
+
+##### callId
+
+`string`
+
+The unique identifier of a call.
+
+#### Returns
+
+[`Call`](Call.md)
+
+The Call object that matches the requested callId, or null if not found.
+
+#### Example
+
+```typescript
+const call = voipClient.getCall('some-call-uuid');
+if (call) {
+  console.log('Call state:', call.currentState);
+}
+```
+
+***
+
+### setActiveCall()
+
+> **setActiveCall**(`callId`): `void`
+
+Defined in: [telnyx-voip-client.ts:206](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L206)
+
+Explicitly set the active call for multi-call scenarios.
+
+#### Parameters
+
+##### callId
+
+`string`
+
+The ID of the call to mark as active
+
+#### Returns
+
+`void`
+
+***
+
+### clearActiveCall()
+
+> **clearActiveCall**(): `void`
+
+Defined in: [telnyx-voip-client.ts:214](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L214)
+
+Clear the explicitly selected active call and return to default selection.
+
+#### Returns
+
+`void`
+
+***
+
+### swapCalls()
+
+> **swapCalls**(`targetCallId`): `Promise`\<`void`\>
+
+Defined in: [telnyx-voip-client.ts:225](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L225)
+
+Swap the current active call with a held call.
+On iOS this is coordinated through CallKit so native and SDK state stay aligned.
+
+#### Parameters
+
+##### targetCallId
+
+`string`
+
+ID of the held call to make active
+
+#### Returns
+
+`Promise`\<`void`\>
+
+***
+
 ### login()
 
 > **login**(`config`): `Promise`\<`void`\>
 
-Defined in: [telnyx-voip-client.ts:148](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L148)
+Defined in: [telnyx-voip-client.ts:292](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L292)
 
 Connects to the Telnyx platform using credential authentication.
 
-### Parameters
+#### Parameters
 
-### config
+##### config
 
 [`CredentialConfig`](../interfaces/CredentialConfig.md)
 
 The credential configuration containing SIP username and password
 
-### Returns
+#### Returns
 
 `Promise`\<`void`\>
 
@@ -207,19 +338,19 @@ Credentials are automatically stored for future reconnection.
 
 > **loginWithToken**(`config`): `Promise`\<`void`\>
 
-Defined in: [telnyx-voip-client.ts:175](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L175)
+Defined in: [telnyx-voip-client.ts:326](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L326)
 
 Connects to the Telnyx platform using token authentication.
 
-### Parameters
+#### Parameters
 
-### config
+##### config
 
 [`TokenConfig`](../interfaces/TokenConfig.md)
 
 The token configuration containing the authentication token
 
-### Returns
+#### Returns
 
 `Promise`\<`void`\>
 
@@ -234,14 +365,14 @@ Token is automatically stored for future reconnection.
 
 > **logout**(): `Promise`\<`void`\>
 
-Defined in: [telnyx-voip-client.ts:199](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L199)
+Defined in: [telnyx-voip-client.ts:357](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L357)
 
 Disconnects from the Telnyx platform.
 
 This method terminates the connection, ends any active calls, and
 cleans up all related resources.
 
-### Returns
+#### Returns
 
 `Promise`\<`void`\>
 
@@ -251,18 +382,18 @@ cleans up all related resources.
 
 > **loginFromStoredConfig**(): `Promise`\<`boolean`\>
 
-Defined in: [telnyx-voip-client.ts:219](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L219)
+Defined in: [telnyx-voip-client.ts:377](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L377)
 
 Attempts to reconnect using previously stored configuration.
 
 This method is used for auto-reconnection scenarios where the app
 comes back to the foreground and needs to restore the connection.
 
-### Returns
+#### Returns
 
 `Promise`\<`boolean`\>
 
-`Promise<boolean>` - true if reconnection was successful, false otherwise
+Promise<boolean> - true if reconnection was successful, false otherwise
 
 ***
 
@@ -270,37 +401,37 @@ comes back to the foreground and needs to restore the connection.
 
 > **newCall**(`destination`, `callerName?`, `callerNumber?`, `customHeaders?`): `Promise`\<[`Call`](Call.md)\>
 
-Defined in: [telnyx-voip-client.ts:296](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L296)
+Defined in: [telnyx-voip-client.ts:476](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L476)
 
 Initiates a new outgoing call.
 
-### Parameters
+#### Parameters
 
-### destination
+##### destination
 
 `string`
 
 The destination number or SIP URI to call
 
-### callerName?
+##### callerName?
 
 `string`
 
 Optional caller name to display
 
-### callerNumber?
+##### callerNumber?
 
 `string`
 
 Optional caller ID number
 
-### customHeaders?
+##### customHeaders?
 
-`Record`\<`string`, `string`\>
+`CustomHeaders`
 
 Optional custom headers to include with the call
 
-### Returns
+#### Returns
 
 `Promise`\<[`Call`](Call.md)\>
 
@@ -314,7 +445,7 @@ The call's state can be monitored through the returned Call object's streams.
 
 > **handlePushNotification**(`payload`): `Promise`\<`void`\>
 
-Defined in: [telnyx-voip-client.ts:335](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L335)
+Defined in: [telnyx-voip-client.ts:515](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L515)
 
 Handle push notification payload.
 
@@ -322,15 +453,15 @@ This is the unified entry point for all push notifications. It intelligently
 determines whether to show a new incoming call UI or to process an already
 actioned (accepted/declined) call upon app launch.
 
-### Parameters
+#### Parameters
 
-### payload
+##### payload
 
 `Record`\<`string`, `any`\>
 
 The push notification payload
 
-### Returns
+#### Returns
 
 `Promise`\<`void`\>
 
@@ -340,14 +471,14 @@ The push notification payload
 
 > **disablePushNotifications**(): `void`
 
-Defined in: [telnyx-voip-client.ts:371](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L371)
+Defined in: [telnyx-voip-client.ts:543](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L543)
 
 Disables push notifications for the current session.
 
 This method sends a request to the Telnyx backend to disable push
 notifications for the current registered device/session.
 
-### Returns
+#### Returns
 
 `void`
 
@@ -357,21 +488,21 @@ notifications for the current registered device/session.
 
 > **setCallConnecting**(`callId`): `void`
 
-Defined in: [telnyx-voip-client.ts:388](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L388)
+Defined in: [telnyx-voip-client.ts:560](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L560)
 
 **`Internal`**
 
 Set a call to connecting state (used for push notification calls when answered via CallKit)
 
-### Parameters
+#### Parameters
 
-### callId
+##### callId
 
 `string`
 
 The ID of the call to set to connecting state
 
-### Returns
+#### Returns
 
 `void`
 
@@ -381,21 +512,21 @@ The ID of the call to set to connecting state
 
 > **findCallByTelnyxCall**(`telnyxCall`): [`Call`](Call.md)
 
-Defined in: [telnyx-voip-client.ts:397](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L397)
+Defined in: [telnyx-voip-client.ts:569](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L569)
 
 **`Internal`**
 
 Find a call by its underlying Telnyx call object
 
-### Parameters
+#### Parameters
 
-### telnyxCall
+##### telnyxCall
 
 `any`
 
 The Telnyx call object to find
 
-### Returns
+#### Returns
 
 [`Call`](Call.md)
 
@@ -403,22 +534,26 @@ The Telnyx call object to find
 
 ### queueAnswerFromCallKit()
 
-> **queueAnswerFromCallKit**(`customHeaders`): `void`
+> **queueAnswerFromCallKit**(`callKitUUIDOrHeaders?`, `customHeaders?`): `void`
 
-Defined in: [telnyx-voip-client.ts:406](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L406)
+Defined in: [telnyx-voip-client.ts:578](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L578)
 
 Queue an answer action for when the call invite arrives (for CallKit integration)
 This should be called when the user answers from CallKit before the socket connection is established
 
-### Parameters
+#### Parameters
 
-### customHeaders
+##### callKitUUIDOrHeaders?
+
+`string` \| `Record`\<`string`, `string`\>
+
+##### customHeaders?
 
 `Record`\<`string`, `string`\> = `{}`
 
 Optional custom headers to include with the answer
 
-### Returns
+#### Returns
 
 `void`
 
@@ -426,14 +561,43 @@ Optional custom headers to include with the answer
 
 ### queueEndFromCallKit()
 
-> **queueEndFromCallKit**(): `void`
+> **queueEndFromCallKit**(`callKitUUID?`): `void`
 
-Defined in: [telnyx-voip-client.ts:427](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L427)
+Defined in: [telnyx-voip-client.ts:614](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L614)
 
 Queue an end action for when the call invite arrives (for CallKit integration)
 This should be called when the user ends from CallKit before the socket connection is established
 
-### Returns
+#### Parameters
+
+##### callKitUUID?
+
+`string`
+
+#### Returns
+
+`void`
+
+***
+
+### setPushNotificationCallKitUUID()
+
+> **setPushNotificationCallKitUUID**(`callKitUUID`): `void`
+
+Defined in: [telnyx-voip-client.ts:636](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L636)
+
+**`Internal`**
+
+Associate the next push-delivered INVITE with its app-facing CallKit UUID.
+The underlying signaling call ID remains unchanged.
+
+#### Parameters
+
+##### callKitUUID
+
+`string`
+
+#### Returns
 
 `void`
 
@@ -443,7 +607,7 @@ This should be called when the user ends from CallKit before the socket connecti
 
 > **dispose**(): `Promise`\<`void`\>
 
-Defined in: [telnyx-voip-client.ts:534](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L534)
+Defined in: [telnyx-voip-client.ts:655](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L655)
 
 Dispose of the client and clean up all resources.
 
@@ -451,7 +615,6 @@ After calling this method, the client instance should not be used anymore.
 This is particularly important for background clients that should be
 disposed after handling push notifications.
 
-### Returns
+#### Returns
 
 `Promise`\<`void`\>
-

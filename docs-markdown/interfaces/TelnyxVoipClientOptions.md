@@ -1,6 +1,6 @@
 # Interface: TelnyxVoipClientOptions
 
-Defined in: [telnyx-voip-client.ts:11](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L11)
+Defined in: [telnyx-voip-client.ts:24](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L24)
 
 Configuration options for TelnyxVoipClient
 
@@ -8,9 +8,9 @@ Configuration options for TelnyxVoipClient
 
 ### enableAppStateManagement?
 
-> `optional` **enableAppStateManagement**: `boolean`
+> `optional` **enableAppStateManagement?**: `boolean`
 
-Defined in: [telnyx-voip-client.ts:13](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L13)
+Defined in: [telnyx-voip-client.ts:26](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L26)
 
 Enable automatic app state management (background/foreground behavior) - default: true
 
@@ -18,20 +18,18 @@ Enable automatic app state management (background/foreground behavior) - default
 
 ### debug?
 
-> `optional` **debug**: `boolean`
+> `optional` **debug?**: `boolean`
 
-Defined in: [telnyx-voip-client.ts:16](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L16)
+Defined in: [telnyx-voip-client.ts:29](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L29)
 
-Enable debug logging. Default: `false`
+Enable debug logging
 
 ***
 
 ### useTrickleIce?
 
-> `optional` **useTrickleIce**: `boolean`
+> `optional` **useTrickleIce?**: `boolean`
 
-Defined in: [telnyx-voip-client.ts:24](https://github.com/team-telnyx/react-native-voice-commons/blob/c4cb510b087336b2b81d43ac34f7dbecac40ee19/react-voice-commons-sdk/src/telnyx-voip-client.ts#L24)
+Defined in: [telnyx-voip-client.ts:32](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L32)
 
-Enable Trickle ICE for calls created by this client. When enabled, the SDK sends the initial SDP immediately and delivers ICE candidates incrementally, which can reduce call setup latency. Default: `false`
-
-See the [Trickle ICE guide](../call-features/trickle-ice.md) for details and usage examples.
+Enable Trickle ICE for calls created by this client

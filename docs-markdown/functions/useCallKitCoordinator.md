@@ -2,150 +2,152 @@
 
 > **useCallKitCoordinator**(): `object`
 
-Defined in: [hooks/use-callkit-coordinator.ts:6](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/hooks/use-callkit-coordinator.ts#L6)
+Defined in: [hooks/use-callkit-coordinator.ts:6](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/hooks/use-callkit-coordinator.ts#L6)
 
 ## Returns
 
-`object`
-
-### reportIncomingCall()
+### reportIncomingCall
 
 > **reportIncomingCall**: (`call`, `callerName`, `callerNumber`) => `Promise`\<`string`\>
 
-### Parameters
+#### Parameters
 
-### call
+##### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-### callerName
+##### callerName
 
 `string`
 
-### callerNumber
+##### callerNumber
 
 `string`
 
-### Returns
+#### Returns
 
 `Promise`\<`string`\>
 
-### startOutgoingCall()
+### startOutgoingCall
 
 > **startOutgoingCall**: (`call`, `destinationNumber`, `displayName?`) => `Promise`\<`string`\>
 
-### Parameters
+#### Parameters
 
-### call
+##### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-### destinationNumber
+##### destinationNumber
 
 `string`
 
-### displayName?
+##### displayName?
 
 `string`
 
-### Returns
+#### Returns
 
 `Promise`\<`string`\>
 
-### answerCallFromUI()
+### answerCallFromUI
 
 > **answerCallFromUI**: (`call`) => `Promise`\<`boolean`\>
 
-### Parameters
+#### Parameters
 
-### call
+##### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-### Returns
+#### Returns
 
 `Promise`\<`boolean`\>
 
-### endCallFromUI()
+### endCallFromUI
 
 > **endCallFromUI**: (`call`) => `Promise`\<`boolean`\>
 
-### Parameters
+#### Parameters
 
-### call
+##### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-### Returns
+#### Returns
 
 `Promise`\<`boolean`\>
 
-### getCallKitUUID()
+### getCallKitUUID
 
 > **getCallKitUUID**: (`call`) => `string`
 
-### Parameters
+#### Parameters
 
-### call
+##### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-### Returns
+#### Returns
 
 `string`
 
-### getWebRTCCall()
+### getWebRTCCall
 
 > **getWebRTCCall**: (`callKitUUID`) => [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-### Parameters
+#### Parameters
 
-### callKitUUID
+##### callKitUUID
 
 `string`
 
-### Returns
+#### Returns
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-### linkExistingCallKitCall()
+### linkExistingCallKitCall
 
 > **linkExistingCallKitCall**: (`call`, `callKitUUID`) => `void`
 
-### Parameters
+#### Parameters
 
-### call
+##### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-### callKitUUID
+##### callKitUUID
 
 `string`
 
-### Returns
+#### Returns
 
 `void`
 
-### isAvailable()
+### isAvailable
 
 > **isAvailable**: () => `boolean`
 
-### Returns
+#### Returns
 
 `boolean`
 
-### setVoipClient()
+### ~~setVoipClient~~
 
 > **setVoipClient**: (`voipClient`) => `void`
 
-### Parameters
+#### Parameters
 
-### voipClient
+##### voipClient
 
 [`TelnyxVoipClient`](../classes/TelnyxVoipClient.md)
 
-### Returns
+#### Returns
 
 `void`
 
+#### Deprecated
 
+No longer needed — TelnyxVoiceApp now auto-wires the voipClient
+on the CallKit coordinator when it receives the voipClient prop.
+This method is kept for backwards compatibility and will be removed in a future release.

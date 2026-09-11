@@ -1,12 +1,12 @@
 # Function: useCallKit()
 
-> **useCallKit**(`options`): `object`
+> **useCallKit**(`options?`): `object`
 
-Defined in: [callkit/use-callkit.ts:19](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/callkit/use-callkit.ts#L19)
+Defined in: [callkit/use-callkit.ts:19](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/callkit/use-callkit.ts#L19)
 
 ## Parameters
 
-### options
+### options?
 
 `UseCallKitOptions` = `{}`
 
@@ -22,156 +22,154 @@ Defined in: [callkit/use-callkit.ts:19](https://github.com/team-telnyx/react-nat
 
 > **activeCalls**: `CallKitCall`[]
 
-### startOutgoingCall()
+### startOutgoingCall
 
 > **startOutgoingCall**: (`call`, `handle?`, `displayName?`) => `Promise`\<`string`\>
 
-### Parameters
+#### Parameters
 
-### call
+##### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-### handle?
+##### handle?
 
 `string`
 
-### displayName?
+##### displayName?
 
 `string`
 
-### Returns
+#### Returns
 
 `Promise`\<`string`\>
 
-### reportIncomingCall()
+### reportIncomingCall
 
 > **reportIncomingCall**: (`call`, `handle?`, `displayName?`) => `Promise`\<`string`\>
 
-### Parameters
+#### Parameters
 
-### call
+##### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-### handle?
+##### handle?
 
 `string`
 
-### displayName?
+##### displayName?
 
 `string`
 
-### Returns
+#### Returns
 
 `Promise`\<`string`\>
 
-### answerCall()
+### answerCall
 
 > **answerCall**: (`callUUID`) => `Promise`\<`boolean`\>
 
-### Parameters
+#### Parameters
 
-### callUUID
+##### callUUID
 
 `string`
 
-### Returns
+#### Returns
 
 `Promise`\<`boolean`\>
 
-### endCall()
+### endCall
 
 > **endCall**: (`callUUID`, `reason`) => `Promise`\<`boolean`\>
 
-### Parameters
+#### Parameters
 
-### callUUID
+##### callUUID
 
 `string`
 
-### reason
+##### reason?
 
 [`CallEndReason`](../enumerations/CallEndReason.md) = `CallEndReason.RemoteEnded`
 
-### Returns
+#### Returns
 
 `Promise`\<`boolean`\>
 
-### reportCallConnected()
+### reportCallConnected
 
 > **reportCallConnected**: (`callUUID`) => `Promise`\<`boolean`\>
 
-### Parameters
+#### Parameters
 
-### callUUID
+##### callUUID
 
 `string`
 
-### Returns
+#### Returns
 
 `Promise`\<`boolean`\>
 
-### updateCall()
+### updateCall
 
 > **updateCall**: (`callUUID`, `displayName`, `handle`) => `Promise`\<`boolean`\>
 
-### Parameters
+#### Parameters
 
-### callUUID
-
-`string`
-
-### displayName
+##### callUUID
 
 `string`
 
-### handle
+##### displayName
 
 `string`
 
-### Returns
+##### handle
+
+`string`
+
+#### Returns
 
 `Promise`\<`boolean`\>
 
-### getCallKitUUID()
+### getCallKitUUID
 
 > **getCallKitUUID**: (`call`) => `string`
 
-### Parameters
+#### Parameters
 
-### call
+##### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-### Returns
+#### Returns
 
 `string`
 
-### integrateCall()
+### integrateCall
 
 > **integrateCall**: (`call`, `direction`) => `Promise`\<`string`\>
 
-### Parameters
+#### Parameters
 
-### call
+##### call
 
 [`TelnyxCall`](../interfaces/TelnyxCall.md)
 
-### direction
+##### direction
 
-`"incoming"` | `"outgoing"`
+`"incoming"` \| `"outgoing"`
 
-### Returns
+#### Returns
 
 `Promise`\<`string`\>
 
-### generateCallUUID()
+### generateCallUUID
 
 > **generateCallUUID**: () => `string` = `CallKit.generateCallUUID`
 
-### Returns
+#### Returns
 
 `string`
-
-
