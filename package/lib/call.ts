@@ -29,7 +29,7 @@ import {
 } from './sdp-utils';
 import { WebRTCReporter } from './webrtc-reporter';
 import { CallReportCollector } from './call-report-collector';
-import type { CallReportConfig, CallReportSummary } from './call-report-models';
+import type { CallReportConfig, CallReportSummary, StatsInterval } from './call-report-models';
 import { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
 import { CALL_REPORT_ID, VOICE_SDK_ID } from './global';
 import { PROD_HOST, SDK_VERSION } from './env';
@@ -109,6 +109,19 @@ export class Call extends EventEmitter<CallEvents> {
    * Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
    */
   public answerCustomHeaders: { name: string; value: string }[] | null = null;
+
+  /**
+   * Latest WebRTC call stats interval collected for call reports.
+   *
+   * This is intended for demo/debug UI surfaces that want to display the same
+   * real-time packet, bitrate, jitter, RTT, ICE, and transport stats already
+   * collected by the call report pipeline. Returns null until call report
+   * collection has produced its first interval, or when call reports are
+   * disabled for the call.
+   */
+  public getLatestStats(): StatsInterval | null {
+    return this.callReportCollector?.latestInterval ?? null;
+  }
 
   static async createInboundCall({
     connection,

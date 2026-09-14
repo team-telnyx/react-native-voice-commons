@@ -51,6 +51,7 @@ export type { Config, CredentialConfig, TokenConfig } from './models/config';
 
 // Re-export useful types from the underlying SDK
 export type { Call as TelnyxCall } from '@telnyx/react-native-voice-sdk';
+export type { StatsInterval } from '@telnyx/react-native-voice-sdk';
 
 // Export CallKit functionality
 export * from './callkit';

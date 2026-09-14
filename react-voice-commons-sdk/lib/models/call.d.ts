@@ -1,6 +1,7 @@
 import { Observable } from 'rxjs';
 import { TelnyxCallState } from './call-state';
 import { Call as TelnyxCall } from '@telnyx/react-native-voice-sdk';
+import type { StatsInterval } from '@telnyx/react-native-voice-sdk';
 /**
  * Represents a call with reactive state streams.
  *
@@ -72,6 +73,11 @@ export declare class Call {
    * Current call duration in seconds (synchronous access)
    */
   get currentDuration(): number;
+  /**
+   * Latest WebRTC stats interval collected by the underlying SDK call report pipeline.
+   * Returns null until stats collection has produced its first interval.
+   */
+  get currentStats(): StatsInterval | null;
   /**
    * Custom headers received from the WebRTC INVITE message.
    * These headers are passed during call initiation and can contain application-specific information.
