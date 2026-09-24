@@ -37,6 +37,15 @@ class CallKitCoordinator {
   // Tracks action+UUID pairs so an end action is not dropped merely because
   // an answer or held action for the same call is still completing.
   private processingCalls = new Set<string>();
+  private activeOrAnsweringCallUUID: string | null = null;
+
+  private claimActiveCall(callKitUUID: string): boolean {
+    if (this.activeOrAnsweringCallUUID !== null && this.activeOrAnsweringCallUUID !== callKitUUID) {
+      return false;
+    }
+    this.activeOrAnsweringCallUUID = callKitUUID;
+    return true;
+  }
 
   // Tracks calls that have already been ended in CallKit to prevent duplicate reports
   private endedCalls = new Set<string>();
@@ -205,6 +214,11 @@ class CallKitCoordinator {
     const callKitUUID = this.getCallKitUUID(call);
     if (!callKitUUID) {
       console.warn('CallKitCoordinator: Cannot answer call - no CallKit UUID found');
+      return false;
+    }
+
+    if (!this.claimActiveCall(callKitUUID)) {
+      console.warn('CallKitCoordinator: Another call is already active or answering');
       return false;
     }
 
@@ -415,6 +429,14 @@ class CallKitCoordinator {
     const processingKey = this.actionKey('answer', callKitUUID);
     if (this.processingCalls.has(processingKey)) {
       console.log('CallKitCoordinator: Answer action already being processed, skipping duplicate');
+      return;
+    }
+
+    if (!this.claimActiveCall(callKitUUID)) {
+      console.warn(
+        'CallKitCoordinator: Rejecting answer because another call owns the active slot'
+      );
+      await CallKit.reportCallEnded(callKitUUID, CallEndReason.Failed);
       return;
     }
 
@@ -927,6 +949,9 @@ class CallKitCoordinator {
     this.connectedCalls.delete(callKitUUID);
     this.pendingPushCallUUIDs.delete(callKitUUID);
     this.autoAnswerCallUUIDs.delete(callKitUUID);
+    if (this.activeOrAnsweringCallUUID === callKitUUID) {
+      this.activeOrAnsweringCallUUID = null;
+    }
 
     // Get the call before removing it
     const call = this.callMap.get(callKitUUID);
@@ -1322,6 +1347,10 @@ class CallKitCoordinator {
 
     this.isCallFromPush = this.pendingPushCallUUIDs.size > 0;
 
+    if (this.callMap.size === 0) {
+      this.activeOrAnsweringCallUUID = null;
+    }
+
     console.log('CallKitCoordinator: ✅ Coordinator flags reset');
   }
 
@@ -1335,6 +1364,18 @@ class CallKitCoordinator {
     // (isHandlingForegroundCall, backgroundDetectorIgnore) before the WebRTC
     // call arrives during push notification handling.
     return this.processingCalls.size > 0 || this.isCallFromPush;
+  }
+
+  /** @internal Exposed for deterministic single-active-call regression tests. */
+  claimActiveCallForTesting(callKitUUID: string): boolean {
+    return this.claimActiveCall(callKitUUID);
+  }
+
+  /** @internal Exposed for deterministic single-active-call regression tests. */
+  releaseActiveCallForTesting(callKitUUID: string): void {
+    if (this.activeOrAnsweringCallUUID === callKitUUID) {
+      this.activeOrAnsweringCallUUID = null;
+    }
   }
 
   /**
