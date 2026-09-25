@@ -109,6 +109,7 @@ export class Call extends EventEmitter<CallEvents> {
    * Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
    */
   public answerCustomHeaders: { name: string; value: string }[] | null = null;
+  private answerPromise: Promise<void> | null = null;
 
   static async createInboundCall({
     connection,
@@ -361,7 +362,21 @@ export class Call extends EventEmitter<CallEvents> {
    * @throws {Error} If the peer connection is not created
    * @returns {Promise<void>} A promise that resolves when the call is accepted
    */
-  public answer = async (customHeaders?: { name: string; value: string }[]) => {
+  public answer = (customHeaders?: { name: string; value: string }[]): Promise<void> => {
+    if (this.state === 'active') {
+      return Promise.resolve();
+    }
+    if (this.answerPromise) {
+      return this.answerPromise;
+    }
+
+    this.answerPromise = this.performAnswer(customHeaders).finally(() => {
+      this.answerPromise = null;
+    });
+    return this.answerPromise;
+  };
+
+  private performAnswer = async (customHeaders?: { name: string; value: string }[]) => {
     if (!this.peer) {
       throw new Error('[Call] Peer is not created');
     }

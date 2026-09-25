@@ -37,6 +37,15 @@ class CallKitCoordinator {
   // Tracks action+UUID pairs so an end action is not dropped merely because
   // an answer or held action for the same call is still completing.
   private processingCalls = new Set<string>();
+  private activeOrAnsweringCallUUID: string | null = null;
+
+  private claimActiveCall(callKitUUID: string): boolean {
+    if (this.activeOrAnsweringCallUUID !== null && this.activeOrAnsweringCallUUID !== callKitUUID) {
+      return false;
+    }
+    this.activeOrAnsweringCallUUID = callKitUUID;
+    return true;
+  }
 
   // Tracks calls that have already been ended in CallKit to prevent duplicate reports
   private endedCalls = new Set<string>();
@@ -184,6 +193,16 @@ class CallKitCoordinator {
       );
 
       if (success) {
+        if (!this.claimActiveCall(callKitUUID)) {
+          console.warn('CallKitCoordinator: Another call is already active or answering');
+          await CallKit.reportCallEnded(callKitUUID, CallEndReason.Failed);
+          try {
+            await call.hangup();
+          } finally {
+            this.cleanupCall(callKitUUID);
+          }
+          return null;
+        }
         this.callMap.set(callKitUUID, call);
         this.setupWebRTCCallListeners(call, callKitUUID);
         (call as any)._callKitUUID = callKitUUID;
@@ -205,6 +224,11 @@ class CallKitCoordinator {
     const callKitUUID = this.getCallKitUUID(call);
     if (!callKitUUID) {
       console.warn('CallKitCoordinator: Cannot answer call - no CallKit UUID found');
+      return false;
+    }
+
+    if (!this.claimActiveCall(callKitUUID)) {
+      console.warn('CallKitCoordinator: Another call is already active or answering');
       return false;
     }
 
@@ -240,6 +264,8 @@ class CallKitCoordinator {
         this.isCallFromPush = this.pendingPushCallUUIDs.size > 0;
         await this.clearMatchingPendingVoipPush(callKitUUID);
         console.log('CallKitCoordinator: CallKit answer success');
+      } else {
+        this.releaseActiveCall(callKitUUID);
       }
 
       return success;
@@ -418,6 +444,22 @@ class CallKitCoordinator {
       return;
     }
 
+    if (!this.claimActiveCall(callKitUUID)) {
+      console.warn(
+        'CallKitCoordinator: Rejecting answer because another call owns the active slot'
+      );
+      await CallKit.reportCallEnded(callKitUUID, CallEndReason.Failed);
+      const rejectedCall = this.callMap.get(callKitUUID);
+      if (rejectedCall) {
+        try {
+          await rejectedCall.hangup();
+        } finally {
+          this.cleanupCall(callKitUUID);
+        }
+      }
+      return;
+    }
+
     const call = this.callMap.get(callKitUUID);
 
     if (!call) {
@@ -428,7 +470,10 @@ class CallKitCoordinator {
       });
 
       console.log('CallKitCoordinator: No WebRTC call found, handling as push notification');
-      await this.handlePushNotificationAnswer(callKitUUID, event);
+      const queued = await this.handlePushNotificationAnswer(callKitUUID, event);
+      if (!queued) {
+        this.releaseActiveCall(callKitUUID);
+      }
       return;
     }
 
@@ -748,7 +793,7 @@ class CallKitCoordinator {
    * Handle push notification answer - when user answers from CallKit but we don't have a WebRTC call yet
    * This is the iOS equivalent of the Android FCM handler
    */
-  private async handlePushNotificationAnswer(callKitUUID: string, event?: any) {
+  private async handlePushNotificationAnswer(callKitUUID: string, event?: any): Promise<boolean> {
     try {
       console.log(
         'CallKitCoordinator: Handling push notification answer for CallKit UUID:',
@@ -770,7 +815,7 @@ class CallKitCoordinator {
           // checkForInitialPushNotification() will run after setVoipClient()
           // and will find the push data still intact, call handleCallKitPushReceived()
           // which queues the matching auto-answer.
-          return;
+          return false;
         }
 
         // Queue one UUID-targeted answer. If the push is already being
@@ -779,22 +824,22 @@ class CallKitCoordinator {
         voipClient.queueAnswerFromCallKit(callKitUUID);
         if (this.pendingPushCallUUIDs.has(callKitUUID)) {
           this.autoAnswerCallUUIDs.delete(callKitUUID);
-          return;
+          return true;
         }
 
-        await this.handleCallKitPushReceived(callKitUUID, event);
-
-        return;
+        return await this.handleCallKitPushReceived(callKitUUID, event);
       }
 
       // For other platforms (shouldn't happen on iOS)
       console.error('CallKitCoordinator: ❌ Unsupported platform for push notification handling');
       await CallKit.reportCallEnded(callKitUUID, CallEndReason.Failed);
+      return false;
     } catch (error) {
       console.error('CallKitCoordinator: ❌ Error handling push notification answer:', error);
       // Report the call as failed to CallKit
       await CallKit.reportCallEnded(callKitUUID, CallEndReason.Failed);
       this.cleanupCall(callKitUUID);
+      return false;
     }
   }
 
@@ -849,6 +894,18 @@ class CallKitCoordinator {
 
       switch (state) {
         case 'active':
+          if (!this.claimActiveCall(callKitUUID)) {
+            console.warn(
+              'CallKitCoordinator: Ending active call because another call owns the slot'
+            );
+            await CallKit.reportCallEnded(callKitUUID, CallEndReason.Failed);
+            try {
+              await call.hangup();
+            } finally {
+              this.cleanupCall(callKitUUID);
+            }
+            break;
+          }
           this.selectCall(call);
           this.pendingPushCallUUIDs.delete(callKitUUID);
           this.autoAnswerCallUUIDs.delete(callKitUUID);
@@ -927,6 +984,9 @@ class CallKitCoordinator {
     this.connectedCalls.delete(callKitUUID);
     this.pendingPushCallUUIDs.delete(callKitUUID);
     this.autoAnswerCallUUIDs.delete(callKitUUID);
+    if (this.activeOrAnsweringCallUUID === callKitUUID) {
+      this.activeOrAnsweringCallUUID = null;
+    }
 
     // Get the call before removing it
     const call = this.callMap.get(callKitUUID);
@@ -1082,6 +1142,13 @@ class CallKitCoordinator {
 
   private actionKey(action: string, callKitUUID: string): string {
     return `${action}:${this.normalizeUUID(callKitUUID)}`;
+  }
+
+  private releaseActiveCall(callKitUUID: string): void {
+    callKitUUID = this.normalizeUUID(callKitUUID);
+    if (this.activeOrAnsweringCallUUID === callKitUUID) {
+      this.activeOrAnsweringCallUUID = null;
+    }
   }
 
   private selectCall(call: Call): void {
@@ -1322,6 +1389,10 @@ class CallKitCoordinator {
 
     this.isCallFromPush = this.pendingPushCallUUIDs.size > 0;
 
+    if (this.callMap.size === 0) {
+      this.activeOrAnsweringCallUUID = null;
+    }
+
     console.log('CallKitCoordinator: ✅ Coordinator flags reset');
   }
 
@@ -1335,6 +1406,16 @@ class CallKitCoordinator {
     // (isHandlingForegroundCall, backgroundDetectorIgnore) before the WebRTC
     // call arrives during push notification handling.
     return this.processingCalls.size > 0 || this.isCallFromPush;
+  }
+
+  /** @internal Exposed for deterministic single-active-call regression tests. */
+  claimActiveCallForTesting(callKitUUID: string): boolean {
+    return this.claimActiveCall(callKitUUID);
+  }
+
+  /** @internal Exposed for deterministic single-active-call regression tests. */
+  releaseActiveCallForTesting(callKitUUID: string): void {
+    this.releaseActiveCall(callKitUUID);
   }
 
   /**
