@@ -438,7 +438,10 @@ class CallKitCoordinator {
         availableWebRTCCallIds: Array.from(this.callMap.values()).map((c) => c.callId),
       });
       console.log('CallKitCoordinator: No WebRTC call found, handling as push notification');
-      await this.handlePushNotificationAnswer(callKitUUID, event);
+      const queued = await this.handlePushNotificationAnswer(callKitUUID, event);
+      if (!queued) {
+        this.releaseActiveCall(callKitUUID);
+      }
       return;
     }
     console.log('CallKitCoordinator: Processing CallKit answer action', {
@@ -737,7 +740,7 @@ class CallKitCoordinator {
           // checkForInitialPushNotification() will run after setVoipClient()
           // and will find the push data still intact, call handleCallKitPushReceived()
           // which queues the matching auto-answer.
-          return;
+          return false;
         }
         // Queue one UUID-targeted answer. If the push is already being
         // processed, its eventual INVITE will consume this action. Otherwise
@@ -745,19 +748,20 @@ class CallKitCoordinator {
         voipClient.queueAnswerFromCallKit(callKitUUID);
         if (this.pendingPushCallUUIDs.has(callKitUUID)) {
           this.autoAnswerCallUUIDs.delete(callKitUUID);
-          return;
+          return true;
         }
-        await this.handleCallKitPushReceived(callKitUUID, event);
-        return;
+        return await this.handleCallKitPushReceived(callKitUUID, event);
       }
       // For other platforms (shouldn't happen on iOS)
       console.error('CallKitCoordinator: ❌ Unsupported platform for push notification handling');
       await callkit_1.default.reportCallEnded(callKitUUID, callkit_1.CallEndReason.Failed);
+      return false;
     } catch (error) {
       console.error('CallKitCoordinator: ❌ Error handling push notification answer:', error);
       // Report the call as failed to CallKit
       await callkit_1.default.reportCallEnded(callKitUUID, callkit_1.CallEndReason.Failed);
       this.cleanupCall(callKitUUID);
+      return false;
     }
   }
   /**

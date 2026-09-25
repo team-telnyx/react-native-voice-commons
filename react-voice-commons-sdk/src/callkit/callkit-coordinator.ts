@@ -470,7 +470,10 @@ class CallKitCoordinator {
       });
 
       console.log('CallKitCoordinator: No WebRTC call found, handling as push notification');
-      await this.handlePushNotificationAnswer(callKitUUID, event);
+      const queued = await this.handlePushNotificationAnswer(callKitUUID, event);
+      if (!queued) {
+        this.releaseActiveCall(callKitUUID);
+      }
       return;
     }
 
@@ -790,7 +793,7 @@ class CallKitCoordinator {
    * Handle push notification answer - when user answers from CallKit but we don't have a WebRTC call yet
    * This is the iOS equivalent of the Android FCM handler
    */
-  private async handlePushNotificationAnswer(callKitUUID: string, event?: any) {
+  private async handlePushNotificationAnswer(callKitUUID: string, event?: any): Promise<boolean> {
     try {
       console.log(
         'CallKitCoordinator: Handling push notification answer for CallKit UUID:',
@@ -812,7 +815,7 @@ class CallKitCoordinator {
           // checkForInitialPushNotification() will run after setVoipClient()
           // and will find the push data still intact, call handleCallKitPushReceived()
           // which queues the matching auto-answer.
-          return;
+          return false;
         }
 
         // Queue one UUID-targeted answer. If the push is already being
@@ -821,22 +824,22 @@ class CallKitCoordinator {
         voipClient.queueAnswerFromCallKit(callKitUUID);
         if (this.pendingPushCallUUIDs.has(callKitUUID)) {
           this.autoAnswerCallUUIDs.delete(callKitUUID);
-          return;
+          return true;
         }
 
-        await this.handleCallKitPushReceived(callKitUUID, event);
-
-        return;
+        return await this.handleCallKitPushReceived(callKitUUID, event);
       }
 
       // For other platforms (shouldn't happen on iOS)
       console.error('CallKitCoordinator: ❌ Unsupported platform for push notification handling');
       await CallKit.reportCallEnded(callKitUUID, CallEndReason.Failed);
+      return false;
     } catch (error) {
       console.error('CallKitCoordinator: ❌ Error handling push notification answer:', error);
       // Report the call as failed to CallKit
       await CallKit.reportCallEnded(callKitUUID, CallEndReason.Failed);
       this.cleanupCall(callKitUUID);
+      return false;
     }
   }
 

@@ -9,7 +9,9 @@ jest.mock('react-native', () => ({
 }));
 
 jest.mock('../../src/internal/voice-pn-bridge', () => ({
-  VoicePnBridge: {},
+  VoicePnBridge: {
+    getPendingVoipPush: jest.fn().mockResolvedValue(null),
+  },
 }));
 
 jest.mock('../../src/callkit/callkit', () => ({
@@ -78,5 +80,13 @@ describe('CallKitCoordinator single-active-call policy', () => {
     expect(CallKit.reportCallEnded).toHaveBeenCalledWith('call-2', 1);
     expect(outgoingCall.hangup).toHaveBeenCalledTimes(1);
     expect(callKitCoordinator.getWebRTCCall('call-2')).toBeNull();
+  });
+
+  it('releases a push-answer claim when no VoIP client can queue the answer', async () => {
+    (callKitCoordinator as any).voipClient = null;
+
+    await callKitCoordinator.handleCallKitAnswer('call-1');
+
+    expect(callKitCoordinator.claimActiveCallForTesting('call-2')).toBe(true);
   });
 });
