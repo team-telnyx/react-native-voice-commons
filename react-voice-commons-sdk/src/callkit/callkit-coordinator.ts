@@ -193,6 +193,16 @@ class CallKitCoordinator {
       );
 
       if (success) {
+        if (!this.claimActiveCall(callKitUUID)) {
+          console.warn('CallKitCoordinator: Another call is already active or answering');
+          await CallKit.reportCallEnded(callKitUUID, CallEndReason.Failed);
+          try {
+            await call.hangup();
+          } finally {
+            this.cleanupCall(callKitUUID);
+          }
+          return null;
+        }
         this.callMap.set(callKitUUID, call);
         this.setupWebRTCCallListeners(call, callKitUUID);
         (call as any)._callKitUUID = callKitUUID;
@@ -254,6 +264,8 @@ class CallKitCoordinator {
         this.isCallFromPush = this.pendingPushCallUUIDs.size > 0;
         await this.clearMatchingPendingVoipPush(callKitUUID);
         console.log('CallKitCoordinator: CallKit answer success');
+      } else {
+        this.releaseActiveCall(callKitUUID);
       }
 
       return success;
@@ -437,6 +449,14 @@ class CallKitCoordinator {
         'CallKitCoordinator: Rejecting answer because another call owns the active slot'
       );
       await CallKit.reportCallEnded(callKitUUID, CallEndReason.Failed);
+      const rejectedCall = this.callMap.get(callKitUUID);
+      if (rejectedCall) {
+        try {
+          await rejectedCall.hangup();
+        } finally {
+          this.cleanupCall(callKitUUID);
+        }
+      }
       return;
     }
 
@@ -871,6 +891,18 @@ class CallKitCoordinator {
 
       switch (state) {
         case 'active':
+          if (!this.claimActiveCall(callKitUUID)) {
+            console.warn(
+              'CallKitCoordinator: Ending active call because another call owns the slot'
+            );
+            await CallKit.reportCallEnded(callKitUUID, CallEndReason.Failed);
+            try {
+              await call.hangup();
+            } finally {
+              this.cleanupCall(callKitUUID);
+            }
+            break;
+          }
           this.selectCall(call);
           this.pendingPushCallUUIDs.delete(callKitUUID);
           this.autoAnswerCallUUIDs.delete(callKitUUID);
@@ -1107,6 +1139,13 @@ class CallKitCoordinator {
 
   private actionKey(action: string, callKitUUID: string): string {
     return `${action}:${this.normalizeUUID(callKitUUID)}`;
+  }
+
+  private releaseActiveCall(callKitUUID: string): void {
+    callKitUUID = this.normalizeUUID(callKitUUID);
+    if (this.activeOrAnsweringCallUUID === callKitUUID) {
+      this.activeOrAnsweringCallUUID = null;
+    }
   }
 
   private selectCall(call: Call): void {
@@ -1373,9 +1412,7 @@ class CallKitCoordinator {
 
   /** @internal Exposed for deterministic single-active-call regression tests. */
   releaseActiveCallForTesting(callKitUUID: string): void {
-    if (this.activeOrAnsweringCallUUID === callKitUUID) {
-      this.activeOrAnsweringCallUUID = null;
-    }
+    this.releaseActiveCall(callKitUUID);
   }
 
   /**
