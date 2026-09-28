@@ -167,6 +167,37 @@ describe('Call Custom Headers', () => {
       // Verify
       expect(stateSpy).toHaveBeenCalledWith('telnyx.call.state', call, 'active');
     });
+
+    it('should share one in-flight answer operation across duplicate callers', async () => {
+      let resolveAnswer!: (value: unknown) => void;
+      mockConnection.sendAndWait.mockReturnValue(
+        new Promise((resolve) => {
+          resolveAnswer = resolve;
+        }) as any
+      );
+      (createAnswerMessage as jest.Mock).mockReturnValue('mock-answer-message');
+
+      const first = call.answer();
+      const duplicate = call.answer();
+
+      expect(duplicate).toBe(first);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(mockPeer.attachLocalStream).toHaveBeenCalledTimes(1);
+      expect(createAnswerMessage).toHaveBeenCalledTimes(1);
+
+      resolveAnswer({});
+      await Promise.all([first, duplicate]);
+      expect(mockConnection.sendAndWait).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not answer an already active call again', async () => {
+      call.state = 'active';
+
+      await call.answer();
+
+      expect(mockPeer.attachLocalStream).not.toHaveBeenCalled();
+      expect(mockConnection.sendAndWait).not.toHaveBeenCalled();
+    });
   });
 
   describe('hangup method', () => {
