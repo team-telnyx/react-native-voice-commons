@@ -1,6 +1,6 @@
 # Enumeration: CallEndReason
 
-Defined in: [callkit/callkit.ts:23](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/callkit/callkit.ts#L23)
+Defined in: [callkit/callkit.ts:36](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/callkit/callkit.ts#L36)
 
 ## Enumeration Members
 
@@ -8,7 +8,7 @@ Defined in: [callkit/callkit.ts:23](https://github.com/team-telnyx/react-native-
 
 > **Failed**: `1`
 
-Defined in: [callkit/callkit.ts:24](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/callkit/callkit.ts#L24)
+Defined in: [callkit/callkit.ts:37](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/callkit/callkit.ts#L37)
 
 ***
 
@@ -16,7 +16,7 @@ Defined in: [callkit/callkit.ts:24](https://github.com/team-telnyx/react-native-
 
 > **RemoteEnded**: `2`
 
-Defined in: [callkit/callkit.ts:25](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/callkit/callkit.ts#L25)
+Defined in: [callkit/callkit.ts:38](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/callkit/callkit.ts#L38)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [callkit/callkit.ts:25](https://github.com/team-telnyx/react-native-
 
 > **Unanswered**: `3`
 
-Defined in: [callkit/callkit.ts:26](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/callkit/callkit.ts#L26)
+Defined in: [callkit/callkit.ts:39](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/callkit/callkit.ts#L39)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: [callkit/callkit.ts:26](https://github.com/team-telnyx/react-native-
 
 > **AnsweredElsewhere**: `4`
 
-Defined in: [callkit/callkit.ts:27](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/callkit/callkit.ts#L27)
+Defined in: [callkit/callkit.ts:40](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/callkit/callkit.ts#L40)
 
 ***
 
@@ -40,4 +40,4 @@ Defined in: [callkit/callkit.ts:27](https://github.com/team-telnyx/react-native-
 
 > **DeclinedElsewhere**: `5`
 
-Defined in: [callkit/callkit.ts:28](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/callkit/callkit.ts#L28)
+Defined in: [callkit/callkit.ts:41](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/callkit/callkit.ts#L41)

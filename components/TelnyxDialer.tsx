@@ -8,6 +8,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  NativeModules,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -28,6 +29,8 @@ interface TelnyxDialerProps {
 
 type DestinationType = 'sip' | 'phone';
 const telnyxLogo = require('../assets/images/telnyx_logo.png');
+// Change by hand for VSUP-226 validation. The native method only exists in DEBUG builds.
+const enableAudioRaceDebug = false;
 
 export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => {
   const { voipClient } = useTelnyxVoice();
@@ -36,6 +39,7 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
   const [callerIdName, setCallerIdName] = useState('');
   const [callerIdNumber, setCallerIdNumber] = useState('');
   const [connectionState, setConnectionState] = useState(voipClient.currentConnectionState);
+  const [calls, setCalls] = useState<Call[]>(voipClient.currentCalls);
   const [activeCall, setActiveCall] = useState<Call | null>(voipClient.currentActiveCall);
   const [activeCallState, setActiveCallState] = useState<TelnyxCallState | null>(
     voipClient.currentActiveCall?.currentState || null
@@ -60,6 +64,12 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
     loadProfile();
     return () => connectionSubscription.unsubscribe();
   }, [voipClient, log]);
+
+  useEffect(() => {
+    const callsSubscription = voipClient.calls$.subscribe(setCalls);
+
+    return () => callsSubscription.unsubscribe();
+  }, [voipClient]);
 
   useEffect(() => {
     const activeCallSubscription = voipClient.activeCall$.subscribe((call) => {
@@ -170,6 +180,21 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
     }
   };
 
+  const handleAudioRaceDebug = async () => {
+    try {
+      if (!activeCall || !NativeModules.CallKitBridge?.simulateAudioSetupRace) {
+        throw new Error('Audio race debug bridge is unavailable');
+      }
+      await NativeModules.CallKitBridge.simulateAudioSetupRace(activeCall.callId, 250);
+      Alert.alert(
+        'Audio race scheduled',
+        'A late audio reset will run in 250 ms. Check Xcode logs.'
+      );
+    } catch (error) {
+      Alert.alert('Audio race failed', String(error));
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
@@ -216,63 +241,81 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
           </View>
         </View>
 
-        <View style={styles.segmentedControl}>
-          <TouchableOpacity
-            style={[styles.segment, destinationType === 'sip' && styles.segmentSelected]}
-            onPress={() => setDestinationType('sip')}
-            disabled={!isConnected}
-            testID="sipAddressToggle"
-            accessibilityLabel="SIP address"
-          >
-            <Text
-              style={[styles.segmentText, destinationType === 'sip' && styles.segmentTextSelected]}
+        {!isStartingCall && !activeCall && (
+          <View style={styles.segmentedControl}>
+            <TouchableOpacity
+              style={[styles.segment, destinationType === 'sip' && styles.segmentSelected]}
+              onPress={() => setDestinationType('sip')}
+              disabled={!isConnected}
+              testID="sipAddressToggle"
+              accessibilityLabel="SIP address"
             >
-              SIP address
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.segment, destinationType === 'phone' && styles.segmentSelected]}
-            onPress={() => setDestinationType('phone')}
-            disabled={!isConnected}
-            testID="phoneNumberToggle"
-            accessibilityLabel="Phone number"
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                destinationType === 'phone' && styles.segmentTextSelected,
-              ]}
+              <Text
+                style={[
+                  styles.segmentText,
+                  destinationType === 'sip' && styles.segmentTextSelected,
+                ]}
+              >
+                SIP address
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.segment, destinationType === 'phone' && styles.segmentSelected]}
+              onPress={() => setDestinationType('phone')}
+              disabled={!isConnected}
+              testID="phoneNumberToggle"
+              accessibilityLabel="Phone number"
             >
-              Phone number
-            </Text>
-          </TouchableOpacity>
-        </View>
+              <Text
+                style={[
+                  styles.segmentText,
+                  destinationType === 'phone' && styles.segmentTextSelected,
+                ]}
+              >
+                Phone number
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-        <TextInput
-          style={[styles.callInput, inputFocused && styles.inputFocused]}
-          placeholder={destinationType === 'phone' ? 'Enter phone number' : 'Enter SIP address'}
-          placeholderTextColor="gray"
-          value={destinationNumber}
-          onChangeText={setDestinationNumber}
-          onFocus={() => setInputFocused(true)}
-          onBlur={() => setInputFocused(false)}
-          keyboardType={destinationType === 'phone' ? 'phone-pad' : 'default'}
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={isConnected}
-          testID="numberToCallTextField"
-          accessibilityLabel="Call input"
-        />
+        {!isStartingCall && !activeCall && (
+          <TextInput
+            style={[styles.callInput, inputFocused && styles.inputFocused]}
+            placeholder={destinationType === 'phone' ? 'Enter phone number' : 'Enter SIP address'}
+            placeholderTextColor="gray"
+            value={destinationNumber}
+            onChangeText={setDestinationNumber}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+            keyboardType={destinationType === 'phone' ? 'phone-pad' : 'default'}
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={isConnected}
+            testID="numberToCallTextField"
+            accessibilityLabel="Call input"
+          />
+        )}
 
         <View style={styles.actions}>
+          {enableAudioRaceDebug && activeCall && (
+            <TouchableOpacity
+              style={styles.disconnectButton}
+              onPress={handleAudioRaceDebug}
+              testID="audioRaceDebugButton"
+            >
+              <Text style={styles.disconnectButtonText}>Inject audio setup race</Text>
+            </TouchableOpacity>
+          )}
           {isStartingCall || activeCall ? (
             <InlineCallControls
               activeCall={activeCall}
+              calls={calls}
               activeCallState={activeCallState}
               destination={destinationNumber}
               isStartingCall={isStartingCall}
               onAnswer={handleAnswerCall}
               onEnd={handleEndCall}
+              onSwap={(heldCall) => voipClient.swapCalls(heldCall.callId)}
             />
           ) : (
             <TouchableOpacity

@@ -11,8 +11,21 @@ interface CallKitBridgeInterface {
     handle: string,
     displayName: string
   ): Promise<{ success: boolean; callUUID: string }>;
+  isCallRegistered(callUUID: string): Promise<{ registered: boolean; callUUID: string }>;
   answerCall(callUUID: string): Promise<{ success: boolean; callUUID: string }>;
   endCall(callUUID: string): Promise<{ success: boolean; callUUID: string }>;
+  completeHeldCallAction(
+    callUUID: string,
+    success: boolean
+  ): Promise<{ success: boolean; callUUID: string }>;
+  setCallHeld(
+    callUUID: string,
+    isOnHold: boolean
+  ): Promise<{ success: boolean; callUUID: string; isOnHold: boolean }>;
+  swapCalls(
+    activeCallUUID: string,
+    heldCallUUID: string
+  ): Promise<{ success: boolean; activeCallUUID: string; heldCallUUID: string }>;
   reportCallConnected(callUUID: string): Promise<{ success: boolean }>;
   reportCallEnded(callUUID: string, reason: number): Promise<{ success: boolean }>;
   updateCall(callUUID: string, displayName: string, handle: string): Promise<{ success: boolean }>;
@@ -31,13 +44,14 @@ export enum CallEndReason {
 // CallKit event types
 export interface CallKitEvent {
   callUUID: string;
+  isOnHold?: boolean;
   [key: string]: any;
 }
 
 class CallKitManager {
   private bridge: CallKitBridgeInterface | null = null;
   private eventEmitter: NativeEventEmitter | null = null;
-  private listeners: Map<string, (event: CallKitEvent) => void> = new Map();
+  private listeners: Map<string, Set<(event: CallKitEvent) => void>> = new Map();
 
   /**
    * Normalize UUID to lowercase for consistent handling in React Native
@@ -100,6 +114,12 @@ class CallKitManager {
       this.notifyListeners('endCall', normalizedEvent);
     });
 
+    this.eventEmitter.addListener('CallKitDidPerformHeldCallAction', (event) => {
+      const normalizedEvent = this.normalizeEvent(event);
+      console.log('CallKit: Received held call action', normalizedEvent);
+      this.notifyListeners('heldCall', normalizedEvent);
+    });
+
     this.eventEmitter.addListener('CallKitDidReceivePush', (event) => {
       const normalizedEvent = this.normalizeEvent(event);
       console.log('CallKit: Received push notification event', normalizedEvent);
@@ -108,9 +128,11 @@ class CallKitManager {
   }
 
   private notifyListeners(eventType: string, event: CallKitEvent) {
-    const listener = this.listeners.get(eventType);
-    if (listener) {
-      listener(event);
+    const listeners = this.listeners.get(eventType);
+    if (listeners) {
+      for (const listener of listeners) {
+        listener(event);
+      }
     }
   }
 
@@ -189,6 +211,23 @@ class CallKitManager {
     }
   }
 
+  public async isCallRegistered(callUUID: string): Promise<boolean> {
+    if (!this.bridge || Platform.OS !== 'ios') {
+      return false;
+    }
+
+    try {
+      const result = await this.bridge.isCallRegistered(this.denormalizeUUID(callUUID));
+      return result.registered;
+    } catch (error) {
+      console.error('CallKit: Failed to check incoming call registration', {
+        callUUID,
+        error,
+      });
+      return false;
+    }
+  }
+
   public async endCall(callUUID: string): Promise<boolean> {
     if (!this.bridge || Platform.OS !== 'ios') {
       console.warn('CallKit: Not available on this platform');
@@ -204,6 +243,52 @@ class CallKitManager {
       return result.success;
     } catch (error) {
       console.error('CallKit: Failed to end call', error);
+      return false;
+    }
+  }
+
+  public async completeHeldCallAction(callUUID: string, success: boolean): Promise<boolean> {
+    if (!this.bridge || Platform.OS !== 'ios') {
+      return false;
+    }
+
+    try {
+      const uppercaseUUID = this.denormalizeUUID(callUUID);
+      const result = await this.bridge.completeHeldCallAction(uppercaseUUID, success);
+      return result.success;
+    } catch (error) {
+      console.error('CallKit: Failed to complete held call action', error);
+      return false;
+    }
+  }
+
+  public async setCallHeld(callUUID: string, isOnHold: boolean): Promise<boolean> {
+    if (!this.bridge || Platform.OS !== 'ios') {
+      return false;
+    }
+
+    try {
+      const result = await this.bridge.setCallHeld(this.denormalizeUUID(callUUID), isOnHold);
+      return result.success;
+    } catch (error) {
+      console.error('CallKit: Failed to change held state', { callUUID, isOnHold, error });
+      return false;
+    }
+  }
+
+  public async swapCalls(activeCallUUID: string, heldCallUUID: string): Promise<boolean> {
+    if (!this.bridge || Platform.OS !== 'ios') {
+      return false;
+    }
+
+    try {
+      const result = await this.bridge.swapCalls(
+        this.denormalizeUUID(activeCallUUID),
+        this.denormalizeUUID(heldCallUUID)
+      );
+      return result.success;
+    } catch (error) {
+      console.error('CallKit: Failed to swap calls', error);
       return false;
     }
   }
@@ -283,23 +368,36 @@ class CallKitManager {
   // Event listener management
 
   public onStartCall(listener: (event: CallKitEvent) => void): () => void {
-    this.listeners.set('startCall', listener);
-    return () => this.listeners.delete('startCall');
+    return this.addListener('startCall', listener);
   }
 
   public onAnswerCall(listener: (event: CallKitEvent) => void): () => void {
-    this.listeners.set('answerCall', listener);
-    return () => this.listeners.delete('answerCall');
+    return this.addListener('answerCall', listener);
   }
 
   public onEndCall(listener: (event: CallKitEvent) => void): () => void {
-    this.listeners.set('endCall', listener);
-    return () => this.listeners.delete('endCall');
+    return this.addListener('endCall', listener);
+  }
+
+  public onHeldCall(listener: (event: CallKitEvent) => void): () => void {
+    return this.addListener('heldCall', listener);
   }
 
   public onReceivePush(listener: (event: CallKitEvent) => void): () => void {
-    this.listeners.set('receivePush', listener);
-    return () => this.listeners.delete('receivePush');
+    return this.addListener('receivePush', listener);
+  }
+
+  private addListener(eventType: string, listener: (event: CallKitEvent) => void): () => void {
+    const listeners = this.listeners.get(eventType) ?? new Set();
+    listeners.add(listener);
+    this.listeners.set(eventType, listeners);
+
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) {
+        this.listeners.delete(eventType);
+      }
+    };
   }
 
   // Utility methods

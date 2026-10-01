@@ -1,14 +1,22 @@
 import { Observable } from 'rxjs';
+import { Platform } from 'react-native';
 import { TelnyxConnectionState } from './models/connection-state';
 import { Call } from './models/call';
 import { TelnyxCallState } from './models/call-state';
 import { Config, CredentialConfig, TokenConfig, validateConfig } from './models/config';
 import { SessionManager } from './internal/session/session-manager';
-import { CallStateController } from './internal/calls/call-state-controller';
+import { CallStateController, type CustomHeaders } from './internal/calls/call-state-controller';
 import { VoicePnBridge } from './internal/voice-pn-bridge';
 
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
+const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
 const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
+const LEGACY_CALLKIT_ANSWER_KEY = '__legacy_callkit_answer__';
+
+interface PendingCallKitAnswer {
+  callKitUUIDOrHeaders?: string | Record<string, string>;
+  customHeaders: Record<string, string>;
+}
 
 /**
  * Configuration options for TelnyxVoipClient
@@ -39,7 +47,9 @@ export class TelnyxVoipClient {
   private readonly _sessionManager: SessionManager;
   private readonly _callStateController: CallStateController;
   private readonly _options: Required<TelnyxVoipClientOptions>;
+  private readonly _pendingCallKitAnswers = new Map<string, PendingCallKitAnswer>();
   private _disposed = false;
+  private _disposePromise?: Promise<void>;
 
   /**
    * Check if the app was launched from a push notification.
@@ -86,6 +96,7 @@ export class TelnyxVoipClient {
       console.log(
         '🔧 TelnyxVoipClient: Client ready, initializing call state controller listeners'
       );
+      this._flushPendingCallKitAnswers();
       this._callStateController.initializeClientListeners();
     });
 
@@ -189,6 +200,71 @@ export class TelnyxVoipClient {
   }
 
   /**
+   * Explicitly set the active call for multi-call scenarios.
+   * @param callId The ID of the call to mark as active
+   */
+  setActiveCall(callId: string): void {
+    this._throwIfDisposed();
+    this._callStateController.setActiveCall(callId);
+  }
+
+  /**
+   * Clear the explicitly selected active call and return to default selection.
+   */
+  clearActiveCall(): void {
+    this._throwIfDisposed();
+    this._callStateController.clearActiveCall();
+  }
+
+  /**
+   * Swap the current active call with a held call.
+   * On iOS this is coordinated through CallKit so native and SDK state stay aligned.
+   *
+   * @param targetCallId ID of the held call to make active
+   */
+  async swapCalls(targetCallId: string): Promise<void> {
+    this._throwIfDisposed();
+
+    const activeCall = this.currentActiveCall;
+    const heldCall = this.getCall(targetCallId);
+
+    if (!activeCall || !heldCall || activeCall.callId === heldCall.callId) {
+      throw new Error('An active call and a different held call are required to swap calls');
+    }
+    if (activeCall.currentState !== TelnyxCallState.ACTIVE) {
+      throw new Error(`Cannot swap active call in state: ${activeCall.currentState}`);
+    }
+    if (heldCall.currentState !== TelnyxCallState.HELD) {
+      throw new Error(`Cannot swap target call in state: ${heldCall.currentState}`);
+    }
+
+    if (Platform.OS === 'ios') {
+      const { callKitCoordinator } = await import('./callkit/callkit-coordinator');
+      if (callKitCoordinator.isAvailable()) {
+        const success = await callKitCoordinator.swapCallsFromUI(
+          activeCall.telnyxCall,
+          heldCall.telnyxCall
+        );
+        if (!success) {
+          throw new Error('CallKit failed to swap calls');
+        }
+        return;
+      }
+    }
+
+    await activeCall.hold();
+    try {
+      await heldCall.resume();
+      this.setActiveCall(heldCall.callId);
+    } catch (error) {
+      await activeCall.resume().catch((resumeError) => {
+        console.error('Failed to restore active call after swap failure', resumeError);
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Current session ID (UUID) for this connection.
    */
   get sessionId(): string {
@@ -225,10 +301,12 @@ export class TelnyxVoipClient {
       console.log('TelnyxVoipClient: Logging in with credentials for user:', config.sipUser);
     }
 
-    const loginConfig = {
+    const loginConfig = await this._withNativeVoipPushToken({
       ...config,
       useTrickleIce: config.useTrickleIce ?? this._options.useTrickleIce,
-    };
+    });
+
+    await VoicePnBridge.setIncomingCallRingtone(loginConfig.incomingCallRingtone);
 
     // Store credentials for future reconnection
     await this._storeCredentials(loginConfig);
@@ -257,10 +335,12 @@ export class TelnyxVoipClient {
       console.log('TelnyxVoipClient: Logging in with token');
     }
 
-    const loginConfig = {
+    const loginConfig = await this._withNativeVoipPushToken({
       ...config,
       useTrickleIce: config.useTrickleIce ?? this._options.useTrickleIce,
-    };
+    });
+
+    await VoicePnBridge.setIncomingCallRingtone(loginConfig.incomingCallRingtone);
 
     // Store token for future reconnection
     await this._storeToken(loginConfig);
@@ -292,7 +372,7 @@ export class TelnyxVoipClient {
    * This method is used for auto-reconnection scenarios where the app
    * comes back to the foreground and needs to restore the connection.
    *
-   * @returns Promise<boolean> - true if reconnection was successful, false otherwise
+   * @returns Whether reconnection was successful.
    */
   async loginFromStoredConfig(): Promise<boolean> {
     this._throwIfDisposed();
@@ -310,20 +390,30 @@ export class TelnyxVoipClient {
       const storedCredentialToken = await AsyncStorage.getItem('@credential_token');
       const storedPushToken = await AsyncStorage.getItem('@push_token');
       const storedUseTrickleIce = await AsyncStorage.getItem(USE_TRICKLE_ICE_STORAGE_KEY);
+      const storedPushWhenActive = await AsyncStorage.getItem(PUSH_WHEN_ACTIVE_STORAGE_KEY);
       const storedMissedCallNotifications = await AsyncStorage.getItem(
         MISSED_CALL_NOTIFICATIONS_STORAGE_KEY
       );
       const useTrickleIce =
         storedUseTrickleIce === null ? this._options.useTrickleIce : storedUseTrickleIce === 'true';
+      const pushWhenActive = storedPushWhenActive === 'true';
       const enableMissedCallNotifications = storedMissedCallNotifications === 'true';
+      const nativePushToken =
+        Platform.OS === 'ios' ? (await VoicePnBridge.getVoipToken())?.trim() : null;
+      const pushNotificationDeviceToken = nativePushToken || storedPushToken;
+
+      if (nativePushToken && nativePushToken !== storedPushToken) {
+        await AsyncStorage.setItem('@push_token', nativePushToken);
+      }
 
       // Check if we have credential-based authentication data
       if (storedUsername && storedPassword) {
         // Create credential config from stored data
         const { createCredentialConfig } = require('./models/config');
         const config = createCredentialConfig(storedUsername, storedPassword, {
-          pushNotificationDeviceToken: storedPushToken,
+          pushNotificationDeviceToken,
           useTrickleIce,
+          pushWhenActive,
           enableMissedCallNotifications,
         });
 
@@ -343,8 +433,9 @@ export class TelnyxVoipClient {
         // Create token config from stored data
         const { createTokenConfig } = require('./models/config');
         const config = createTokenConfig(storedCredentialToken, {
-          pushNotificationDeviceToken: storedPushToken,
+          pushNotificationDeviceToken,
           useTrickleIce,
+          pushWhenActive,
           enableMissedCallNotifications,
         });
 
@@ -386,7 +477,7 @@ export class TelnyxVoipClient {
     destination: string,
     callerName?: string,
     callerNumber?: string,
-    customHeaders?: Record<string, string>
+    customHeaders?: CustomHeaders
   ): Promise<Call> {
     this._throwIfDisposed();
 
@@ -484,20 +575,35 @@ export class TelnyxVoipClient {
    * This should be called when the user answers from CallKit before the socket connection is established
    * @param customHeaders Optional custom headers to include with the answer
    */
-  queueAnswerFromCallKit(customHeaders: Record<string, string> = {}): void {
+  queueAnswerFromCallKit(
+    callKitUUIDOrHeaders?: string | Record<string, string>,
+    customHeaders: Record<string, string> = {}
+  ): void {
     this._throwIfDisposed();
 
     if (this._options.debug) {
-      console.log('TelnyxVoipClient: Queuing answer action from CallKit', customHeaders);
+      console.log('TelnyxVoipClient: Queuing answer action from CallKit', {
+        callKitUUIDOrHeaders,
+        customHeaders,
+      });
     }
 
     const telnyxClient = this._sessionManager.telnyxClient;
     if (telnyxClient && typeof (telnyxClient as any).queueAnswerFromCallKit === 'function') {
-      (telnyxClient as any).queueAnswerFromCallKit(customHeaders);
+      (telnyxClient as any).queueAnswerFromCallKit(callKitUUIDOrHeaders, customHeaders);
     } else {
-      console.warn(
-        'TelnyxVoipClient: TelnyxRTC client not available or method not found for queueAnswerFromCallKit'
-      );
+      const normalizedUUID =
+        typeof callKitUUIDOrHeaders === 'string' ? callKitUUIDOrHeaders.toLowerCase() : undefined;
+      const actionKey = normalizedUUID ?? LEGACY_CALLKIT_ANSWER_KEY;
+      let retainedUUIDOrHeaders: string | Record<string, string> | undefined = normalizedUUID;
+      if (callKitUUIDOrHeaders && typeof callKitUUIDOrHeaders !== 'string') {
+        retainedUUIDOrHeaders = { ...callKitUUIDOrHeaders };
+      }
+
+      this._pendingCallKitAnswers.set(actionKey, {
+        callKitUUIDOrHeaders: retainedUUIDOrHeaders,
+        customHeaders: { ...customHeaders },
+      });
     }
   }
 
@@ -505,7 +611,7 @@ export class TelnyxVoipClient {
    * Queue an end action for when the call invite arrives (for CallKit integration)
    * This should be called when the user ends from CallKit before the socket connection is established
    */
-  queueEndFromCallKit(): void {
+  queueEndFromCallKit(callKitUUID?: string): void {
     this._throwIfDisposed();
 
     if (this._options.debug) {
@@ -514,11 +620,26 @@ export class TelnyxVoipClient {
 
     const telnyxClient = this._sessionManager.telnyxClient;
     if (telnyxClient && typeof (telnyxClient as any).queueEndFromCallKit === 'function') {
-      (telnyxClient as any).queueEndFromCallKit();
+      (telnyxClient as any).queueEndFromCallKit(callKitUUID);
     } else {
       console.warn(
         'TelnyxVoipClient: TelnyxRTC client not available or method not found for queueEndFromCallKit'
       );
+    }
+  }
+
+  /**
+   * Associate the next push-delivered INVITE with its app-facing CallKit UUID.
+   * The underlying signaling call ID remains unchanged.
+   * @internal
+   */
+  setPushNotificationCallKitUUID(callKitUUID: string | null): void {
+    const telnyxClient = this._sessionManager.telnyxClient;
+    if (
+      telnyxClient &&
+      typeof (telnyxClient as any).setPushNotificationCallKitUUID === 'function'
+    ) {
+      (telnyxClient as any).setPushNotificationCallKitUUID(callKitUUID);
     }
   }
 
@@ -531,9 +652,9 @@ export class TelnyxVoipClient {
    * This is particularly important for background clients that should be
    * disposed after handling push notifications.
    */
-  dispose(): void {
-    if (this._disposed) {
-      return;
+  async dispose(): Promise<void> {
+    if (this._disposePromise) {
+      return this._disposePromise;
     }
 
     if (this._options.debug) {
@@ -541,11 +662,72 @@ export class TelnyxVoipClient {
     }
 
     this._disposed = true;
-    this._callStateController.dispose();
-    this._sessionManager.dispose();
+    this._disposePromise = (async () => {
+      try {
+        await this._sessionManager.dispose();
+      } finally {
+        this._pendingCallKitAnswers.clear();
+        this._callStateController.dispose();
+      }
+    })();
+
+    return this._disposePromise;
   }
 
   // ========== Private Methods ==========
+
+  /**
+   * Forward answers captured during cold start as soon as SessionManager has
+   * created the TelnyxRTC instance. SessionManager invokes its ready callback
+   * before connect(), so the UUID-keyed action is present when the INVITE
+   * arrives.
+   */
+  private _flushPendingCallKitAnswers(): void {
+    const telnyxClient = this._sessionManager.telnyxClient;
+    if (!telnyxClient || typeof (telnyxClient as any).queueAnswerFromCallKit !== 'function') {
+      return;
+    }
+
+    for (const [actionKey, pendingAnswer] of this._pendingCallKitAnswers) {
+      try {
+        (telnyxClient as any).queueAnswerFromCallKit(
+          pendingAnswer.callKitUUIDOrHeaders,
+          pendingAnswer.customHeaders
+        );
+        this._pendingCallKitAnswers.delete(actionKey);
+      } catch (error) {
+        console.error('TelnyxVoipClient: Failed to restore pending CallKit answer', {
+          actionKey,
+          error,
+        });
+      }
+    }
+  }
+
+  /**
+   * Prefer an explicitly supplied token, otherwise hydrate it from PushKit's
+   * native storage. PushKit registration starts in AppDelegate before React
+   * mounts, so this removes the race between the JS token event and login.
+   */
+  private async _withNativeVoipPushToken<T extends Config>(config: T): Promise<T> {
+    if (Platform.OS !== 'ios' || config.pushNotificationDeviceToken?.trim()) {
+      return config;
+    }
+
+    const nativePushToken = (await VoicePnBridge.getVoipToken())?.trim();
+    if (!nativePushToken) {
+      return config;
+    }
+
+    if (this._options.debug) {
+      console.log('TelnyxVoipClient: Using PushKit token from native storage');
+    }
+
+    return {
+      ...config,
+      pushNotificationDeviceToken: nativePushToken,
+    };
+  }
 
   /**
    * Store credential configuration for automatic reconnection
@@ -559,6 +741,10 @@ export class TelnyxVoipClient {
       await AsyncStorage.setItem(
         USE_TRICKLE_ICE_STORAGE_KEY,
         String(config.useTrickleIce ?? false)
+      );
+      await AsyncStorage.setItem(
+        PUSH_WHEN_ACTIVE_STORAGE_KEY,
+        String(config.pushWhenActive ?? false)
       );
       await AsyncStorage.setItem(
         MISSED_CALL_NOTIFICATIONS_STORAGE_KEY,
@@ -594,6 +780,10 @@ export class TelnyxVoipClient {
       await AsyncStorage.setItem(
         USE_TRICKLE_ICE_STORAGE_KEY,
         String(config.useTrickleIce ?? false)
+      );
+      await AsyncStorage.setItem(
+        PUSH_WHEN_ACTIVE_STORAGE_KEY,
+        String(config.pushWhenActive ?? false)
       );
       await AsyncStorage.setItem(
         MISSED_CALL_NOTIFICATIONS_STORAGE_KEY,
@@ -654,10 +844,12 @@ export function createTelnyxVoipClient(options?: TelnyxVoipClientOptions): Telny
  * Disposes the current singleton so that a subsequent call to
  * `createTelnyxVoipClient()` will create a fresh instance.
  */
-export function destroyTelnyxVoipClient(): void {
-  if (_sharedInstance) {
-    _sharedInstance.dispose();
+export async function destroyTelnyxVoipClient(): Promise<void> {
+  const sharedInstance = _sharedInstance;
+
+  if (sharedInstance) {
     _sharedInstance = null;
+    await sharedInstance.dispose();
   }
 }
 

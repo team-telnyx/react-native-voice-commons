@@ -1,6 +1,5 @@
 import { TelnyxRTC } from '../lib/client';
 
-// Mock dependencies
 jest.mock('@react-native-community/netinfo', () => ({
   addEventListener: jest.fn(() => jest.fn()),
 }));
@@ -18,19 +17,17 @@ jest.mock('../lib/login-handler');
 jest.mock('../lib/keep-alive-handler');
 
 describe('TelnyxRTC Client Custom Headers', () => {
+  const callKitUUID = 'AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE';
+  const actionKey = callKitUUID.toLowerCase();
   let client: TelnyxRTC;
   let mockCall: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
-
-    // Create client instance
-    client = new TelnyxRTC({
-      logLevel: 'debug',
-    });
-
-    // Mock call object with answer method
+    client = new TelnyxRTC({ logLevel: 'debug' });
     mockCall = {
+      callId: 'signaling-call-id',
+      _callKitUUID: callKitUUID,
       answer: jest.fn().mockResolvedValue(undefined),
       hangup: jest.fn(),
       state: 'ringing',
@@ -38,150 +35,101 @@ describe('TelnyxRTC Client Custom Headers', () => {
   });
 
   describe('queueAnswerFromCallKit', () => {
-    it('should store custom headers for pending answer', () => {
-      // Setup
+    it('stores custom headers under the normalized CallKit UUID', () => {
       const customHeaders = {
         'X-CallKit-Answer': 'true',
         'X-User-Action': 'answered-from-notification',
       };
 
-      // Execute
-      client.queueAnswerFromCallKit(customHeaders);
+      client.queueAnswerFromCallKit(callKitUUID, customHeaders);
 
-      // Verify internal state
-      expect((client as any).pendingAnswerAction).toBe(true);
-      expect((client as any).pendingCustomHeaders).toEqual(customHeaders);
+      expect((client as any).pendingAnswerActions.get(actionKey)).toEqual(customHeaders);
+      expect((client as any).pendingAnswerActions.size).toBe(1);
     });
 
-    it('should execute immediately if call already exists', async () => {
-      // Setup - add call to calls Map and ensure it's in 'ringing' state for the queue logic
-      mockCall.state = 'ringing';
+    it('executes immediately against the matching CallKit UUID', async () => {
       (client as any).calls.set(mockCall.callId, mockCall);
-      const customHeaders = {
-        'X-Immediate': 'true',
-      };
 
-      // Execute
-      client.queueAnswerFromCallKit(customHeaders);
-
-      // Wait for async execution
+      client.queueAnswerFromCallKit(callKitUUID, { 'X-Immediate': 'true' });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      // Verify call was answered with converted headers
       expect(mockCall.answer).toHaveBeenCalledWith([{ name: 'X-Immediate', value: 'true' }]);
+      expect((client as any).pendingAnswerActions.has(actionKey)).toBe(false);
     });
 
-    it('should handle empty custom headers', () => {
-      // Execute
-      client.queueAnswerFromCallKit({});
+    it('stores empty headers for a UUID-keyed answer', () => {
+      client.queueAnswerFromCallKit(callKitUUID, {});
 
-      // Verify
-      expect((client as any).pendingCustomHeaders).toEqual({});
+      expect((client as any).pendingAnswerActions.get(actionKey)).toEqual({});
     });
 
-    it('should handle undefined custom headers', () => {
-      // Execute
+    it('keeps the legacy no-UUID form as an unambiguous empty-header action', () => {
       client.queueAnswerFromCallKit();
 
-      // Verify
-      expect((client as any).pendingCustomHeaders).toEqual({});
+      expect((client as any).pendingAnswerActions.get('__legacy_unambiguous_call__')).toEqual({});
     });
   });
 
   describe('executePendingAnswer', () => {
-    beforeEach(() => {
-      // Set up pending answer
-      (client as any).pendingAnswerAction = true;
-      (client as any).calls.set(mockCall.callId, mockCall);
-    });
-
-    it('should convert Record<string, string> to header array format', async () => {
-      // Setup
-      (client as any).pendingCustomHeaders = {
+    it('converts Record<string, string> to header array format', async () => {
+      (client as any).pendingAnswerActions.set(actionKey, {
         'X-Header-1': 'value1',
         'X-Header-2': 'value2',
-      };
+      });
 
-      // Execute
-      await (client as any).executePendingAnswer();
+      await (client as any).executePendingAnswer(mockCall, actionKey);
 
-      // Verify conversion
       expect(mockCall.answer).toHaveBeenCalledWith([
         { name: 'X-Header-1', value: 'value1' },
         { name: 'X-Header-2', value: 'value2' },
       ]);
     });
 
-    it('should reset pending actions after successful execution', async () => {
-      // Setup
-      (client as any).pendingCustomHeaders = { 'X-Test': 'value' };
+    it('removes only the completed UUID-keyed action after success', async () => {
+      const otherKey = 'ffffffff-1111-2222-3333-444444444444';
+      (client as any).pendingAnswerActions.set(actionKey, { 'X-Test': 'value' });
+      (client as any).pendingAnswerActions.set(otherKey, { 'X-Other': 'value' });
 
-      // Execute
-      await (client as any).executePendingAnswer();
+      await (client as any).executePendingAnswer(mockCall, actionKey);
 
-      // Verify reset
-      expect((client as any).pendingAnswerAction).toBe(false);
-      expect((client as any).pendingCustomHeaders).toEqual({});
+      expect((client as any).pendingAnswerActions.has(actionKey)).toBe(false);
+      expect((client as any).pendingAnswerActions.get(otherKey)).toEqual({
+        'X-Other': 'value',
+      });
     });
 
-    it('should reset pending actions even after failure', async () => {
-      // Setup
+    it('removes the UUID-keyed action after answer failure', async () => {
       mockCall.answer.mockRejectedValue(new Error('Answer failed'));
-      (client as any).pendingCustomHeaders = { 'X-Test': 'value' };
+      (client as any).pendingAnswerActions.set(actionKey, { 'X-Test': 'value' });
 
-      // Execute
-      await (client as any).executePendingAnswer();
+      await (client as any).executePendingAnswer(mockCall, actionKey);
 
-      // Verify reset even after error
-      expect((client as any).pendingAnswerAction).toBe(false);
-      expect((client as any).pendingCustomHeaders).toEqual({});
+      expect((client as any).pendingAnswerActions.has(actionKey)).toBe(false);
     });
 
-    it('should handle empty custom headers object', async () => {
-      // Setup
-      (client as any).pendingCustomHeaders = {};
+    it('handles an empty custom-header object', async () => {
+      (client as any).pendingAnswerActions.set(actionKey, {});
 
-      // Execute
-      await (client as any).executePendingAnswer();
+      await (client as any).executePendingAnswer(mockCall, actionKey);
 
-      // Verify
       expect(mockCall.answer).toHaveBeenCalledWith([]);
     });
 
-    it('should not execute when no pending action', async () => {
-      // Setup
-      (client as any).pendingAnswerAction = false;
+    it('does not execute when the requested UUID has no pending answer', async () => {
+      await (client as any).executePendingAnswer(mockCall, actionKey);
 
-      // Execute
-      await (client as any).executePendingAnswer();
-
-      // Verify
       expect(mockCall.answer).not.toHaveBeenCalled();
     });
 
-    it('should not execute when no call exists', async () => {
-      // Setup - clear the calls Map
-      (client as any).calls.clear();
-
-      // Execute
-      await (client as any).executePendingAnswer();
-
-      // Verify
-      expect(mockCall.answer).not.toHaveBeenCalled();
-    });
-
-    it('should handle special characters in header values', async () => {
-      // Setup
-      (client as any).pendingCustomHeaders = {
+    it('preserves special characters in header values', async () => {
+      (client as any).pendingAnswerActions.set(actionKey, {
         'X-Special-Chars': 'value with spaces & symbols!@#$%^&*()',
         'X-Unicode': 'héllo wørld 🌍',
         'X-Empty': '',
-      };
+      });
 
-      // Execute
-      await (client as any).executePendingAnswer();
+      await (client as any).executePendingAnswer(mockCall, actionKey);
 
-      // Verify
       expect(mockCall.answer).toHaveBeenCalledWith([
         { name: 'X-Special-Chars', value: 'value with spaces & symbols!@#$%^&*()' },
         { name: 'X-Unicode', value: 'héllo wørld 🌍' },
@@ -190,36 +138,27 @@ describe('TelnyxRTC Client Custom Headers', () => {
     });
   });
 
-  describe('resetPendingActions', () => {
-    it('should reset all pending action flags and custom headers', () => {
-      // Setup
-      (client as any).pendingAnswerAction = true;
-      (client as any).pendingEndAction = true;
-      (client as any).pendingCustomHeaders = { 'X-Test': 'value' };
+  describe('UUID-keyed pending action replacement', () => {
+    it('replaces an answer with an end action only for the same UUID', () => {
+      const otherKey = 'ffffffff-1111-2222-3333-444444444444';
+      (client as any).pendingAnswerActions.set(otherKey, { 'X-Other': 'value' });
+      client.queueAnswerFromCallKit(callKitUUID, { 'X-Test': 'value' });
 
-      // Execute
-      (client as any).resetPendingActions();
+      client.queueEndFromCallKit(callKitUUID);
 
-      // Verify
-      expect((client as any).pendingAnswerAction).toBe(false);
-      expect((client as any).pendingEndAction).toBe(false);
-      expect((client as any).pendingCustomHeaders).toEqual({});
-      // Note: isCallFromPush should NOT be reset by this method
+      expect((client as any).pendingAnswerActions.has(actionKey)).toBe(false);
+      expect((client as any).pendingEndActions.has(actionKey)).toBe(true);
+      expect((client as any).pendingAnswerActions.has(otherKey)).toBe(true);
     });
   });
 
-  describe('integration with processInvite', () => {
-    it('should execute pending answer with custom headers when invite arrives', async () => {
-      // This test would require more complex mocking of the invite processing
-      // For now, we verify the conceptual flow
-
-      // Setup pending answer
+  describe('integration with invite processing', () => {
+    it('retains UUID-keyed custom headers until the matching invite arrives', () => {
       const customHeaders = { 'X-Push-Answer': 'true' };
-      client.queueAnswerFromCallKit(customHeaders);
 
-      // Verify pending state
-      expect((client as any).pendingAnswerAction).toBe(true);
-      expect((client as any).pendingCustomHeaders).toEqual(customHeaders);
+      client.queueAnswerFromCallKit(callKitUUID, customHeaders);
+
+      expect((client as any).pendingAnswerActions.get(actionKey)).toEqual(customHeaders);
     });
   });
 });

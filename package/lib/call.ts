@@ -66,6 +66,8 @@ type CallConstructorParams = {
   callState?: CallState;
   debug?: boolean;
   callReportConfig?: CallReportConfig;
+  pushWhenActive?: boolean;
+  pushDeviceToken?: string;
 };
 
 export type CallDirection = 'inbound' | 'outbound';
@@ -83,6 +85,8 @@ export type CreateInboundCall = {
   initialState?: CallState;
   debug?: boolean;
   callReportConfig?: CallReportConfig;
+  pushWhenActive?: boolean;
+  pushDeviceToken?: string;
 };
 
 // TODO persist customHeaders and clientState
@@ -107,6 +111,7 @@ export class Call extends EventEmitter<CallEvents> {
    * Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
    */
   public answerCustomHeaders: { name: string; value: string }[] | null = null;
+  private answerPromise: Promise<void> | null = null;
 
   static async createInboundCall({
     connection,
@@ -121,6 +126,8 @@ export class Call extends EventEmitter<CallEvents> {
     initialState = 'ringing',
     debug = false,
     callReportConfig,
+    pushWhenActive = false,
+    pushDeviceToken,
   }: CreateInboundCall) {
     const call = new Call({
       connection,
@@ -134,6 +141,8 @@ export class Call extends EventEmitter<CallEvents> {
       callState: initialState,
       debug,
       callReportConfig,
+      pushWhenActive,
+      pushDeviceToken,
     });
 
     // Store the custom headers from the INVITE message
@@ -220,6 +229,8 @@ export class Call extends EventEmitter<CallEvents> {
    * Set this to receive periodic quality updates.
    */
   public onQualityMetrics: ((metrics: CallQualityMetrics) => void) | null = null;
+  private readonly pushWhenActive: boolean;
+  private readonly pushDeviceToken?: string;
 
   constructor({
     connection,
@@ -233,6 +244,8 @@ export class Call extends EventEmitter<CallEvents> {
     callState = 'new',
     debug = false,
     callReportConfig,
+    pushWhenActive = false,
+    pushDeviceToken,
   }: CallConstructorParams) {
     super();
 
@@ -248,6 +261,8 @@ export class Call extends EventEmitter<CallEvents> {
     this.peer = null;
     this.debugEnabled = debug;
     this.callReportConfig = callReportConfig ?? DEFAULT_CALL_REPORT_CONFIG;
+    this.pushWhenActive = pushWhenActive;
+    this.pushDeviceToken = pushDeviceToken;
     this.callStartTimestamp = new Date().toISOString();
 
     // Initialize call report collector if enabled
@@ -425,7 +440,21 @@ export class Call extends EventEmitter<CallEvents> {
    * @throws {Error} If the peer connection is not created
    * @returns {Promise<void>} A promise that resolves when the call is accepted
    */
-  public answer = async (customHeaders?: { name: string; value: string }[]) => {
+  public answer = (customHeaders?: { name: string; value: string }[]): Promise<void> => {
+    if (this.state === 'active') {
+      return Promise.resolve();
+    }
+    if (this.answerPromise) {
+      return this.answerPromise;
+    }
+
+    this.answerPromise = this.performAnswer(customHeaders).finally(() => {
+      this.answerPromise = null;
+    });
+    return this.answerPromise;
+  };
+
+  private performAnswer = async (customHeaders?: { name: string; value: string }[]) => {
     if (!this.peer) {
       throw new Error('[Call] Peer is not created');
     }
@@ -442,6 +471,13 @@ export class Call extends EventEmitter<CallEvents> {
       await this.peer.waitForIceGatheringComplete();
     }
 
+    const pushAnswerParams = this.pushWhenActive
+      ? {
+          pushWhenActive: true,
+          pushDeviceToken: this.pushDeviceToken,
+        }
+      : {};
+
     await this.connection.sendAndWait(
       createAnswerMessage({
         callId: this.callId,
@@ -451,6 +487,7 @@ export class Call extends EventEmitter<CallEvents> {
         telnyxSessionId: this.telnyxSessionId!,
         sessionId: this.sessionId,
         customHeaders,
+        ...pushAnswerParams,
       })
     );
 
@@ -582,7 +619,7 @@ export class Call extends EventEmitter<CallEvents> {
     if (!isModifyCallAnswer(result)) {
       throw new Error(`[Call] Invalid hold response received: ${JSON.stringify(result)}`);
     }
-    if (result.result.holdState !== 'held') {
+    if (result.result.action !== 'hold' || result.result.holdState !== 'held') {
       throw new Error(`[Call] Hold action failed: ${JSON.stringify(result)}`);
     }
     this.setState('held');
@@ -603,10 +640,13 @@ export class Call extends EventEmitter<CallEvents> {
     });
     const result = await this.connection.sendAndWait(unholdRequest);
     if (!isModifyCallAnswer(result)) {
-      throw new Error(`[Call] Invalid hold response received: ${JSON.stringify(result)}`);
+      throw new Error(`[Call] Invalid unhold response received: ${JSON.stringify(result)}`);
     }
-    if (result.result.holdState !== 'held') {
-      throw new Error(`[Call] Hold action failed: ${JSON.stringify(result)}`);
+    if (
+      result.result.action !== 'unhold' ||
+      (result.result.holdState !== 'active' && result.result.holdState !== 'unheld')
+    ) {
+      throw new Error(`[Call] Unhold action failed: ${JSON.stringify(result)}`);
     }
 
     this.setState('active');

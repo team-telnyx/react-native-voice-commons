@@ -2,7 +2,7 @@
 
 > **createTokenConfig**(`sipToken`, `options?`): [`TokenConfig`](../interfaces/TokenConfig.md)
 
-Defined in: [models/config.ts:116](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/models/config.ts#L116)
+Defined in: [models/config.ts:150](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/models/config.ts#L150)
 
 Creates a token-based configuration
 

@@ -25,6 +25,9 @@ export interface VoicePnBridgeInterface {
   ): Promise<boolean>;
   hideOngoingCallNotification(): Promise<boolean>;
   hideIncomingCallNotification(): Promise<boolean>;
+  setIncomingCallRingtone(resourceName: string | null): Promise<boolean>;
+  getPendingCallKitAnswer(): Promise<string | null>;
+  clearPendingCallKitAnswer(): Promise<boolean>;
   getVoipToken(): Promise<string | null>;
   getPendingVoipPush(): Promise<string | null>;
   clearPendingVoipPush(): Promise<boolean>;
@@ -91,6 +94,21 @@ export declare class VoicePnBridge {
    * Useful for dismissing notifications when call is answered/rejected in app
    */
   static hideIncomingCallNotification(): Promise<boolean>;
+  /**
+   * Configure Android's incoming-call ringtone using an app resource in `res/raw`.
+   * Pass no value to use the device's default phone ringtone.
+   */
+  static setIncomingCallRingtone(resourceName?: string): Promise<boolean>;
+  /**
+   * Get pending CallKit answer UUID from native storage (iOS only).
+   * When the user answers a CallKit call before JS listeners are ready,
+   * the native side persists the answer UUID in UserDefaults so JS can detect it.
+   */
+  static getPendingCallKitAnswer(): Promise<string | null>;
+  /**
+   * Clear pending CallKit answer from native storage (iOS only)
+   */
+  static clearPendingCallKitAnswer(): Promise<boolean>;
   /**
    * Get VoIP token from native storage
    */

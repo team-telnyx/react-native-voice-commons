@@ -2,9 +2,13 @@
 
 > **createTelnyxVoipClient**(`options?`): [`TelnyxVoipClient`](../classes/TelnyxVoipClient.md)
 
-Defined in: [telnyx-voip-client.ts:540](https://github.com/team-telnyx/react-native-voice-commons/blob/5f0c1df513588a68afc08a15104d57f9daa9c0a1/react-voice-commons-sdk/src/telnyx-voip-client.ts#L540)
+Defined in: [telnyx-voip-client.ts:833](https://github.com/team-telnyx/react-native-voice-commons/blob/16f83b09dd3a6c7aff2b371d28f6a3c260e60749/react-voice-commons-sdk/src/telnyx-voip-client.ts#L833)
 
-Create a new TelnyxVoipClient instance for normal app usage
+Create or retrieve the shared TelnyxVoipClient instance.
+
+This uses a singleton pattern — calling it multiple times (e.g., inside a
+React component body) always returns the same instance.  If you need to
+reset the instance, call `destroyTelnyxVoipClient()` first.
 
 ## Parameters
 

@@ -62,7 +62,7 @@ class AppDelegate: ExpoAppDelegate, TelnyxVoiceAppDelegate {
     override func customCallKitConfiguration() -> CXProviderConfiguration {
         let configuration = CXProviderConfiguration(localizedName: "My App Voice")
         configuration.supportsVideo = false
-        configuration.maximumCallGroups = 1
+        configuration.maximumCallGroups = 2
         configuration.maximumCallsPerCallGroup = 1
         configuration.supportedHandleTypes = [.phoneNumber, .generic]
         configuration.includesCallsInRecents = true
@@ -113,7 +113,7 @@ class AppDelegate: ExpoAppDelegate {
     private func setupCallKit() {
         let configuration = CXProviderConfiguration(localizedName: "Voice Call")
         configuration.supportsVideo = false
-        configuration.maximumCallGroups = 1
+        configuration.maximumCallGroups = 2
         configuration.maximumCallsPerCallGroup = 1
         configuration.supportedHandleTypes = [.phoneNumber, .generic]
         configuration.includesCallsInRecents = true

@@ -14,6 +14,10 @@ export declare class SessionManager {
   private _currentConfig?;
   private _sessionId;
   private _disposed;
+  private _disposing;
+  private _connectionGeneration;
+  private _disposePromise?;
+  private _connectPromise?;
   private _onClientReady?;
   private _onDisconnect?;
   constructor();
@@ -76,14 +80,17 @@ export declare class SessionManager {
    * Handle push notification (async version)
    */
   handlePushNotification(payload: Record<string, any>): Promise<void>;
+  private _hasActiveOrHeldCall;
   /**
    * Dispose of the session manager and clean up resources
    */
-  dispose(): void;
+  dispose(): Promise<void>;
   /**
    * Internal method to establish connection with or without push notification handling
    */
   private _connect;
+  private _dispose;
+  private _runConnect;
   /**
    * Set up event listeners for the Telnyx client
    */
@@ -96,4 +103,11 @@ export declare class SessionManager {
    * Generate a unique session ID
    */
   private _generateSessionId;
+  private _assertCanStartConnection;
+  private _isTeardownActive;
+  private _isConnectCanceled;
+  private _throwIfConnectCanceled;
+  private _createConnectCanceledError;
+  private _disconnectClient;
+  private _disconnectAndForgetClient;
 }

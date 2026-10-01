@@ -2,6 +2,7 @@ import { Observable } from 'rxjs';
 import { TelnyxConnectionState } from './models/connection-state';
 import { Call } from './models/call';
 import { CredentialConfig, TokenConfig } from './models/config';
+import { type CustomHeaders } from './internal/calls/call-state-controller';
 /**
  * Configuration options for TelnyxVoipClient
  */
@@ -28,7 +29,9 @@ export declare class TelnyxVoipClient {
   private readonly _sessionManager;
   private readonly _callStateController;
   private readonly _options;
+  private readonly _pendingCallKitAnswers;
   private _disposed;
+  private _disposePromise?;
   /**
    * Check if the app was launched from a push notification.
    *
@@ -103,6 +106,22 @@ export declare class TelnyxVoipClient {
    */
   getCall(callId: string): Call | null;
   /**
+   * Explicitly set the active call for multi-call scenarios.
+   * @param callId The ID of the call to mark as active
+   */
+  setActiveCall(callId: string): void;
+  /**
+   * Clear the explicitly selected active call and return to default selection.
+   */
+  clearActiveCall(): void;
+  /**
+   * Swap the current active call with a held call.
+   * On iOS this is coordinated through CallKit so native and SDK state stay aligned.
+   *
+   * @param targetCallId ID of the held call to make active
+   */
+  swapCalls(targetCallId: string): Promise<void>;
+  /**
    * Current session ID (UUID) for this connection.
    */
   get sessionId(): string;
@@ -143,7 +162,7 @@ export declare class TelnyxVoipClient {
    * This method is used for auto-reconnection scenarios where the app
    * comes back to the foreground and needs to restore the connection.
    *
-   * @returns Promise<boolean> - true if reconnection was successful, false otherwise
+   * @returns Whether reconnection was successful.
    */
   loginFromStoredConfig(): Promise<boolean>;
   /**
@@ -161,7 +180,7 @@ export declare class TelnyxVoipClient {
     destination: string,
     callerName?: string,
     callerNumber?: string,
-    customHeaders?: Record<string, string>
+    customHeaders?: CustomHeaders
   ): Promise<Call>;
   /**
    * Handle push notification payload.
@@ -197,12 +216,21 @@ export declare class TelnyxVoipClient {
    * This should be called when the user answers from CallKit before the socket connection is established
    * @param customHeaders Optional custom headers to include with the answer
    */
-  queueAnswerFromCallKit(customHeaders?: Record<string, string>): void;
+  queueAnswerFromCallKit(
+    callKitUUIDOrHeaders?: string | Record<string, string>,
+    customHeaders?: Record<string, string>
+  ): void;
   /**
    * Queue an end action for when the call invite arrives (for CallKit integration)
    * This should be called when the user ends from CallKit before the socket connection is established
    */
-  queueEndFromCallKit(): void;
+  queueEndFromCallKit(callKitUUID?: string): void;
+  /**
+   * Associate the next push-delivered INVITE with its app-facing CallKit UUID.
+   * The underlying signaling call ID remains unchanged.
+   * @internal
+   */
+  setPushNotificationCallKitUUID(callKitUUID: string | null): void;
   /**
    * Dispose of the client and clean up all resources.
    *
@@ -210,7 +238,20 @@ export declare class TelnyxVoipClient {
    * This is particularly important for background clients that should be
    * disposed after handling push notifications.
    */
-  dispose(): void;
+  dispose(): Promise<void>;
+  /**
+   * Forward answers captured during cold start as soon as SessionManager has
+   * created the TelnyxRTC instance. SessionManager invokes its ready callback
+   * before connect(), so the UUID-keyed action is present when the INVITE
+   * arrives.
+   */
+  private _flushPendingCallKitAnswers;
+  /**
+   * Prefer an explicitly supplied token, otherwise hydrate it from PushKit's
+   * native storage. PushKit registration starts in AppDelegate before React
+   * mounts, so this removes the race between the JS token event and login.
+   */
+  private _withNativeVoipPushToken;
   /**
    * Store credential configuration for automatic reconnection
    */
@@ -238,7 +279,7 @@ export declare function createTelnyxVoipClient(options?: TelnyxVoipClientOptions
  * Disposes the current singleton so that a subsequent call to
  * `createTelnyxVoipClient()` will create a fresh instance.
  */
-export declare function destroyTelnyxVoipClient(): void;
+export declare function destroyTelnyxVoipClient(): Promise<void>;
 /**
  * Create a new TelnyxVoipClient instance for background push notification handling.
  *
