@@ -58,6 +58,17 @@ export class Peer {
   /** Callback for logging peer events to call report collector */
   public onPeerEventLog: ((event: string, context: Record<string, unknown>) => void) | null = null;
 
+  /**
+   * Callback for ICE and peer-connection state changes. Call feeds the
+   * recovery coordinator (VSDK-679) with these events.
+   */
+  public onIceStateChange: ((state: string) => void) | null = null;
+
+  /** True while an ICE restart exchange is in progress on this peer. */
+  public isIceRestarting = false;
+  private restartIceTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private static readonly ICE_RESTART_TIMEOUT_MS = 15000;
+
   constructor(options: CallOptions) {
     this.instance = null;
     this.iceGatheringComplete = null;
@@ -88,6 +99,11 @@ export class Peer {
 
   public close = () => {
     log.debug('[Peer] Closing peer connection');
+    if (this.restartIceTimeoutId) {
+      clearTimeout(this.restartIceTimeoutId);
+      this.restartIceTimeoutId = null;
+    }
+    this.isIceRestarting = false;
     if (this.instance) {
       this.instance.close();
       this.instance = null;
@@ -311,6 +327,99 @@ export class Peer {
     return this;
   };
 
+  /**
+   * Restart ICE on the live peer connection and produce a renegotiation offer.
+   *
+   * Mirrors the production JS SDK Peer.restartIce(): applies the underlying
+   * restartIce capability when available, creates a new offer with
+   * `iceRestart`, applies it as the local description, and (for non-trickle
+   * calls) waits for ICE gathering to complete so the full SDP can be sent.
+   *
+   * The caller (Call/RecoveryCoordinator) owns the signaling exchange and
+   * the answer application; this method only covers the local side.
+   *
+   * @returns The local offer SDP after the restart was applied.
+   * @throws When no peer connection exists or the offer cannot be created.
+   */
+  public restartIce = async (): Promise<string> => {
+    const instance = this.instance;
+    if (!instance) {
+      log.warn('[Peer] ICE restart: no peer connection instance');
+      throw new Error('[Peer] ICE restart: no peer connection instance');
+    }
+    if (this.isIceRestarting) {
+      log.debug('[Peer] ICE restart: already in progress, skipping');
+      throw new Error('[Peer] ICE restart: already in progress');
+    }
+
+    this.isIceRestarting = true;
+
+    // Safety net: if the Modify exchange never completes, clear the flag so
+    // a later recovery attempt is not permanently blocked. The recovery
+    // coordinator owns the actual fallback decision on its own timer.
+    this.restartIceTimeoutId = setTimeout(() => {
+      if (this.isIceRestarting) {
+        log.warn('[Peer] ICE restart: exchange timed out, clearing restarting flag');
+        this.isIceRestarting = false;
+      }
+      this.restartIceTimeoutId = null;
+    }, Peer.ICE_RESTART_TIMEOUT_MS);
+
+    try {
+      // Newer react-native-webrtc versions expose restartIce(); older ones
+      // restart ICE implicitly via createOffer({ iceRestart: true }).
+      if (typeof (instance as any).restartIce === 'function') {
+        (instance as any).restartIce();
+      }
+
+      const offer = await instance.createOffer({ iceRestart: true } as any);
+      await instance.setLocalDescription(offer);
+
+      if (!this.useTrickleIce) {
+        log.debug('[Peer] ICE restart offer applied, waiting for ICE gathering');
+        await this.waitForIceGatheringComplete();
+      }
+
+      const sdp = this.instance?.localDescription?.sdp ?? offer.sdp;
+      if (!sdp) {
+        throw new Error('[Peer] ICE restart: local SDP not available after restart');
+      }
+
+      log.info('[Peer] ICE restart offer applied');
+      return sdp;
+    } catch (error) {
+      this.isIceRestarting = false;
+      if (this.restartIceTimeoutId) {
+        clearTimeout(this.restartIceTimeoutId);
+        this.restartIceTimeoutId = null;
+      }
+      throw error;
+    }
+  };
+
+  /**
+   * End the current ICE restart cycle (clears the flag and pending timer).
+   * Safe to call multiple times — only the first invocation has an effect.
+   */
+  public finishIceRestart = (): void => {
+    if (!this.isIceRestarting) {
+      return;
+    }
+    this.isIceRestarting = false;
+    if (this.restartIceTimeoutId) {
+      clearTimeout(this.restartIceTimeoutId);
+      this.restartIceTimeoutId = null;
+    }
+  };
+
+  public getIceConnectionState = (): string | null => {
+    return this.instance?.iceConnectionState ?? null;
+  };
+
+  public getConnectionState = (): string | null => {
+    return this.instance?.connectionState ?? null;
+  };
+
   private onIceGatheringStateChange = () => {
     const iceGatheringState = this.instance?.iceGatheringState;
     log.debug('[Peer] ICE gathering state change', iceGatheringState);
@@ -417,9 +526,21 @@ export class Peer {
     if (iceConnectionState) {
       this.onPeerEventLog?.('ICE connection state changed', { state: iceConnectionState });
     }
+
+    // Feed the recovery coordinator (VSDK-679)
+    if (iceConnectionState) {
+      this.onIceStateChange?.(iceConnectionState);
+    }
   };
 
   private onConnectionStateChange = () => {
-    log.debug('[Peer] Connection state change', this.instance?.connectionState);
+    const connectionState = this.instance?.connectionState;
+    log.debug('[Peer] Connection state change', connectionState);
+
+    // Feed the recovery coordinator (VSDK-679): peer connection failures
+    // must trigger recovery even when the ICE callback does not fire.
+    if (connectionState) {
+      this.onIceStateChange?.(connectionState);
+    }
   };
 }
