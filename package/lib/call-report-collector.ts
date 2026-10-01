@@ -17,6 +17,7 @@ import type {
   TransportStats,
   CallReportFlushReason,
 } from './call-report-models';
+import type { CandidateEvidence } from './call-recovery-coordinator';
 
 const MAX_STATS_BUFFER = 360; // ~30 min at 5s intervals
 const STATS_FLUSH_THRESHOLD = 300; // ~25 min
@@ -63,6 +64,9 @@ export class CallReportCollector {
   private inboundAudioLevels: number[] = [];
   private inboundJitters: number[] = [];
   private roundTripTimes: number[] = [];
+
+  /** Latest selected candidate pair evidence, captured during stat collection. */
+  private lastSelectedCandidateEvidence: CandidateEvidence | null = null;
 
   /** Called when intermediate flush is needed (long calls) */
   public onFlushNeeded: (() => void) | null = null;
@@ -379,6 +383,8 @@ export class CallReportCollector {
     });
 
     if (selectedCandidatePair) {
+      const localCandidate = this.resolveCandidate(stats, selectedCandidatePair.localCandidateId);
+      const remoteCandidate = this.resolveCandidate(stats, selectedCandidatePair.remoteCandidateId);
       ice = {
         id: selectedCandidatePair.id,
         state: selectedCandidatePair.state,
@@ -386,12 +392,20 @@ export class CallReportCollector {
         writable: selectedCandidatePair.writable,
         requestsSent: selectedCandidatePair.requestsSent,
         responsesReceived: selectedCandidatePair.responsesReceived,
-        ...(this.resolveCandidate(stats, selectedCandidatePair.localCandidateId)
-          ? { local: this.resolveCandidate(stats, selectedCandidatePair.localCandidateId) }
-          : {}),
-        ...(this.resolveCandidate(stats, selectedCandidatePair.remoteCandidateId)
-          ? { remote: this.resolveCandidate(stats, selectedCandidatePair.remoteCandidateId) }
-          : {}),
+        ...(localCandidate ? { local: localCandidate } : {}),
+        ...(remoteCandidate ? { remote: remoteCandidate } : {}),
+      };
+
+      // Recovery evidence (VSDK-679): retain the transport facts of the
+      // latest selected candidate pair so the recovery coordinator can
+      // decide whether a one-shot relay override should accompany the
+      // reattach fallback. Without evidence recovery fails closed.
+      this.lastSelectedCandidateEvidence = {
+        localCandidateType: localCandidate?.candidateType,
+        remoteCandidateType: remoteCandidate?.candidateType,
+        localNetworkType: localCandidate?.networkType,
+        localAddress: localCandidate?.address,
+        localProtocol: localCandidate?.protocol,
       };
     }
 
@@ -409,6 +423,46 @@ export class CallReportCollector {
       ...(ice ? { ice } : {}),
       ...(transport ? { transport } : {}),
     };
+  }
+
+  /**
+   * Latest cumulative inbound audio packet counter, used as the RTP
+   * verification signal for ICE restart recovery (VSDK-679).
+   *
+   * Reads the live stats report; returns null when stats are unavailable
+   * (peer closed, stats API failed) so the recovery coordinator falls back
+   * conservatively.
+   */
+  public async getLatestInboundAudioPackets(): Promise<number | null> {
+    if (!this.peerConnection || this.stopped) {
+      return null;
+    }
+    try {
+      const stats = await (this.peerConnection as any).getStats();
+      let packets: number | null = null;
+      stats.forEach((report: any) => {
+        if (report && report.type === 'inbound-rtp' && report.kind === 'audio') {
+          const value =
+            typeof report.packetsReceived === 'number' ? report.packetsReceived : null;
+          if (value != null && (packets == null || value > packets)) {
+            packets = value;
+          }
+        }
+      });
+      return packets;
+    } catch (error) {
+      log.debug('[CallReportCollector] Failed to read inbound audio packets', error);
+      return null;
+    }
+  }
+
+  /**
+   * Selected candidate pair evidence captured from the most recent stats
+   * interval (nominated or succeeded pair). Returns null until the first
+   * stats interval with a selected pair has been processed.
+   */
+  public getSelectedCandidateEvidence(): CandidateEvidence | null {
+    return this.lastSelectedCandidateEvidence;
   }
 
   private checkFlushThresholds(): void {
