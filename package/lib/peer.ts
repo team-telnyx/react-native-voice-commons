@@ -366,6 +366,16 @@ export class Peer {
     }, Peer.ICE_RESTART_TIMEOUT_MS);
 
     try {
+      // Recreate the ICE-gathering deferred for this restart: the one created
+      // in createPeerConnection was resolved and cleared once the initial
+      // gathering completed, so without a fresh deferred
+      // waitForIceGatheringComplete() throws 'Ice gathering not started' for
+      // every restart when useTrickleIce is disabled (the default) and the
+      // coordinator falls back to reconnect/reattach unnecessarily. Created
+      // before the restart exchange so every gathering event fired by
+      // restartIce()/createOffer/setLocalDescription resolves it.
+      this.iceGatheringComplete = createDeferredPromise(1000);
+
       // Newer react-native-webrtc versions expose restartIce(); older ones
       // restart ICE implicitly via createOffer({ iceRestart: true }).
       if (typeof (instance as any).restartIce === 'function') {
