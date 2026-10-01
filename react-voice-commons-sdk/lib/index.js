@@ -38,8 +38,8 @@ var __exportStar =
   };
 Object.defineProperty(exports, '__esModule', { value: true });
 exports.useAppReadyNotifier =
-  exports.CallQualityLevel =
   exports.VoicePnBridge =
+  exports.CallQualityLevel =
   exports.createTokenConfig =
   exports.createCredentialConfig =
   exports.validateTokenConfig =

@@ -1,10 +1,5 @@
 import { QualityMetricsCollector } from '../lib/quality-metrics-collector';
-import {
-  CallQualityLevel,
-  estimateMOS,
-  qualityLevelFromMOS,
-  round4,
-} from '../lib/quality-metrics';
+import { CallQualityLevel, estimateMOS, qualityLevelFromMOS, round4 } from '../lib/quality-metrics';
 import type { CallQualityMetrics } from '../lib/quality-metrics';
 
 // Mock loglevel
@@ -25,18 +20,20 @@ function createMockPeerConnection(statsMap: Map<string, any> = new Map()) {
   } as any;
 }
 
-function createAudioStatsMap(overrides: {
-  packetsReceived?: number;
-  packetsLost?: number;
-  jitter?: number | null;
-  audioLevel?: number | null;
-  bytesReceived?: number;
-  packetsSent?: number;
-  bytesSent?: number;
-  audioLevelOut?: number | null;
-  currentRoundTripTime?: number | null;
-  timestamp?: number;
-} = {}) {
+function createAudioStatsMap(
+  overrides: {
+    packetsReceived?: number;
+    packetsLost?: number;
+    jitter?: number | null;
+    audioLevel?: number | null;
+    bytesReceived?: number;
+    packetsSent?: number;
+    bytesSent?: number;
+    audioLevelOut?: number | null;
+    currentRoundTripTime?: number | null;
+    timestamp?: number;
+  } = {}
+) {
   const ts = overrides.timestamp ?? Date.now();
   const map = new Map<string, any>();
   map.set('inbound', {

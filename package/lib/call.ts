@@ -376,7 +376,10 @@ export class Call extends EventEmitter<CallEvents> {
       return;
     }
 
-    const pc = this.peer?.getPeerConnection();
+    const pc =
+      this.peer && typeof this.peer.getPeerConnection === 'function'
+        ? this.peer.getPeerConnection()
+        : null;
     if (!pc) {
       log.warn('[Call] Cannot start quality metrics: no peer connection');
       return;

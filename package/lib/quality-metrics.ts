@@ -142,8 +142,9 @@ export function estimateMOS(
   const Id =
     0.024 * latency + 0.11 * (latency > 177.3 ? latency - 177.3 : 0);
 
-  // Equipment impairment (Ie) — simplified codec + loss model
-  const Ie = 30 * Math.log10(1 + 0.03 * loss);
+  // Equipment impairment (Ie) — ITU-T G.107 packet-loss robustness model
+  // with the G.711 (PLC) baseline: Ie0 = 0, Bpl = 25.1.
+  const Ie = 95 * (1 - Math.exp(-loss / 25.1));
 
   // Rating factor R
   const R = 93.2 - Id - Ie;
@@ -151,8 +152,8 @@ export function estimateMOS(
   if (R < 0) return 1;
   if (R > 100) return 4.5;
 
-  // R-to-MOS mapping per ITU-T G.107
-  return round4(1 + 0.035 * R + 0.0007 * R * (R - 60) * (100 - R));
+  // R-to-MOS mapping per ITU-T G.107: MOS = 1 + 0.035R + 7e-6·R(R−60)(100−R)
+  return round4(1 + 0.035 * R + 0.000007 * R * (R - 60) * (100 - R));
 }
 
 /**
