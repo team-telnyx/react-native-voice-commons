@@ -99,10 +99,12 @@ export type CallRecoveryHooks = {
   isClientReconnecting(): boolean;
   /**
    * Run the client-owned fallback: one reconnect/register/reattach.
-   * Resolves `true` when the backend attach for a call was received
-   * (replacement call initiated) or `false` when the attempt failed.
+   * Resolves `true` when the backend attach for the recovering call
+   * (`callId`) was received (replacement call initiated) or `false` when the
+   * attempt failed. The call id correlates the reattach event so another
+   * call's attach cannot settle this fallback.
    */
-  performReattachFallback(): Promise<boolean>;
+  performReattachFallback(callId: string): Promise<boolean>;
   /**
    * Invoked with the latest selected candidate pair evidence before the
    * fallback so the client can carry a one-shot relay override into the
@@ -341,7 +343,7 @@ export class Call extends EventEmitter<CallEvents> {
       getSelectedCandidateEvidence: () =>
         this.callReportCollector?.getSelectedCandidateEvidence() ?? null,
       performReattachFallback: () =>
-        this.recoveryHooks?.performReattachFallback() ?? Promise.resolve(false),
+        this.recoveryHooks?.performReattachFallback(this.callId) ?? Promise.resolve(false),
       onCandidateEvidenceCaptured: (evidence: CandidateEvidence) => {
         this.callReportCollector?.log('info', 'Recovery candidate evidence captured', {
           localNetworkType: evidence.localNetworkType ?? null,

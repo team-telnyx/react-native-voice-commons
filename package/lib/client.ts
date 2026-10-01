@@ -1621,7 +1621,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private buildRecoveryHooks(): CallRecoveryHooks {
     return {
       isClientReconnecting: () => this.reconnecting || this.recoveryReattachActive,
-      performReattachFallback: () => this.performReattachFallbackForRecovery(),
+      performReattachFallback: (callId: string) =>
+        this.performReattachFallbackForRecovery(callId),
       captureCandidateEvidence: (evidence: CandidateEvidence) => {
         this.lastRecoveryCandidateEvidence = evidence;
       },
@@ -1647,10 +1648,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   /**
    * Client-owned fallback for a failed ICE restart recovery: one
    * reconnect/register/reattach cycle, mirroring onNetworkUnavailable's
-   * teardown. Resolves `true` only when the backend attach for a call was
-   * received within the reconnection window (replacement call initiated).
+   * teardown. Resolves `true` only when the backend attach for the
+   * recovering call (`callId`) was received within the reconnection window
+   * (replacement call initiated); an attach for any other call is ignored.
    */
-  private performReattachFallbackForRecovery(): Promise<boolean> {
+  private performReattachFallbackForRecovery(callId: string): Promise<boolean> {
     if (this.recoveryReattachActive || this.reconnecting) {
       log.debug('[TelnyxRTC] Recovery fallback skipped: a reconnect flow is already running');
       return Promise.resolve(false);
@@ -1664,7 +1666,19 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     return new Promise<boolean>((resolve) => {
       let settled = false;
-      const onReattach = () => settle(true);
+      // Only the recovering call's replacement attach settles the fallback:
+      // in a multi-call session the first `telnyx.call.reattached` event may
+      // belong to another call, and settling on it would report recovery for
+      // a call that never received a replacement attach.
+      const onReattach = (attachedCall: Call) => {
+        if (attachedCall?.callId !== callId) {
+          log.debug(
+            `[TelnyxRTC] Recovery fallback: ignoring reattach for call ${attachedCall?.callId}, waiting for ${callId}`
+          );
+          return;
+        }
+        settle(true);
+      };
       const timer = setTimeout(() => {
         log.debug('[TelnyxRTC] Recovery fallback: reattach window expired');
         settle(false);
@@ -1685,6 +1699,22 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       log.debug('[TelnyxRTC] Recovery fallback: running one reconnect/register/reattach cycle');
       try {
         this.disconnect(true);
+        // Mirror onNetworkUnavailable's peer teardown before the reconnect:
+        // the attach creates replacement Call objects keyed by the same call
+        // ids, so the old peers (with live microphone tracks) and their
+        // per-call state listeners must be disposed first. Disposing the peer
+        // also cancels the (now obsolete) per-call recovery coordinators;
+        // recovering calls are replaced by the attach itself. Without this,
+        // a stale old-call listener could remove the replacement call from
+        // tracking when a consumer hangs up via the old Call reference.
+        for (const [trackedCallId, call] of Array.from(this.calls.entries())) {
+          const stateListener = this.callStateListeners.get(trackedCallId);
+          if (stateListener) {
+            call.off('telnyx.call.state', stateListener);
+            this.callStateListeners.delete(trackedCallId);
+          }
+          call.disposePeer();
+        }
         this.connect()
           .then(() => {
             log.debug(
