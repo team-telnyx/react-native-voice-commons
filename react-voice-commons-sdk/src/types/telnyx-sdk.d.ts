@@ -55,6 +55,57 @@ declare module '@telnyx/react-native-voice-sdk' {
     PURGE = 'purge',
   }
 
+  export interface StatsInterval {
+    intervalStartUtc: string;
+    intervalEndUtc: string;
+    audio: {
+      outbound: {
+        packetsSent: number;
+        bytesSent: number;
+        audioLevelAvg: number | null;
+        bitrateAvg: number | null;
+      } | null;
+      inbound: {
+        packetsReceived: number;
+        bytesReceived: number;
+        packetsLost: number;
+        packetsDiscarded: number;
+        jitterBufferDelay: number | null;
+        jitterBufferEmittedCount: number | null;
+        totalSamplesReceived: number | null;
+        concealedSamples: number | null;
+        concealmentEvents: number | null;
+        audioLevelAvg: number | null;
+        jitterAvg: number | null;
+        bitrateAvg: number | null;
+      } | null;
+    };
+    connection: {
+      roundTripTimeAvg: number | null;
+      packetsSent: number;
+      packetsReceived: number;
+      bytesSent: number;
+      bytesReceived: number;
+    } | null;
+    ice?: {
+      id?: string;
+      state?: string;
+      nominated?: boolean;
+      writable?: boolean;
+      local?: { candidateType?: string; protocol?: string; networkType?: string };
+      remote?: { candidateType?: string; protocol?: string; networkType?: string };
+      requestsSent?: number;
+      responsesReceived?: number;
+    };
+    transport?: {
+      iceState?: string;
+      dtlsState?: string;
+      srtpCipher?: string;
+      tlsVersion?: string;
+      selectedCandidatePairChanges?: number;
+    };
+  }
+
   export class Call extends EventEmitter {
     callId: string;
     state: CallState;
@@ -87,6 +138,7 @@ declare module '@telnyx/react-native-voice-sdk' {
     mute(): Promise<void>;
     unmute(): Promise<void>;
     dtmf(digits: string): Promise<void>;
+    getLatestStats?(): StatsInterval | null;
 
     on(event: string, listener: (...args: any[]) => void): this;
     off(event: string, listener: (...args: any[]) => void): this;

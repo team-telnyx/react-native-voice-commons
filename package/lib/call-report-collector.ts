@@ -37,6 +37,7 @@ export class CallReportCollector {
   private peerConnection: RTCPeerConnectionType | null = null;
   private logCollector: LogCollector;
   private statsBuffer: StatsInterval[] = [];
+  private latestStatsInterval: StatsInterval | null = null;
   private statsTimer: ReturnType<typeof setTimeout> | null = null;
   private intervalStart: Date | null = null;
   private callStartTime: Date = new Date();
@@ -66,6 +67,11 @@ export class CallReportCollector {
 
   /** Called when intermediate flush is needed (long calls) */
   public onFlushNeeded: (() => void) | null = null;
+
+  /** Most recent stats interval collected for UI/debug surfaces. */
+  get latestInterval(): StatsInterval | null {
+    return this.latestStatsInterval;
+  }
 
   constructor(config: CallReportConfig) {
     this.config = config;
@@ -256,6 +262,7 @@ export class CallReportCollector {
         this.statsBuffer.shift();
       }
       this.statsBuffer.push(interval);
+      this.latestStatsInterval = interval;
 
       this.checkFlushThresholds();
     } catch (err) {
