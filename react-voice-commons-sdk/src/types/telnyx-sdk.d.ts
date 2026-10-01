@@ -9,7 +9,7 @@ declare module '@telnyx/react-native-voice-sdk' {
   export interface CallOptions {
     callerIdName?: string;
     callerIdNumber?: string;
-    customHeaders?: Record<string, string>;
+    customHeaders?: { name: string; value: string }[];
     clientState?: string;
     destinationNumber?: string;
     audio?: boolean;
@@ -34,6 +34,7 @@ declare module '@telnyx/react-native-voice-sdk' {
     debug?: boolean;
     logLevel?: string;
     pushNotificationDeviceToken?: string;
+    pushWhenActive?: boolean;
     enableMissedCallNotifications?: boolean;
     useTrickleIce?: boolean;
     enableCallReports?: boolean;
@@ -66,14 +67,14 @@ declare module '@telnyx/react-native-voice-sdk' {
     /**
      * Custom headers received from the WebRTC INVITE message.
      * These headers are passed during call initiation and can contain application-specific information.
-     * Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+     * Format: `[{"name": "X-Header-Name", "value": "Value"}]`; header names must start with `X-`.
      */
     inviteCustomHeaders: { name: string; value: string }[] | null;
 
     /**
      * Custom headers received from the WebRTC ANSWER message.
      * These headers are passed during call acceptance and can contain application-specific information.
-     * Format should be [{"name": "X-Header-Name", "value": "Value"}] where header names must start with "X-".
+     * Format: `[{"name": "X-Header-Name", "value": "Value"}]`; header names must start with `X-`.
      */
     answerCustomHeaders: { name: string; value: string }[] | null;
 

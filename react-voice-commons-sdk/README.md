@@ -79,7 +79,7 @@ const voipClient = createTelnyxVoipClient({
 
 // If you need to tear down and recreate the client (e.g., on logout):
 import { destroyTelnyxVoipClient } from '@telnyx/react-voice-commons-sdk';
-destroyTelnyxVoipClient(); // Disposes the singleton; next createTelnyxVoipClient() call creates a fresh instance
+await destroyTelnyxVoipClient(); // Disposes the singleton; next createTelnyxVoipClient() call creates a fresh instance
 ```
 
 **Configuration Options Explained:**
@@ -120,14 +120,16 @@ call.callState$.subscribe((state) => {
 
 As of **v0.3.0**, the SDK no longer navigates the host app. Routing on state transitions (e.g. redirecting to a login screen on disconnect, surfacing an in-call screen when a call arrives via push) is entirely the host app's responsibility. Subscribe to the observables below and invoke your own navigator.
 
+> In the snippets below, `voipClient` is the instance returned by `createTelnyxVoipClient()` (see [Basic Setup](#basic-setup)). It is a singleton, so it's safe to reference the same module-level value from any component, or to read it from context.
+
 **What to observe:**
 
-| Observable                    | Emits                                                                                        | Use it for                                                                                                                                                                        |
-| ----------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `voipClient.connectionState$` | `TelnyxConnectionState` (`CONNECTING`, `CONNECTED`, `RECONNECTING`, `DISCONNECTED`, `ERROR`) | Redirect to login on `DISCONNECTED`; gate outbound-call UI on `CONNECTED`. There is no separate `loginState$` — `CONNECTED` means the socket is up **and** authenticated.         |
-| `voipClient.activeCall$`      | `Call \| null`                                                                               | Navigate to your in-call screen when a call appears. Primary signal for push-launched cold starts — when the SDK finishes the push-driven login and the call arrives, this emits. |
-| `voipClient.calls$`           | `Call[]`                                                                                     | Multi-call UIs (call waiting, conference).                                                                                                                                        |
-| `call.callState$`             | `TelnyxCallState`                                                                            | Per-call transitions (ringing / active / held / ended).                                                                                                                           |
+| Observable                    | Emits                                                                                        | Use it for                                                                                                                                                                |
+| ----------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `voipClient.connectionState$` | `TelnyxConnectionState` (`CONNECTING`, `CONNECTED`, `RECONNECTING`, `DISCONNECTED`, `ERROR`) | Redirect to login on `DISCONNECTED`; gate outbound-call UI on `CONNECTED`. There is no separate `loginState$` — `CONNECTED` means the socket is up **and** authenticated. |
+| `voipClient.activeCall$`      | `Call \| null`                                                                               | Emits the `Call` once the SDK has processed the push and the call has arrived. Navigate to your in-call screen here. Fires for push-launched, foreground, and outbound.   |
+| `voipClient.calls$`           | `Call[]`                                                                                     | Multi-call UIs (call waiting, conference).                                                                                                                                |
+| `call.callState$`             | `TelnyxCallState`                                                                            | Per-call transitions (ringing / active / held / ended).                                                                                                                   |
 
 #### Redirect to login on disconnect
 
@@ -172,6 +174,8 @@ useEffect(() => {
 **Note on CallKit / ConnectionService:** the native call UI (ringtone, answer/decline) is shown by the OS regardless — your RN screen is only visible once the user taps into the app. If you only need native UI, you can skip the navigation step entirely.
 
 #### Optional: gate outbound-call UI on CONNECTED
+
+`canMakeCalls(state)` is a small helper that returns `true` only when `state === TelnyxConnectionState.CONNECTED`. It exists purely to keep the check readable — you can inline the comparison if you prefer.
 
 ```tsx
 import { canMakeCalls } from '@telnyx/react-voice-commons-sdk';
@@ -270,6 +274,7 @@ import { createCredentialConfig } from '@telnyx/react-voice-commons-sdk';
 const config = createCredentialConfig('your_sip_username', 'your_sip_password', {
   debug: true,
   pushNotificationDeviceToken: 'your_device_token',
+  pushWhenActive: true,
 });
 
 await voipClient.login(config);
@@ -283,10 +288,25 @@ import { createTokenConfig } from '@telnyx/react-voice-commons-sdk';
 const config = createTokenConfig('your_jwt_token', {
   debug: true,
   pushNotificationDeviceToken: 'your_device_token',
+  pushWhenActive: true,
 });
 
 await voipClient.loginWithToken(config);
 ```
+
+`pushWhenActive` is opt-in and defaults to `false`. Enable it on iOS when the device must receive a second PushKit call while another call is active or held.
+
+### Android Incoming Ringtone
+
+Android uses the device's selected phone ringtone by default. To use an app-bundled sound instead, add a supported audio file such as `my_ringtone.wav` to `android/app/src/main/res/raw/` and pass its resource name without the extension when logging in:
+
+```tsx
+const config = createCredentialConfig('your_sip_username', 'your_sip_password', {
+  incomingCallRingtone: 'my_ringtone',
+});
+```
+
+The SDK persists this setting for incoming FCM pushes. If the resource is missing or the option is omitted, it falls back to the device ringtone.
 
 ### Automatic Storage & Reconnection
 
@@ -300,6 +320,7 @@ The library uses these AsyncStorage keys internally:
 - `@telnyx_password` - SIP password (credential auth)
 - `@credential_token` - JWT authentication token (token auth)
 - `@push_token` - Push notification device token
+- `@push_when_active` - Whether the device remains eligible for PushKit calls while connected
 
 **Note**: These are managed automatically by the library. You only need to call `login()` once, and the library will handle storage and future reconnections.
 

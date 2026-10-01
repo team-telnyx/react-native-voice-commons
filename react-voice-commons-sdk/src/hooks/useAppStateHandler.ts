@@ -34,8 +34,13 @@ export const useAppStateHandler = ({
         log('AppStateHandler: App went to background, checking for active calls...');
 
         const connectionState = voipClient.currentConnectionState;
-        if (connectionState !== TelnyxConnectionState.CONNECTED) {
-          log('AppStateHandler: Not connected, skipping background handling');
+        const shouldHandleBackgroundConnection =
+          connectionState === TelnyxConnectionState.CONNECTED ||
+          connectionState === TelnyxConnectionState.CONNECTING ||
+          connectionState === TelnyxConnectionState.RECONNECTING;
+
+        if (!shouldHandleBackgroundConnection) {
+          log('AppStateHandler: Not connected or connecting, skipping background handling');
           appState.current = nextAppState;
           return;
         }

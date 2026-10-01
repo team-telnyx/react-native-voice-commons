@@ -61,6 +61,7 @@ async function buildProfileConnectionConfig(
   const options = {
     debug: true,
     pushNotificationDeviceToken: pushToken || undefined,
+    pushWhenActive: true,
     enableMissedCallNotifications: false,
     useTrickleIce: DEMO_USE_TRICKLE_ICE,
     enableCallReports: true,
@@ -123,6 +124,7 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   const [editingProfileKey, setEditingProfileKey] = useState<string | null>(null);
   const [showProfileSheet, setShowProfileSheet] = useState(false);
   const [connectionState, setConnectionState] = useState(voipClient.currentConnectionState);
+  const [calls, setCalls] = useState<Call[]>(voipClient.currentCalls);
   const [activeCall, setActiveCall] = useState<Call | null>(voipClient.currentActiveCall);
   const [activeCallState, setActiveCallState] = useState<TelnyxCallState | null>(
     voipClient.currentActiveCall?.currentState || null
@@ -159,6 +161,12 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
     loadProfile();
     return () => subscription.unsubscribe();
   }, [voipClient, onLoginSuccess]);
+
+  useEffect(() => {
+    const subscription = voipClient.calls$.subscribe(setCalls);
+
+    return () => subscription.unsubscribe();
+  }, [voipClient]);
 
   useEffect(() => {
     const subscription = voipClient.activeCall$.subscribe((call) => {
@@ -523,9 +531,13 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <Text style={styles.instructions}>
-            {isConnected
-              ? 'Enter a destination (phone number or SIP user) to initiate your call.'
-              : 'Please confirm details below and click Connect to make a call.'}
+            {activeCallState === TelnyxCallState.HELD
+              ? 'Your call is on hold. Tap Resume when you are ready to continue.'
+              : activeCallState === TelnyxCallState.ACTIVE
+                ? 'Your call is active. Use the controls below to hold or end it.'
+                : isConnected
+                  ? 'Enter a destination (phone number or SIP user) to initiate your call.'
+                  : 'Please confirm details below and click Connect to make a call.'}
           </Text>
 
           {!isConnected && (
@@ -562,64 +574,73 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
 
           {isConnected && (
             <View style={styles.callSection}>
-              <View style={styles.segmentedControl}>
-                <TouchableOpacity
-                  style={[styles.segment, destinationType === 'sip' && styles.segmentSelected]}
-                  onPress={() => setDestinationType('sip')}
-                  testID="sipAddressToggle"
-                  accessibilityLabel="SIP address"
-                >
-                  <Text
-                    style={[
-                      styles.segmentText,
-                      destinationType === 'sip' && styles.segmentTextSelected,
-                    ]}
-                  >
-                    SIP address
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.segment, destinationType === 'phone' && styles.segmentSelected]}
-                  onPress={() => setDestinationType('phone')}
-                  testID="phoneNumberToggle"
-                  accessibilityLabel="Phone number"
-                >
-                  <Text
-                    style={[
-                      styles.segmentText,
-                      destinationType === 'phone' && styles.segmentTextSelected,
-                    ]}
-                  >
-                    Phone number
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              {!isStartingCall && !activeCall && (
+                <>
+                  <View style={styles.segmentedControl}>
+                    <TouchableOpacity
+                      style={[styles.segment, destinationType === 'sip' && styles.segmentSelected]}
+                      onPress={() => setDestinationType('sip')}
+                      testID="sipAddressToggle"
+                      accessibilityLabel="SIP address"
+                    >
+                      <Text
+                        style={[
+                          styles.segmentText,
+                          destinationType === 'sip' && styles.segmentTextSelected,
+                        ]}
+                      >
+                        SIP address
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.segment,
+                        destinationType === 'phone' && styles.segmentSelected,
+                      ]}
+                      onPress={() => setDestinationType('phone')}
+                      testID="phoneNumberToggle"
+                      accessibilityLabel="Phone number"
+                    >
+                      <Text
+                        style={[
+                          styles.segmentText,
+                          destinationType === 'phone' && styles.segmentTextSelected,
+                        ]}
+                      >
+                        Phone number
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
 
-              <TextInput
-                style={[styles.callInput, inputFocused && styles.inputFocused]}
-                placeholder={
-                  destinationType === 'phone' ? 'Enter phone number' : 'Enter SIP address'
-                }
-                placeholderTextColor="gray"
-                value={destinationNumber}
-                onChangeText={setDestinationNumber}
-                onFocus={() => setInputFocused(true)}
-                onBlur={() => setInputFocused(false)}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType={destinationType === 'phone' ? 'phone-pad' : 'default'}
-                testID="numberToCallTextField"
-                accessibilityLabel="Call input"
-              />
+                  <TextInput
+                    style={[styles.callInput, inputFocused && styles.inputFocused]}
+                    placeholder={
+                      destinationType === 'phone' ? 'Enter phone number' : 'Enter SIP address'
+                    }
+                    placeholderTextColor="gray"
+                    value={destinationNumber}
+                    onChangeText={setDestinationNumber}
+                    onFocus={() => setInputFocused(true)}
+                    onBlur={() => setInputFocused(false)}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType={destinationType === 'phone' ? 'phone-pad' : 'default'}
+                    testID="numberToCallTextField"
+                    accessibilityLabel="Call input"
+                  />
+                </>
+              )}
 
               {isStartingCall || activeCall ? (
                 <InlineCallControls
                   activeCall={activeCall}
+                  calls={calls}
                   activeCallState={activeCallState}
                   destination={destinationNumber}
                   isStartingCall={isStartingCall}
                   onAnswer={handleAnswerCall}
                   onEnd={handleEndCall}
+                  onSwap={(heldCall) => voipClient.swapCalls(heldCall.callId)}
                 />
               ) : (
                 <TouchableOpacity

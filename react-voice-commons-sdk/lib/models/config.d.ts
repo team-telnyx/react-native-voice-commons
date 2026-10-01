@@ -7,8 +7,12 @@ export interface CredentialConfig {
   sipPassword: string;
   debug?: boolean;
   pushNotificationDeviceToken?: string;
+  /** Receive PushKit calls while the WebSocket session is active. Default: false */
+  pushWhenActive?: boolean;
   /** Enable native missed call push notifications. Default: false */
   enableMissedCallNotifications?: boolean;
+  /** Android only: name of a bundled `res/raw` ringtone (without its file extension). Falls back to the device ringtone. */
+  incomingCallRingtone?: string;
   /** Enable Trickle ICE. Default: false */
   useTrickleIce?: boolean;
   /** Enable automatic call quality reporting. Default: true */
@@ -28,8 +32,12 @@ export interface TokenConfig {
   token: string;
   debug?: boolean;
   pushNotificationDeviceToken?: string;
+  /** Receive PushKit calls while the WebSocket session is active. Default: false */
+  pushWhenActive?: boolean;
   /** Enable native missed call push notifications. Default: false */
   enableMissedCallNotifications?: boolean;
+  /** Android only: name of a bundled `res/raw` ringtone (without its file extension). Falls back to the device ringtone. */
+  incomingCallRingtone?: string;
   /** Enable Trickle ICE. Default: false */
   useTrickleIce?: boolean;
   /** Enable automatic call quality reporting. Default: true */
@@ -73,6 +81,7 @@ export declare function validateConfig(config: Config): string[];
  * @param options - Optional configuration settings
  * @param options.debug - Enable debug logging (sets SDK logLevel to 'debug')
  * @param options.pushNotificationDeviceToken - Device token for push notifications
+ * @param options.pushWhenActive - Keep active PushKit devices eligible for incoming calls
  * @returns Complete credential configuration object
  */
 export declare function createCredentialConfig(
@@ -87,6 +96,7 @@ export declare function createCredentialConfig(
  * @param options - Optional configuration settings
  * @param options.debug - Enable debug logging (sets SDK logLevel to 'debug')
  * @param options.pushNotificationDeviceToken - Device token for push notifications
+ * @param options.pushWhenActive - Keep active PushKit devices eligible for incoming calls
  * @returns Complete token configuration object
  */
 export declare function createTokenConfig(

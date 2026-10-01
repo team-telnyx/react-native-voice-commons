@@ -202,4 +202,48 @@ describe('TelnyxRTC Multi-Call Support', () => {
       expect(client.hasActiveCalls).toBe(false);
     });
   });
+
+  describe('UUID-targeted pending CallKit actions', () => {
+    it('answers B without answering active call A when app and signaling IDs differ', async () => {
+      const callA = createMockCall('signal-a', 'active');
+      const callB = createMockCall('signal-c', 'ringing');
+      (callB as any)._callKitUUID = 'callkit-b';
+      (callB.answer as jest.Mock).mockResolvedValue(undefined);
+
+      client.calls.set('signal-a', callA as any);
+      client.calls.set('signal-c', callB as any);
+
+      client.queueAnswerFromCallKit('CALLKIT-B');
+      await Promise.resolve();
+
+      expect(callA.answer).not.toHaveBeenCalled();
+      expect(callB.answer).toHaveBeenCalledTimes(1);
+    });
+
+    it('ends B without ending active call A when app and signaling IDs differ', () => {
+      const callA = createMockCall('signal-a', 'active');
+      const callB = createMockCall('signal-c', 'ringing');
+      (callB as any)._callKitUUID = 'callkit-b';
+
+      client.calls.set('signal-a', callA as any);
+      client.calls.set('signal-c', callB as any);
+
+      client.queueEndFromCallKit('CALLKIT-B');
+
+      expect(callA.hangup).not.toHaveBeenCalled();
+      expect(callB.hangup).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves A and stores push UUID B separately from the future INVITE ID C', () => {
+      const callA = createMockCall('signal-a', 'active');
+      client.calls.set('signal-a', callA as any);
+
+      client.processVoIPNotification({
+        metadata: { call_id: 'CALLKIT-B', voice_sdk_id: 'voice-sdk-b' },
+      });
+
+      expect(client.getCall('signal-a')).toBe(callA);
+      expect(client.getPushNotificationCallKitUUID()).toBe('callkit-b');
+    });
+  });
 });

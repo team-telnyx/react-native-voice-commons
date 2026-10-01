@@ -1,6 +1,11 @@
 import { Observable } from 'rxjs';
 import { Call } from '../../models/call';
 import { SessionManager } from '../session/session-manager';
+export type CustomHeader = {
+  name: string;
+  value: string;
+};
+export type CustomHeaders = Record<string, string> | CustomHeader[];
 /**
  * Central state machine for call management.
  *
@@ -15,6 +20,7 @@ export declare class CallStateController {
   private _listenerClient?;
   private _isWaitingForInvite?;
   private _onInviteAutoAccepted?;
+  private _activeCallId;
   constructor(_sessionManager: SessionManager);
   /**
    * Observable stream of all current calls
@@ -47,10 +53,32 @@ export declare class CallStateController {
    */
   setCallConnecting(callId: string): void;
   /**
+   * Explicitly set the active call for multi-call scenarios.
+   * When set, activeCall$ and currentActiveCall prefer this call over
+   * the first-match heuristic. The ID is cleared automatically when the
+   * call reaches a terminal state.
+   * @param callId The ID of the call to mark as active
+   */
+  setActiveCall(callId: string): void;
+  /**
+   * Clear the explicitly-tracked active call ID, reverting to the
+   * first-match heuristic for active call selection.
+   */
+  clearActiveCall(): void;
+  /**
    * Find a call by its underlying Telnyx call ID
    * @param telnyxCall The Telnyx call object to find
    */
   findCallByTelnyxCall(telnyxCall: any): Call | null;
+  /**
+   * Select the active call, preferring the explicitly-tracked call ID
+   * over the first-match heuristic.
+   */
+  private _selectActiveCall;
+  /**
+   * Check if a call is in a non-terminal (active or connecting) state.
+   */
+  private _isNonTerminal;
   /**
    * Initialize client listeners when the Telnyx client becomes available
    * This should be called by the session manager after client creation
@@ -63,8 +91,12 @@ export declare class CallStateController {
     destination: string,
     callerName?: string,
     callerNumber?: string,
-    customHeaders?: Record<string, string>
+    customHeaders?: CustomHeaders
   ): Promise<Call>;
+  /**
+   * Normalize public custom headers into the format expected by the underlying SDK.
+   */
+  private _normalizeCustomHeaders;
   /**
    * Set callbacks for waiting for invite logic (used for push notifications)
    */

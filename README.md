@@ -127,6 +127,8 @@ You do not need to wire up JS push handlers. The native layer does the work:
 
 In both cases the SDK connects the socket and restores the call internally — you just observe the VoIP client's streams to render UI.
 
+> In the snippets below, `voipClient` is the instance returned by `createTelnyxVoipClient()` (see [Basic Setup](#basic-setup)). It is a singleton, so it's safe to reference the same module-level value from any component, or to read it from context.
+
 **What to observe after the SDK-driven push login:**
 
 - `voipClient.connectionState$` — emits `CONNECTED` when the socket is up and authenticated (there is no separate `loginState$`).
@@ -208,6 +210,7 @@ import { createCredentialConfig } from '@telnyx/react-voice-commons-sdk';
 const config = createCredentialConfig('your_sip_username', 'your_sip_password', {
   debug: true,
   pushNotificationDeviceToken: 'your_device_token',
+  pushWhenActive: true,
 });
 
 await voipClient.login(config);
@@ -221,10 +224,25 @@ import { createTokenConfig } from '@telnyx/react-voice-commons-sdk';
 const config = createTokenConfig('your_jwt_token', {
   debug: true,
   pushNotificationDeviceToken: 'your_device_token',
+  pushWhenActive: true,
 });
 
 await voipClient.loginWithToken(config);
 ```
+
+`pushWhenActive` is opt-in and defaults to `false`. Enable it on iOS when the device must receive a second PushKit call while another call is active or held.
+
+### Android Incoming Ringtone
+
+Android uses the device's selected phone ringtone by default. To use an app-bundled sound instead, add a supported audio file such as `my_ringtone.wav` to `android/app/src/main/res/raw/` and pass its resource name without the extension when logging in:
+
+```tsx
+const config = createCredentialConfig('your_sip_username', 'your_sip_password', {
+  incomingCallRingtone: 'my_ringtone',
+});
+```
+
+The SDK persists this setting for incoming FCM pushes. If the resource is missing or the option is omitted, it falls back to the device ringtone.
 
 ### Automatic Storage & Reconnection
 
@@ -238,6 +256,7 @@ The library uses these AsyncStorage keys internally:
 - `@telnyx_password` - SIP password (credential auth)
 - `@credential_token` - JWT authentication token (token auth)
 - `@push_token` - Push notification device token
+- `@push_when_active` - Whether the device remains eligible for PushKit calls while connected
 
 **Note**: These are managed automatically by the library. You only need to call `login()` once, and the library will handle storage and future reconnections.
 
@@ -548,6 +567,8 @@ For complete API documentation and advanced usage patterns, see:
 - **[API Reference](https://developers.telnyx.com/development/webrtc/react-native-sdk)** - Auto-generated TypeDoc documentation
 - **[TelnyxVoiceApp Documentation](https://developers.telnyx.com/development/webrtc/react-native-sdk)** - Detailed component guide
 - **[iOS Missed Call Notifications](./docs-markdown/call-features/ios-missed-call-notifications.md)** - iOS-specific missed call handling with CallKit
+- **[Trickle ICE Guide](./docs-markdown/call-features/trickle-ice.md)** - Enabling and disabling Trickle ICE for faster call setup
+- **[Push-When-Active Guide](./docs-markdown/push-notification/push-when-active.md)** - Multidevice call delivery and answered-elsewhere handling
 
 ## License
 

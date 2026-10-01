@@ -1,5 +1,40 @@
 # CHANGELOG.md
 
+## Unreleased
+
+## [1.1.1] (2026-09-11)
+
+### Bug Fixing
+
+- Improve iOS CallKit audio reliability by routing activation and connected-call verification through a single idempotent recovery path.
+- Recover connected calls when CallKit owns an active play-and-record audio session but the WebRTC audio device remains disabled.
+- Prevent duplicate CallKit setup from disabling WebRTC audio after a call is already active, and harden failure handling when audio recovery does not succeed.
+
+### Dependencies
+
+- Continues to require `@telnyx/react-native-voice-sdk >= 1.1.0`; no new base Voice SDK release is required.
+
+## [1.1.0] (2026-08-07)
+
+### Enhancement
+
+- Add and persist opt-in `pushWhenActive` support so push routing remains available when an active WebSocket connection would otherwise be prioritized.
+- Add Android `incomingCallRingtone` configuration. Apps can provide the name of an audio resource bundled in `android/app/src/main/res/raw`; the setting is retained for incoming FCM calls.
+- Add iOS call-waiting support, including UUID-targeted answer, end, hold, resume, and `swapCalls(targetCallId)` operations for two simultaneous CallKit calls.
+- Expose the explicitly selected active call through the public client API and re-emit call collections when a tracked call changes state.
+- Forward custom SIP headers supplied to `newCall()` in the React Native SDK's expected format.
+- Add Android push-notification fallbacks when call notifications are unavailable, and declare the required foreground-service type for active calls.
+- Add documentation for `pushWhenActive`, answered-elsewhere handling, Trickle ICE, and Android custom incoming ringtones.
+
+### Bug Fixing
+
+- Play and loop the Android incoming-call ringtone until the call is answered, rejected, ended, or dismissed. The SDK falls back to the device's selected phone ringtone when no valid app resource is configured.
+- Preserve iOS CallKit answers that occur before React Native listeners attach during a VoIP-push cold launch, including the case where the app omits a PushKit token while the native token is already available.
+- Prevent stale CallKit callbacks and subscription leaks after React re-renders or the active call changes.
+- Handle repeated holds, call swaps, rejected pushes, malformed PushKit payloads, Focus/DND-filtered CallKit registrations, and a second incoming call without leaving ghost calls or stuck foreground flags.
+- Harden session teardown and reconnection by serializing disposal, cancelling pending connection work, and waiting for socket cleanup before continuing.
+- Clear stale fallback push actions and keep incoming-call handling available when notifications are disabled.
+
 ## [0.4.3] (2026-04-30)
 
 ### Bug Fixing

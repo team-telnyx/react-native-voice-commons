@@ -35,6 +35,15 @@ export interface ClientOptions {
    */
   pushNotificationDeviceToken?: string;
   /**
+   * Keep this PushKit device eligible for incoming call delivery while its
+   * WebSocket session is already active.
+   *
+   * When enabled, login advertises `push_when_active` and `pn_late_fanout`,
+   * and answers identify the PushKit device that accepted the call.
+   * @default false
+   */
+  pushWhenActive?: boolean;
+  /**
    * Enable native missed call push notifications.
    * When enabled, the SDK tags the User-Agent with the missed-call notification marker.
    * @default false

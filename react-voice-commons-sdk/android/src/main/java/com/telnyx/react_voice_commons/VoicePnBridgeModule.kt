@@ -145,6 +145,7 @@ class VoicePnBridgeModule(reactContext: ReactApplicationContext) : ReactContextB
             Log.d(TAG, "showOngoingCallNotification called from React Native")
             
             val notificationHelper = TelnyxNotificationHelper(reactApplicationContext)
+            notificationHelper.hideIncomingCallNotification()
             notificationHelper.showOngoingCallNotification(
                 callerName ?: "Unknown Caller",
                 callerNumber ?: "",
@@ -222,6 +223,24 @@ class VoicePnBridgeModule(reactContext: ReactApplicationContext) : ReactContextB
         } catch (e: Exception) {
             Log.e(TAG, "Error hiding incoming call notification", e)
             promise.reject("HIDE_INCOMING_NOTIFICATION_ERROR", e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun setIncomingCallRingtone(resourceName: String?, promise: Promise) {
+        try {
+            val configured = VoicePnManager.setIncomingCallRingtoneResource(
+                reactApplicationContext,
+                resourceName?.trim()?.takeIf { it.isNotEmpty() }
+            )
+            // Create the resource-specific channel while JavaScript is available.
+            // Android preserves channel settings, and a later FCM push may arrive
+            // while the app process is not running.
+            TelnyxNotificationHelper(reactApplicationContext)
+            promise.resolve(configured)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting incoming call ringtone", e)
+            promise.reject("SET_INCOMING_CALL_RINGTONE_ERROR", e.message, e)
         }
     }
 

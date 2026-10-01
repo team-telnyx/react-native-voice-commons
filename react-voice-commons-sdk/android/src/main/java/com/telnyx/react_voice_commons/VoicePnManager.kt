@@ -9,6 +9,7 @@ object VoicePnManager {
     private const val TAG = "VoicePnManager"
     private const val PREFS_NAME = "telnyx_voice_prefs"
     private const val MISSED_CALL_NOTIFICATIONS_ENABLED = "telnyx_enable_missed_call_notifications"
+    private const val INCOMING_CALL_RINGTONE_RESOURCE = "telnyx_incoming_call_ringtone_resource"
     
     private fun getSharedPreferences(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -92,6 +93,24 @@ object VoicePnManager {
         Log.d(TAG, "getMissedCallNotificationsEnabled called")
         return getSharedPreferences(context)
             .getBoolean(MISSED_CALL_NOTIFICATIONS_ENABLED, true)
+    }
+
+    fun setIncomingCallRingtoneResource(context: Context, resourceName: String?): Boolean {
+        getSharedPreferences(context)
+            .edit()
+            .apply {
+                if (resourceName.isNullOrBlank()) {
+                    remove(INCOMING_CALL_RINGTONE_RESOURCE)
+                } else {
+                    putString(INCOMING_CALL_RINGTONE_RESOURCE, resourceName)
+                }
+            }
+            .apply()
+        return true
+    }
+
+    fun getIncomingCallRingtoneResource(context: Context): String? {
+        return getSharedPreferences(context).getString(INCOMING_CALL_RINGTONE_RESOURCE, null)
     }
 
     // PnModule functions

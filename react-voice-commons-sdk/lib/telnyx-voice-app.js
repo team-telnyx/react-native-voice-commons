@@ -6,7 +6,30 @@ const react_1 = require('react');
 const react_native_1 = require('react-native');
 const telnyx_voip_client_1 = require('./telnyx-voip-client');
 const connection_state_1 = require('./models/connection-state');
+const call_state_1 = require('./models/call-state');
 const TelnyxVoiceContext_1 = require('./context/TelnyxVoiceContext');
+let sharedBackgroundClient = null;
+let sharedBackgroundDisposePromise = null;
+const disposeSharedBackgroundClient = async (log, expectedClient) => {
+  if (sharedBackgroundDisposePromise) {
+    await sharedBackgroundDisposePromise;
+  }
+  const backgroundClient = expectedClient ?? sharedBackgroundClient;
+  if (!backgroundClient || (expectedClient && sharedBackgroundClient !== expectedClient)) {
+    return;
+  }
+  sharedBackgroundClient = null;
+  log('Disposing background client instance');
+  sharedBackgroundDisposePromise = backgroundClient
+    .dispose()
+    .catch((e) => {
+      log('Error disposing background client instance:', e);
+    })
+    .finally(() => {
+      sharedBackgroundDisposePromise = null;
+    });
+  await sharedBackgroundDisposePromise;
+};
 /**
  * A comprehensive wrapper component that handles all Telnyx SDK lifecycle management.
  *
@@ -39,11 +62,17 @@ const TelnyxVoiceAppComponent = ({
   const [currentConnectionState, setCurrentConnectionState] = (0, react_1.useState)(
     voipClient.currentConnectionState
   );
+  // Refs that mirror mutable state for use inside long-lived effects and
+  // callbacks. Reading these flags through refs (instead of the state
+  // variables) keeps the setup effect's dependency array stable so
+  // connection/call subscriptions are not torn down and recreated every
+  // time the flags change — fixing the subscription gap described in
+  // VSDK-344.
+  const isHandlingForegroundCallRef = (0, react_1.useRef)(false);
+  const processingPushOnLaunchRef = (0, react_1.useRef)(false);
   // Refs for tracking state
   const appStateRef = (0, react_1.useRef)(react_native_1.AppState.currentState);
   const backgroundDetectorIgnore = (0, react_1.useRef)(false);
-  // Static background client instance for singleton pattern
-  const backgroundClientRef = (0, react_1.useRef)(null);
   const log = (0, react_1.useCallback)(
     (message, ...args) => {
       if (debug) {
@@ -59,7 +88,7 @@ const TelnyxVoiceAppComponent = ({
       appStateRef.current = nextAppState;
       log(`App state changed from ${previousAppState} to ${nextAppState}`);
       log(`Background detector ignore flag: ${backgroundDetectorIgnore.current}`);
-      log(`Handling foreground call: ${isHandlingForegroundCall}`);
+      log(`Handling foreground call: ${isHandlingForegroundCallRef.current}`);
       // Call optional user callback first
       onAppStateChanged?.(nextAppState);
       // Only handle background disconnection when actually transitioning from active to background
@@ -87,12 +116,12 @@ const TelnyxVoiceAppComponent = ({
         await handleAppResumed();
       }
     },
-    [enableAutoReconnect, onAppStateChanged, isHandlingForegroundCall, log]
+    [enableAutoReconnect, onAppStateChanged, log]
   );
   // Handle app going to background - disconnect like the old implementation
   const handleAppBackgrounded = (0, react_1.useCallback)(async () => {
     // Check if we should ignore background detection (e.g., during active calls)
-    if (backgroundDetectorIgnore.current || isHandlingForegroundCall) {
+    if (backgroundDetectorIgnore.current || isHandlingForegroundCallRef.current) {
       log(
         'Background detector ignore flag set or handling foreground call - skipping disconnection'
       );
@@ -140,7 +169,7 @@ const TelnyxVoiceAppComponent = ({
     } catch (e) {
       log('Error disconnecting on background:', e);
     }
-  }, [voipClient, isHandlingForegroundCall, log]);
+  }, [voipClient, log]);
   // Handle app resuming from background
   const handleAppResumed = (0, react_1.useCallback)(async () => {
     log('App resumed - checking reconnection needs');
@@ -148,7 +177,7 @@ const TelnyxVoiceAppComponent = ({
     // This handles the case where the user accepted a call while the app was backgrounded
     await checkForInitialPushNotification(true); // Pass true for fromAppResume
     // If we're ignoring (e.g., from push call) or handling foreground call, don't auto-reconnect
-    if (backgroundDetectorIgnore.current || isHandlingForegroundCall) {
+    if (backgroundDetectorIgnore.current || isHandlingForegroundCallRef.current) {
       log(
         'Background detector ignore flag set or handling foreground call - skipping reconnection'
       );
@@ -176,7 +205,7 @@ const TelnyxVoiceAppComponent = ({
     if (currentState !== connection_state_1.TelnyxConnectionState.CONNECTED) {
       await attemptAutoReconnection();
     }
-  }, [voipClient, isHandlingForegroundCall, log]);
+  }, [voipClient, log]);
   // Attempt to reconnect using stored credentials
   const attemptAutoReconnection = (0, react_1.useCallback)(async () => {
     try {
@@ -296,12 +325,13 @@ const TelnyxVoiceAppComponent = ({
   const checkForInitialPushNotification = (0, react_1.useCallback)(
     async (fromAppResume = false) => {
       log(`checkForInitialPushNotification called${fromAppResume ? ' (from app resume)' : ''}`);
-      if (processingPushOnLaunch && !fromAppResume) {
+      if (processingPushOnLaunchRef.current && !fromAppResume) {
         log('Already processing push, returning early');
         return;
       }
       if (!fromAppResume) {
         setProcessingPushOnLaunch(true);
+        processingPushOnLaunchRef.current = true;
       }
       onPushNotificationProcessingStarted?.();
       try {
@@ -324,11 +354,20 @@ const TelnyxVoiceAppComponent = ({
         // Prevent duplicate processing if already connected or connecting.
         // Since push data is no longer cleared on read, this guard prevents
         // re-processing when checkForInitialPushNotification fires again on app resume.
-        if (
+        const isConnectedOrConnecting =
           voipClient.currentConnectionState ===
             connection_state_1.TelnyxConnectionState.CONNECTED ||
-          voipClient.currentConnectionState === connection_state_1.TelnyxConnectionState.CONNECTING
-        ) {
+          voipClient.currentConnectionState === connection_state_1.TelnyxConnectionState.CONNECTING;
+        const isActiveIOSCallWaitingPush =
+          react_native_1.Platform.OS === 'ios' &&
+          voipClient.currentConnectionState ===
+            connection_state_1.TelnyxConnectionState.CONNECTED &&
+          voipClient.currentCalls.some(
+            (call) =>
+              call.currentState === call_state_1.TelnyxCallState.ACTIVE ||
+              call.currentState === call_state_1.TelnyxCallState.HELD
+          );
+        if (isConnectedOrConnecting && !isActiveIOSCallWaitingPush) {
           log(
             `SKIPPING - Already ${voipClient.currentConnectionState}, preventing duplicate processing`
           );
@@ -336,20 +375,31 @@ const TelnyxVoiceAppComponent = ({
         }
         // Set flags to prevent auto-reconnection during push call
         setIsHandlingForegroundCall(true);
+        isHandlingForegroundCallRef.current = true;
         backgroundDetectorIgnore.current = true;
         log(`Background detector ignore set to: true at ${new Date().toISOString()}`);
         log(`Foreground call handling flag set to: true at ${new Date().toISOString()}`);
-        disposeBackgroundClient();
+        await disposeBackgroundClient();
         // On iOS, coordinate with CallKit using the call_id from push metadata
         if (react_native_1.Platform.OS === 'ios') {
           const callId = pushData.metadata?.call_id;
           if (callId) {
             const { callKitCoordinator } = require('./callkit/callkit-coordinator');
             log('Notifying CallKit coordinator about push notification:', callId);
-            await callKitCoordinator.handleCallKitPushReceived(callId, {
+            const processed = await callKitCoordinator.handleCallKitPushReceived(callId, {
               callData: { source: 'push_notification' },
               pushData: pushData,
             });
+            if (!processed) {
+              // The push was filtered, rejected, or otherwise ignored by
+              // CallKit. Reset the foreground-push lifecycle flags so the
+              // app does not stay in a state that skips background
+              // disconnect/reconnect handling.
+              log('CallKit push was not processed - resetting foreground flags');
+              setIsHandlingForegroundCall(false);
+              isHandlingForegroundCallRef.current = false;
+              backgroundDetectorIgnore.current = false;
+            }
           } else {
             log('No call_id found in push data, falling back to direct handling');
             await voipClient.handlePushNotification(pushData);
@@ -361,26 +411,18 @@ const TelnyxVoiceAppComponent = ({
       } catch (e) {
         log('Error processing initial push notification:', e);
         setIsHandlingForegroundCall(false);
+        isHandlingForegroundCallRef.current = false;
       } finally {
         setProcessingPushOnLaunch(false);
+        processingPushOnLaunchRef.current = false;
         onPushNotificationProcessingCompleted?.();
       }
     },
-    [
-      processingPushOnLaunch,
-      voipClient,
-      onPushNotificationProcessingStarted,
-      onPushNotificationProcessingCompleted,
-      log,
-    ]
+    [voipClient, onPushNotificationProcessingStarted, onPushNotificationProcessingCompleted, log]
   );
   // Dispose background client instance when no longer needed
-  const disposeBackgroundClient = (0, react_1.useCallback)(() => {
-    if (backgroundClientRef.current) {
-      log('Disposing background client instance');
-      backgroundClientRef.current.dispose();
-      backgroundClientRef.current = null;
-    }
+  const disposeBackgroundClient = (0, react_1.useCallback)(async () => {
+    await disposeSharedBackgroundClient(log);
   }, [log]);
   // Create background client for push notification handling
   const createBackgroundClient = (0, react_1.useCallback)(() => {
@@ -429,17 +471,18 @@ const TelnyxVoiceAppComponent = ({
         }
       }
       log(
-        `Flag reset check: WebRTC calls=${calls.length}, CallKit processing=${hasCallKitProcessing}, isHandlingForegroundCall=${isHandlingForegroundCall}, backgroundDetectorIgnore=${backgroundDetectorIgnore.current}`
+        `Flag reset check: WebRTC calls=${calls.length}, CallKit processing=${hasCallKitProcessing}, isHandlingForegroundCall=${isHandlingForegroundCallRef.current}, backgroundDetectorIgnore=${backgroundDetectorIgnore.current}`
       );
       if (
         !hasActiveWebRTCCalls &&
         !hasCallKitProcessing &&
-        (isHandlingForegroundCall || backgroundDetectorIgnore.current)
+        (isHandlingForegroundCallRef.current || backgroundDetectorIgnore.current)
       ) {
         log(
           `No active calls and no CallKit processing - resetting ignore flags at ${new Date().toISOString()}`
         );
         setIsHandlingForegroundCall(false);
+        isHandlingForegroundCallRef.current = false;
         backgroundDetectorIgnore.current = false;
       } else if (!hasActiveWebRTCCalls && hasCallKitProcessing) {
         log(
@@ -450,9 +493,10 @@ const TelnyxVoiceAppComponent = ({
       }
       // Also reset processingPushOnLaunch if no calls are active
       // This ensures the flag doesn't get stuck after call ends
-      if (calls.length === 0 && processingPushOnLaunch) {
+      if (calls.length === 0 && processingPushOnLaunchRef.current) {
         log('No active calls - resetting processing push flag');
         setProcessingPushOnLaunch(false);
+        processingPushOnLaunchRef.current = false;
       }
     });
     // Listen for immediate call action events from notification buttons (Android only)
@@ -501,7 +545,7 @@ const TelnyxVoiceAppComponent = ({
     // Handle initial push notification if app was launched from terminated state
     // Only check if we're not already processing to prevent infinite loops
     const timeoutId = setTimeout(() => {
-      if (!processingPushOnLaunch) {
+      if (!processingPushOnLaunchRef.current) {
         checkForInitialPushNotification();
       }
     }, 100);
@@ -523,16 +567,9 @@ const TelnyxVoiceAppComponent = ({
       }
       clearTimeout(timeoutId);
       // Clean up background client instance
-      disposeBackgroundClient();
+      void disposeBackgroundClient();
     };
-  }, [
-    voipClient,
-    handleAppStateChange,
-    disposeBackgroundClient,
-    skipWebBackgroundDetection,
-    isHandlingForegroundCall,
-    log,
-  ]);
+  }, [voipClient, handleAppStateChange, disposeBackgroundClient, skipWebBackgroundDetection, log]);
   // Simply return the children wrapped in context provider - all lifecycle management is handled internally
   return (0, jsx_runtime_1.jsx)(TelnyxVoiceContext_1.TelnyxVoiceProvider, {
     voipClient: voipClient,
@@ -608,18 +645,23 @@ const initializeAndCreate = async (options) => {
  */
 const handleBackgroundPush = async (message) => {
   console.log('[TelnyxVoiceApp] Background push received:', message);
+  let backgroundClient = null;
   try {
     // TODO: Initialize push notification service in isolate if needed
+    await disposeSharedBackgroundClient(console.log);
     // Use singleton pattern for background client to prevent multiple instances
-    let backgroundClient = (0, telnyx_voip_client_1.createBackgroundTelnyxVoipClient)({
+    backgroundClient = (0, telnyx_voip_client_1.createBackgroundTelnyxVoipClient)({
       debug: false,
     });
+    sharedBackgroundClient = backgroundClient;
     await backgroundClient.handlePushNotification(message);
     console.log('[TelnyxVoiceApp] Background push processed successfully');
-    // Clean up the background client
-    backgroundClient.dispose();
   } catch (e) {
     console.log('[TelnyxVoiceApp] Error processing background push:', e);
+  } finally {
+    if (backgroundClient) {
+      await disposeSharedBackgroundClient(console.log, backgroundClient);
+    }
   }
 };
 // Create the component with static methods
