@@ -5,6 +5,8 @@ import log from 'loglevel';
 import uuid from 'uuid-random';
 import { Platform } from 'react-native';
 import { Call } from './call';
+import type { CallRecoveryHooks } from './call';
+import type { CandidateEvidence } from './call-recovery-coordinator';
 import type { CallOptions } from './call-options';
 import type { ClientOptions } from './client-options';
 import type { CallReportConfig } from './call-report-models';
@@ -96,6 +98,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private reconnectionTimeoutHandle: any = null;
   private reconnectionSessionId: string | null = null; // Store sessionId during reconnection
   private connectionGeneration: number = 0;
+
+  // Active-call ICE restart recovery (VSDK-679)
+  // True while a recovery fallback owns the reconnect flow.
+  private recoveryReattachActive: boolean = false;
+  // One-shot relay-only override captured from the recovering call's stats.
+  private lastRecoveryCandidateEvidence: CandidateEvidence | null = null;
   private static readonly RECONNECT_DELAY = 3000; // 3 seconds
   private static readonly RECONNECT_TIMEOUT = 60000; // 30 seconds
 
@@ -436,6 +444,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       callReportConfig: this.getCallReportConfig(),
       pushWhenActive: this.options.pushWhenActive,
       pushDeviceToken: this.options.pushNotificationDeviceToken,
+      recoveryHooks: this.buildRecoveryHooks(),
     });
 
     // Add to calls tracking (matches iOS SDK behavior)
@@ -1132,6 +1141,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         callReportConfig: this.getCallReportConfig(),
         pushWhenActive: this.options.pushWhenActive,
         pushDeviceToken: this.options.pushNotificationDeviceToken,
+        recoveryHooks: this.buildRecoveryHooks(),
       });
     } catch (error) {
       log.error('[TelnyxRTC] Failed to create inbound call:', error);
@@ -1276,6 +1286,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         destinationNumber: msg.params.caller_id_number,
         peerConnectionOptions: {
           useTrickleIce: this.options.useTrickleIce,
+          // One-shot relay-only override (VSDK-679): when the pre-failure
+          // candidate evidence explicitly reports a VPN, force the replacement
+          // call's media through a TURN relay once, then clear the evidence so
+          // normal reattaches are not affected.
+          ...(this.consumeRelayOverride() ? { iceTransportPolicy: 'relay' as const } : {}),
         },
       },
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
@@ -1284,6 +1299,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       callReportConfig: this.getCallReportConfig(),
       pushWhenActive: this.options.pushWhenActive,
       pushDeviceToken: this.options.pushNotificationDeviceToken,
+      recoveryHooks: this.buildRecoveryHooks(),
     });
 
     // Add to calls tracking (matches iOS SDK behavior)
@@ -1592,6 +1608,98 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     } catch (error) {
       log.error('[TelnyxRTC] Reconnection attempt failed:', error);
     }
+  }
+
+  // --- Active-call ICE restart recovery (VSDK-679) ---
+
+  /**
+   * Recovery hooks injected into every call created by this client.
+   * They let the per-call recovery coordinator see client reconnect state,
+   * request the one reconnect/register/reattach fallback, and hand over the
+   * one-shot relay override captured from the recovering call's stats.
+   */
+  private buildRecoveryHooks(): CallRecoveryHooks {
+    return {
+      isClientReconnecting: () => this.reconnecting || this.recoveryReattachActive,
+      performReattachFallback: () => this.performReattachFallbackForRecovery(),
+      captureCandidateEvidence: (evidence: CandidateEvidence) => {
+        this.lastRecoveryCandidateEvidence = evidence;
+      },
+    };
+  }
+
+  /**
+   * Consume the one-shot relay override captured during recovery. Returns
+   * true only when the pre-failure candidate evidence explicitly reports a
+   * VPN network; without evidence recovery fails closed (no override).
+   */
+  private consumeRelayOverride(): boolean {
+    if (this.lastRecoveryCandidateEvidence?.localNetworkType === 'vpn') {
+      this.lastRecoveryCandidateEvidence = null;
+      log.debug(
+        '[TelnyxRTC] Applying one-shot relay-only override to reattached call (VPN evidence)'
+      );
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Client-owned fallback for a failed ICE restart recovery: one
+   * reconnect/register/reattach cycle, mirroring onNetworkUnavailable's
+   * teardown. Resolves `true` only when the backend attach for a call was
+   * received within the reconnection window (replacement call initiated).
+   */
+  private performReattachFallbackForRecovery(): Promise<boolean> {
+    if (this.recoveryReattachActive || this.reconnecting) {
+      log.debug('[TelnyxRTC] Recovery fallback skipped: a reconnect flow is already running');
+      return Promise.resolve(false);
+    }
+
+    this.recoveryReattachActive = true;
+    // Reuse the existing reconnect-flow guard semantics: keeps push flags and
+    // listeners intact while the teardown runs, and signals reconnecting to
+    // any other call's recovery coordinator for the duration of the window.
+    this.reconnecting = true;
+
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const onReattach = () => settle(true);
+      const timer = setTimeout(() => {
+        log.debug('[TelnyxRTC] Recovery fallback: reattach window expired');
+        settle(false);
+      }, TelnyxRTC.RECONNECT_TIMEOUT);
+      const settle = (value: boolean) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        this.removeListener('telnyx.call.reattached', onReattach);
+        this.reconnecting = false;
+        this.recoveryReattachActive = false;
+        resolve(value);
+      };
+      this.addListener('telnyx.call.reattached', onReattach);
+
+      log.debug('[TelnyxRTC] Recovery fallback: running one reconnect/register/reattach cycle');
+      try {
+        this.disconnect(true);
+        this.connect()
+          .then(() => {
+            log.debug(
+              '[TelnyxRTC] Recovery fallback: reconnected, waiting for backend attach'
+            );
+          })
+          .catch((error) => {
+            log.error('[TelnyxRTC] Recovery fallback: reconnect failed', error);
+            settle(false);
+          });
+      } catch (error) {
+        log.error('[TelnyxRTC] Recovery fallback: teardown failed', error);
+        settle(false);
+      }
+    });
   }
 
   /**

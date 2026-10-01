@@ -474,4 +474,76 @@ describe('CallReportCollector', () => {
       });
     });
   });
+
+  describe('selected candidate evidence for recovery (VSDK-679)', () => {
+    function buildCandidatePairStats(networkType: string | undefined) {
+      const statsMap = new Map<string, any>();
+      statsMap.set('local-candidate', {
+        id: 'local-candidate',
+        type: 'local-candidate',
+        address: '192.168.1.10',
+        port: 5000,
+        candidateType: 'srflx',
+        protocol: 'udp',
+        ...(networkType !== undefined ? { networkType } : {}),
+      });
+      statsMap.set('remote-candidate', {
+        id: 'remote-candidate',
+        type: 'remote-candidate',
+        address: '50.114.148.33',
+        port: 28714,
+        candidateType: 'relay',
+        protocol: 'udp',
+      });
+      statsMap.set('pair', {
+        id: 'candidate-pair',
+        type: 'candidate-pair',
+        nominated: true,
+        state: 'succeeded',
+        writable: true,
+        localCandidateId: 'local-candidate',
+        remoteCandidateId: 'remote-candidate',
+        requestsSent: 3,
+        responsesReceived: 3,
+      });
+      return statsMap;
+    }
+
+    it('captures VPN evidence for the recovery relay override', async () => {
+      const collector = new CallReportCollector(DEFAULT_CONFIG);
+      const mockPC = createMockPeerConnection(buildCandidatePairStats('vpn'));
+      collector.start(mockPC);
+
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+      await collector.stop();
+
+      const evidence = collector.getSelectedCandidateEvidence();
+      expect(evidence).toEqual({
+        localCandidateType: 'srflx',
+        remoteCandidateType: 'relay',
+        localNetworkType: 'vpn',
+        localAddress: '192.168.1.10',
+        localProtocol: 'udp',
+      });
+    });
+
+    it('reports non-VPN evidence without failing closed consumers', async () => {
+      const collector = new CallReportCollector(DEFAULT_CONFIG);
+      const mockPC = createMockPeerConnection(buildCandidatePairStats('wifi'));
+      collector.start(mockPC);
+
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+      await collector.stop();
+
+      const evidence = collector.getSelectedCandidateEvidence();
+      expect(evidence?.localNetworkType).toBe('wifi');
+    });
+
+    it('returns null evidence before any stats were processed', () => {
+      const collector = new CallReportCollector(DEFAULT_CONFIG);
+      expect(collector.getSelectedCandidateEvidence()).toBeNull();
+    });
+  });
 });
