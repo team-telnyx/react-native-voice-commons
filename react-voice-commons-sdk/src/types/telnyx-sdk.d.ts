@@ -55,6 +55,70 @@ declare module '@telnyx/react-native-voice-sdk' {
     PURGE = 'purge',
   }
 
+  /**
+   * Quality level classification derived from the estimated MOS score.
+   */
+  export enum CallQualityLevel {
+    EXCELLENT = 'excellent',
+    GOOD = 'good',
+    FAIR = 'fair',
+    POOR = 'poor',
+    BAD = 'bad',
+  }
+
+  /**
+   * Normalized inbound (received) audio quality statistics.
+   * All values come from WebRTC `getStats()` reports; missing fields are `null`.
+   */
+  export interface AudioInboundQualityStats {
+    /** Total number of RTP packets received for this audio stream. */
+    packetsReceived: number;
+    /** Total number of RTP packets reported as lost. */
+    packetsLost: number;
+    /** Average jitter in milliseconds over the sampling interval, or null when unavailable. */
+    jitter: number | null;
+    /** Average audio level (0–1, RFC 6464), or null when unavailable. */
+    audioLevel: number | null;
+    /** Average bitrate in bits per second, or null for the first sample. */
+    bitrateAvg: number | null;
+  }
+
+  /**
+   * Normalized outbound (sent) audio quality statistics.
+   */
+  export interface AudioOutboundQualityStats {
+    /** Total number of RTP packets sent for this audio stream. */
+    packetsSent: number;
+    /** Average audio level (0–1, RFC 6464), or null when unavailable. */
+    audioLevel: number | null;
+    /** Average bitrate in bits per second, or null for the first sample. */
+    bitrateAvg: number | null;
+  }
+
+  /**
+   * Snapshot of call quality metrics at a single sampling point.
+   */
+  export interface CallQualityMetrics {
+    /** The call identifier this metrics snapshot belongs to. */
+    callId: string;
+    /** ISO-8601 timestamp of when the metrics were collected. */
+    timestamp: string;
+    /** Derived quality level classification. */
+    qualityLevel: CallQualityLevel;
+    /** Estimated Mean Opinion Score (1.0–4.5), or null when insufficient data. */
+    mos: number | null;
+    /** Average jitter in milliseconds, or null when unavailable. */
+    jitter: number | null;
+    /** Round-trip time in milliseconds, or null when unavailable. */
+    roundTripTime: number | null;
+    /** Packet loss rate as a percentage (0–100), or null when unavailable. */
+    packetLossRate: number | null;
+    /** Normalized inbound audio stats, or null when no inbound audio is flowing. */
+    inbound: AudioInboundQualityStats | null;
+    /** Normalized outbound audio stats, or null when no outbound audio is flowing. */
+    outbound: AudioOutboundQualityStats | null;
+  }
+
   export class Call extends EventEmitter {
     callId: string;
     state: CallState;
@@ -77,6 +141,12 @@ declare module '@telnyx/react-native-voice-sdk' {
      * Format: `[{"name": "X-Header-Name", "value": "Value"}]`; header names must start with `X-`.
      */
     answerCustomHeaders: { name: string; value: string }[] | null;
+
+    /**
+     * Callback invoked periodically (default every 5 seconds) while the call
+     * is active with a snapshot of call quality metrics.
+     */
+    onQualityMetrics: ((metrics: CallQualityMetrics) => void) | null;
 
     constructor(options: any);
 

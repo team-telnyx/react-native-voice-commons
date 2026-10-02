@@ -1,6 +1,7 @@
 import { Observable } from 'rxjs';
 import { TelnyxCallState } from './call-state';
 import { Call as TelnyxCall } from '@telnyx/react-native-voice-sdk';
+import type { CallQualityMetrics } from '@telnyx/react-native-voice-sdk';
 /**
  * Represents a call with reactive state streams.
  *
@@ -19,6 +20,7 @@ export declare class Call {
   private readonly _isMuted;
   private readonly _isHeld;
   private readonly _duration;
+  private readonly _qualityMetrics;
   private _durationTimer?;
   private _startTime?;
   constructor(
@@ -115,6 +117,17 @@ export declare class Call {
    * Observable stream of call duration changes (in seconds)
    */
   get duration$(): Observable<number>;
+  /**
+   * Observable stream of call quality metrics updates.
+   * Emits `null` initially, then a {@link CallQualityMetrics} object
+   * each time the underlying SDK collects a new sample.
+   */
+  get qualityMetrics$(): Observable<CallQualityMetrics | null>;
+  /**
+   * Current call quality metrics (synchronous access).
+   * Returns `null` until the first metrics sample is collected.
+   */
+  get currentQualityMetrics(): CallQualityMetrics | null;
   /**
    * Observable that emits true when the call can be answered
    */
