@@ -111,7 +111,8 @@ export class QualityMetricsCollector {
 
     let inbound: AudioInboundQualityStats | null = null;
     let outbound: AudioOutboundQualityStats | null = null;
-    let rtt: number | null = null;
+    let nominatedRtt: number | null = null;
+    let fallbackRtt: number | null = null;
     let jitterMs: number | null = null;
     let packetLossRate: number | null = null;
 
@@ -191,10 +192,18 @@ export class QualityMetricsCollector {
           break;
 
         case 'candidate-pair':
-          if (report.nominated || report.state === 'succeeded') {
-            if (report.currentRoundTripTime != null) {
-              // RTT is in seconds; convert to ms
-              rtt = round4(report.currentRoundTripTime * 1000);
+          if (report.currentRoundTripTime != null) {
+            // RTT is in seconds; convert to ms
+            const rttMs = round4(report.currentRoundTripTime * 1000);
+            if (report.nominated) {
+              // The nominated pair is the connection in use — its RTT is
+              // authoritative. A later non-nominated succeeded pair must not
+              // overwrite it (skews RTT and the downstream MOS/quality level).
+              nominatedRtt = rttMs;
+            } else if (report.state === 'succeeded' && fallbackRtt == null) {
+              // Fallback for platforms that omit the nominated flag: take the
+              // first succeeded pair and keep it stable across the report walk.
+              fallbackRtt = rttMs;
             }
           }
           break;
@@ -211,6 +220,10 @@ export class QualityMetricsCollector {
           break;
       }
     });
+
+    // Prefer the nominated pair's RTT; fall back to a succeeded pair only when
+    // no nominated pair reported an RTT.
+    const rtt = nominatedRtt ?? fallbackRtt;
 
     const mos = estimateMOS(jitterMs, rtt, packetLossRate);
     const qualityLevel = qualityLevelFromMOS(mos);

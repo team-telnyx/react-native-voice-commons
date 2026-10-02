@@ -464,5 +464,143 @@ describe('QualityMetricsCollector', () => {
 
       collector.stop();
     });
+
+    it('prefers the nominated pair RTT over a later non-nominated succeeded pair', async () => {
+      const map = createAudioStatsMap();
+      // A non-nominated succeeded pair reported AFTER the nominated pair must
+      // not overwrite the nominated pair's RTT (0.05s -> 50ms, not 400ms).
+      map.set('candidate-pair-alt', {
+        type: 'candidate-pair',
+        nominated: false,
+        state: 'succeeded',
+        currentRoundTripTime: 0.4,
+      });
+      const pc = createMockPeerConnection(map);
+      const collected: CallQualityMetrics[] = [];
+
+      const collector = new QualityMetricsCollector({
+        peerConnection: pc,
+        callId: 'test-call-1',
+        intervalMs: 1000,
+      });
+      collector.onMetrics = (m) => collected.push(m);
+
+      collector.start();
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(collected[0].roundTripTime).toBe(50);
+
+      collector.stop();
+    });
+
+    it('prefers the nominated pair RTT even when it appears after a non-nominated pair', async () => {
+      const map = createAudioStatsMap();
+      // Reinsert the nominated pair after the non-nominated one (Map.delete +
+      // Map.set moves the entry to the end of iteration order).
+      map.delete('candidate-pair');
+      map.set('candidate-pair-alt', {
+        type: 'candidate-pair',
+        nominated: false,
+        state: 'succeeded',
+        currentRoundTripTime: 0.4,
+      });
+      map.set('candidate-pair', {
+        type: 'candidate-pair',
+        nominated: true,
+        state: 'succeeded',
+        currentRoundTripTime: 0.05,
+      });
+      const pc = createMockPeerConnection(map);
+      const collected: CallQualityMetrics[] = [];
+
+      const collector = new QualityMetricsCollector({
+        peerConnection: pc,
+        callId: 'test-call-1',
+        intervalMs: 1000,
+      });
+      collector.onMetrics = (m) => collected.push(m);
+
+      collector.start();
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(collected[0].roundTripTime).toBe(50);
+
+      collector.stop();
+    });
+
+    it('falls back to the first succeeded pair RTT when no nominated pair exists', async () => {
+      const map = createAudioStatsMap();
+      map.delete('candidate-pair');
+      map.set('pair-a', {
+        type: 'candidate-pair',
+        nominated: false,
+        state: 'succeeded',
+        currentRoundTripTime: 0.07,
+      });
+      map.set('pair-b', {
+        type: 'candidate-pair',
+        nominated: false,
+        state: 'succeeded',
+        currentRoundTripTime: 0.12,
+      });
+      const pc = createMockPeerConnection(map);
+      const collected: CallQualityMetrics[] = [];
+
+      const collector = new QualityMetricsCollector({
+        peerConnection: pc,
+        callId: 'test-call-1',
+        intervalMs: 1000,
+      });
+      collector.onMetrics = (m) => collected.push(m);
+
+      collector.start();
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // No nominated pair: the first succeeded pair wins and stays stable
+      expect(collected[0].roundTripTime).toBe(70);
+
+      collector.stop();
+    });
+
+    it('falls back to a succeeded pair RTT when the nominated pair omits it', async () => {
+      const map = createAudioStatsMap();
+      map.delete('candidate-pair');
+      map.set('candidate-pair', {
+        type: 'candidate-pair',
+        nominated: true,
+        state: 'in-progress',
+        currentRoundTripTime: null,
+      });
+      map.set('candidate-pair-alt', {
+        type: 'candidate-pair',
+        nominated: false,
+        state: 'succeeded',
+        currentRoundTripTime: 0.1,
+      });
+      const pc = createMockPeerConnection(map);
+      const collected: CallQualityMetrics[] = [];
+
+      const collector = new QualityMetricsCollector({
+        peerConnection: pc,
+        callId: 'test-call-1',
+        intervalMs: 1000,
+      });
+      collector.onMetrics = (m) => collected.push(m);
+
+      collector.start();
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(collected[0].roundTripTime).toBe(100);
+
+      collector.stop();
+    });
   });
 });
