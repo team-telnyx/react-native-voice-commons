@@ -528,16 +528,23 @@ type UpdateMediaRequest = {
     action: 'updateMedia';
     sdp: string;
     trickle: boolean;
-    dialogParams: object;
+    callID: string;
+    dialogParams: {
+      callID: string;
+    };
   };
 };
 
 /**
  * `telnyx_rtc.modify` request carrying an ICE restart offer.
  *
- * Mirrors the production JS SDK `BaseCall.updateMedia()` Modify payload:
- * same method (`telnyx_rtc.modify`) and `action: 'updateMedia'`, with the
- * offer SDP and the Trickle ICE flag of the owning call.
+ * Mirrors the production JS SDK `_sendIceRestartModify()` Modify payload:
+ * same method (`telnyx_rtc.modify`) and `action: 'updateMedia'`, the offer
+ * SDP, and the Trickle ICE flag of the owning call. The call id uses the
+ * backend spelling `callID` — top-level in the Modify params (as the JS SDK
+ * sends it) and inside `dialogParams` (as the iOS implementation reads it) —
+ * so the gateway associates the request with the call consistently across
+ * SDKs.
  */
 export function createUpdateMediaRequest({
   sessionId,
@@ -559,7 +566,8 @@ export function createUpdateMediaRequest({
       action: 'updateMedia',
       sdp,
       trickle: trickleIce,
-      dialogParams: { callId },
+      callID: callId,
+      dialogParams: { callID: callId },
     },
   };
 }

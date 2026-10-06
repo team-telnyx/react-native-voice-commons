@@ -22,8 +22,24 @@ describe('updateMedia messages (ICE restart recovery)', () => {
         action: 'updateMedia',
         sdp: 'offer-sdp',
         trickle: true,
-        dialogParams: { callId: 'signaling-call-id' },
+        callID: 'signaling-call-id',
+        dialogParams: { callID: 'signaling-call-id' },
       });
+    });
+
+    it('sends the backend callID spelling in Modify params and dialogParams', () => {
+      const request = createUpdateMediaRequest({
+        sessionId: 'session-id',
+        callId: 'signaling-call-id',
+        sdp: 'offer-sdp',
+        trickleIce: false,
+      });
+
+      expect(request.params.callID).toBe('signaling-call-id');
+      expect(request.params.dialogParams.callID).toBe('signaling-call-id');
+      expect(Object.prototype.hasOwnProperty.call(request.params.dialogParams, 'callId')).toBe(
+        false
+      );
     });
 
     it('does not mutate the hold/unhold request shape', () => {
