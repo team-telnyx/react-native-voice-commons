@@ -211,6 +211,8 @@ const config = createCredentialConfig('your_sip_username', 'your_sip_password', 
   debug: true,
   pushNotificationDeviceToken: 'your_device_token',
   pushWhenActive: true,
+  // iOS only: explicitly opt in to backend missed-call cleanup pushes.
+  enableMissedCallNotifications: true,
 });
 
 await voipClient.login(config);
@@ -225,12 +227,16 @@ const config = createTokenConfig('your_jwt_token', {
   debug: true,
   pushNotificationDeviceToken: 'your_device_token',
   pushWhenActive: true,
+  // iOS only: explicitly opt in to backend missed-call cleanup pushes.
+  enableMissedCallNotifications: true,
 });
 
 await voipClient.loginWithToken(config);
 ```
 
 `pushWhenActive` is opt-in and defaults to `false`. Enable it on iOS when the device must receive a second PushKit call while another call is active or held.
+
+`enableMissedCallNotifications` is also opt-in and defaults to `false`. Enable it only for iOS apps that want Telnyx to send backend missed-call cleanup pushes (`"Missed call!"`) when a pending incoming call expires or is rejected elsewhere. When enabled, the SDK advertises `ReactNative-mpn-<version>` in the login User-Agent; when disabled, it advertises `ReactNative-<version>`. Android missed-call cleanup push behavior is unchanged.
 
 ### Android Incoming Ringtone
 

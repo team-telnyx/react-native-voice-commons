@@ -2,6 +2,21 @@
 
 On iOS, missed call detection works closely with CallKit and the app lifecycle. This guide explains iOS-specific behavior for detecting and displaying missed calls with the Telnyx React Voice Commons SDK.
 
+## Enabling Backend Missed-Call Pushes
+
+Backend missed-call cleanup pushes are opt-in for React Native iOS registrations. Add `enableMissedCallNotifications: true` to the credential or token config you pass to `login` / `loginWithToken`:
+
+```tsx
+const config = createTokenConfig('your_jwt_token', {
+  pushNotificationDeviceToken: 'your_ios_voip_token',
+  enableMissedCallNotifications: true,
+});
+
+await voipClient.loginWithToken(config);
+```
+
+When this option is enabled, the SDK advertises `ReactNative-mpn-<version>` in the login User-Agent so Telnyx can send iOS missed-call cleanup pushes. When it is omitted or `false`, the SDK advertises `ReactNative-<version>` and does not opt in. Android cleanup push behavior is unchanged.
+
 ## How iOS Affects Missed Call Detection
 
 iOS introduces three app states that change how call state events arrive:
