@@ -491,15 +491,30 @@ export class Call extends EventEmitter<CallEvents> {
 
   /**
    * Hang up the call
-   * This method will send a hangup request to the Telnyx platform,
+  /**
+   * Send a hangup request to the Telnyx platform,
    * close the peer connection, and set the call state to 'ended'.
+   *
+   * The cause code is state-dependent (backport of JS SDK PRs #506, #528):
+   * - Pre-answer states (new, ringing, connecting) → USER_BUSY/17 (signals rejection, prevents TeXML retries)
+   * - Post-answer states (active, held) → NORMAL_CLEARING/16 (normal call termination)
+   *
+   * This prevents the platform from retrying the INVITE when a user declines a ringing call,
+   * while ensuring active calls end normally.
+   *
    * @param customHeaders Optional custom headers to include with the hangup request
    */
   public hangup = (customHeaders?: { name: string; value: string }[]) => {
+    // State-dependent default cause code (backport of JS SDK PR #528)
+    const isPreAnswer =
+      this.state === 'new' || this.state === 'ringing' || this.state === 'connecting';
+    const defaultCause = isPreAnswer ? 'USER_BUSY' : 'NORMAL_CLEARING';
+    const defaultCauseCode = isPreAnswer ? 17 : 16;
+
     // Log local hangup to call report
     this.callReportCollector?.log('info', 'Call ended', {
-      cause: 'USER_BUSY',
-      causeCode: 17,
+      cause: defaultCause,
+      causeCode: defaultCauseCode,
     });
 
     // Stop debug stats collection before ending the call
@@ -510,8 +525,8 @@ export class Call extends EventEmitter<CallEvents> {
         callId: this.callId,
         telnyxLegId: this.telnyxLegId!,
         telnyxSessionId: this.telnyxSessionId!,
-        cause: 'USER_BUSY',
-        causeCode: 17,
+        cause: defaultCause,
+        causeCode: defaultCauseCode,
         sessionId: this.sessionId,
         customHeaders,
       })
