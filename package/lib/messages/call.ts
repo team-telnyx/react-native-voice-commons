@@ -519,6 +519,101 @@ export function isModifyCallAnswer(msg: unknown): msg is ModifyCallAnswer {
   );
 }
 
+type UpdateMediaRequest = {
+  jsonrpc: '2.0';
+  id: string;
+  method: 'telnyx_rtc.modify';
+  params: {
+    sessid: string;
+    action: 'updateMedia';
+    sdp: string;
+    trickle: boolean;
+    callID: string;
+    dialogParams: {
+      callID: string;
+    };
+  };
+};
+
+/**
+ * `telnyx_rtc.modify` request carrying an ICE restart offer.
+ *
+ * Mirrors the production JS SDK `_sendIceRestartModify()` Modify payload:
+ * same method (`telnyx_rtc.modify`) and `action: 'updateMedia'`, the offer
+ * SDP, and the Trickle ICE flag of the owning call. The call id uses the
+ * backend spelling `callID` — top-level in the Modify params (as the JS SDK
+ * sends it) and inside `dialogParams` (as the iOS implementation reads it) —
+ * so the gateway associates the request with the call consistently across
+ * SDKs.
+ */
+export function createUpdateMediaRequest({
+  sessionId,
+  callId,
+  sdp,
+  trickleIce,
+}: {
+  sessionId: string;
+  callId: string;
+  sdp: string;
+  trickleIce: boolean;
+}): UpdateMediaRequest {
+  return {
+    jsonrpc: '2.0',
+    id: uuid(),
+    method: TelnyxRTCMethod.MODIFY,
+    params: {
+      sessid: sessionId,
+      action: 'updateMedia',
+      sdp,
+      trickle: trickleIce,
+      callID: callId,
+      dialogParams: { callID: callId },
+    },
+  };
+}
+
+type UpdateMediaAnswer = {
+  id: string;
+  jsonrpc: '2.0';
+  result: {
+    action: 'updateMedia';
+    callID: string;
+    sdp: string;
+    sessid: string;
+  };
+  voice_sdk_id: string;
+};
+
+export function isUpdateMediaAnswer(msg: unknown): msg is UpdateMediaAnswer {
+  if (!msg) {
+    return false;
+  }
+  const temp: Partial<UpdateMediaAnswer> = msg as Partial<UpdateMediaAnswer>;
+  return Boolean(
+    temp.result?.callID &&
+      temp.result?.sessid &&
+      temp.result?.action === 'updateMedia' &&
+      typeof temp.result?.sdp === 'string'
+  );
+}
+
+/** Extract the answer SDP from an updateMedia Modify response. */
+export function extractUpdateMediaAnswerSdp(msg: unknown): string | null {
+  if (!isUpdateMediaAnswer(msg)) {
+    return null;
+  }
+  return msg.result.sdp ?? null;
+}
+
+/** Detect a JSON-RPC error response (resolves transactions in Connection). */
+export function isJsonRpcErrorMessage(msg: unknown): boolean {
+  if (!msg) {
+    return false;
+  }
+  const temp = msg as { error?: { message?: unknown; code?: unknown } };
+  return Boolean(temp.error && typeof temp.error === 'object');
+}
+
 /**
  * Verto `telnyx_rtc.info` request used to send DTMF tones.
  *
