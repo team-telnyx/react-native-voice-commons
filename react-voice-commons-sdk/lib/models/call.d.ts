@@ -9,203 +9,187 @@ import { Call as TelnyxCall } from '@telnyx/react-native-voice-sdk';
  * integrate with any state management solution.
  */
 export declare class Call {
-  private readonly _telnyxCall;
-  private readonly _callId;
-  private readonly _destination;
-  private readonly _isIncoming;
-  private readonly _originalCallerName?;
-  private readonly _originalCallerNumber?;
-  private readonly _callState;
-  private readonly _isMuted;
-  private readonly _isHeld;
-  private readonly _duration;
-  private _durationTimer?;
-  private _startTime?;
-  constructor(
-    _telnyxCall: TelnyxCall,
-    _callId: string,
-    _destination: string,
-    _isIncoming: boolean,
-    isReattached?: boolean,
-    _originalCallerName?: string,
-    _originalCallerNumber?: string
-  );
-  /**
-   * Unique identifier for this call
-   */
-  get callId(): string;
-  /**
-   * The destination number or SIP URI
-   */
-  get destination(): string;
-  /**
-   * Whether this is an incoming call
-   */
-  get isIncoming(): boolean;
-  /**
-   * Whether this is an outgoing call
-   */
-  get isOutgoing(): boolean;
-  /**
-   * The original caller name (from_display_name) received in the INVITE message.
-   * Falls back to destination if not available.
-   */
-  get callerName(): string;
-  /**
-   * The original caller number received in the INVITE message.
-   * Falls back to destination if not available.
-   */
-  get callerNumber(): string;
-  /**
-   * Current call state (synchronous access)
-   */
-  get currentState(): TelnyxCallState;
-  /**
-   * Current mute state (synchronous access)
-   */
-  get currentIsMuted(): boolean;
-  /**
-   * Current hold state (synchronous access)
-   */
-  get currentIsHeld(): boolean;
-  /**
-   * Current call duration in seconds (synchronous access)
-   */
-  get currentDuration(): number;
-  /**
-   * Custom headers received from the WebRTC INVITE message.
-   * These headers are passed during call initiation and can contain application-specific information.
-   * Format: `[{"name": "X-Header-Name", "value": "Value"}]`; header names must start with `X-`.
-   */
-  get inviteCustomHeaders():
-    | {
+    private readonly _telnyxCall;
+    private readonly _callId;
+    private readonly _destination;
+    private readonly _isIncoming;
+    private readonly _originalCallerName?;
+    private readonly _originalCallerNumber?;
+    private readonly _callState;
+    private readonly _isMuted;
+    private readonly _isHeld;
+    private readonly _duration;
+    private _durationTimer?;
+    private _startTime?;
+    constructor(_telnyxCall: TelnyxCall, _callId: string, _destination: string, _isIncoming: boolean, isReattached?: boolean, _originalCallerName?: string, _originalCallerNumber?: string);
+    /**
+     * Unique identifier for this call
+     */
+    get callId(): string;
+    /**
+     * The destination number or SIP URI
+     */
+    get destination(): string;
+    /**
+     * Whether this is an incoming call
+     */
+    get isIncoming(): boolean;
+    /**
+     * Whether this is an outgoing call
+     */
+    get isOutgoing(): boolean;
+    /**
+     * The original caller name (from_display_name) received in the INVITE message.
+     * Falls back to destination if not available.
+     */
+    get callerName(): string;
+    /**
+     * The original caller number received in the INVITE message.
+     * Falls back to destination if not available.
+     */
+    get callerNumber(): string;
+    /**
+     * Current call state (synchronous access)
+     */
+    get currentState(): TelnyxCallState;
+    /**
+     * Current mute state (synchronous access)
+     */
+    get currentIsMuted(): boolean;
+    /**
+     * Current hold state (synchronous access)
+     */
+    get currentIsHeld(): boolean;
+    /**
+     * Current call duration in seconds (synchronous access)
+     */
+    get currentDuration(): number;
+    /**
+     * Custom headers received from the WebRTC INVITE message.
+     * These headers are passed during call initiation and can contain application-specific information.
+     * Format: `[{"name": "X-Header-Name", "value": "Value"}]`; header names must start with `X-`.
+     */
+    get inviteCustomHeaders(): {
         name: string;
         value: string;
-      }[]
-    | null;
-  /**
-   * Custom headers received from the WebRTC ANSWER message.
-   * These headers are passed during call acceptance and can contain application-specific information.
-   * Format: `[{"name": "X-Header-Name", "value": "Value"}]`; header names must start with `X-`.
-   */
-  get answerCustomHeaders():
-    | {
+    }[] | null;
+    /**
+     * Custom headers received from the WebRTC ANSWER message.
+     * These headers are passed during call acceptance and can contain application-specific information.
+     * Format: `[{"name": "X-Header-Name", "value": "Value"}]`; header names must start with `X-`.
+     */
+    get answerCustomHeaders(): {
         name: string;
         value: string;
-      }[]
-    | null;
-  /**
-   * Get the underlying Telnyx Call object (for internal use)
-   * @internal
-   */
-  get telnyxCall(): TelnyxCall;
-  /**
-   * Observable stream of call state changes
-   */
-  get callState$(): Observable<TelnyxCallState>;
-  /**
-   * Observable stream of mute state changes
-   */
-  get isMuted$(): Observable<boolean>;
-  /**
-   * Observable stream of hold state changes
-   */
-  get isHeld$(): Observable<boolean>;
-  /**
-   * Observable stream of call duration changes (in seconds)
-   */
-  get duration$(): Observable<number>;
-  /**
-   * Observable that emits true when the call can be answered
-   */
-  get canAnswer$(): Observable<boolean>;
-  /**
-   * Observable that emits true when the call can be hung up
-   */
-  get canHangup$(): Observable<boolean>;
-  /**
-   * Observable that emits true when the call can be put on hold
-   */
-  get canHold$(): Observable<boolean>;
-  /**
-   * Observable that emits true when the call can be resumed from hold
-   */
-  get canResume$(): Observable<boolean>;
-  /**
-   * Answer the incoming call
-   * @param customHeaders Optional custom headers to include with the answer
-   */
-  answer(
-    customHeaders?: {
-      name: string;
-      value: string;
-    }[]
-  ): Promise<void>;
-  /**
-   * Hang up the call
-   * @param customHeaders Optional custom headers to include with the hangup request
-   */
-  hangup(
-    customHeaders?: {
-      name: string;
-      value: string;
-    }[]
-  ): Promise<void>;
-  /**
-   * Put the call on hold
-   */
-  hold(): Promise<void>;
-  /**
-   * Resume the call from hold
-   */
-  resume(): Promise<void>;
-  /**
-   * Mute the call
-   */
-  mute(): Promise<void>;
-  /**
-   * Unmute the call
-   */
-  unmute(): Promise<void>;
-  /**
-   * Toggle mute state
-   */
-  toggleMute(): Promise<void>;
-  /**
-   * Send DTMF tones on this call.
-   *
-   * Each character in `digits` is sent as a Verto INFO message to the Telnyx
-   * platform. Valid characters are `0-9`, `A-D`, `*`, and `#`; any other
-   * characters are silently dropped by the underlying SDK.
-   *
-   * Only valid while the call is `ACTIVE` — will throw otherwise. Safe to call
-   * with a single digit (e.g. for IVR dialpad presses) or a whole string
-   * (e.g. `"123#"`).
-   */
-  dtmf(digits: string): Promise<void>;
-  /**
-   * Set the call to connecting state (used for push notification calls when answered via CallKit)
-   * @internal
-   */
-  setConnecting(): void;
-  /**
-   * Clean up resources when the call is disposed
-   */
-  dispose(): void;
-  /**
-   * Set up listeners for the underlying Telnyx call
-   */
-  private _setupCallListeners;
-  /**
-   * Map Telnyx SDK call states to our simplified call states
-   */
-  private _mapToTelnyxCallState;
-  /**
-   * Start the duration timer
-   */
-  private _startDurationTimer;
-  /**
-   * Stop the duration timer
-   */
-  private _stopDurationTimer;
+    }[] | null;
+    /**
+     * Get the underlying Telnyx Call object (for internal use)
+     * @internal
+     */
+    get telnyxCall(): TelnyxCall;
+    /**
+     * Observable stream of call state changes
+     */
+    get callState$(): Observable<TelnyxCallState>;
+    /**
+     * Observable stream of mute state changes
+     */
+    get isMuted$(): Observable<boolean>;
+    /**
+     * Observable stream of hold state changes
+     */
+    get isHeld$(): Observable<boolean>;
+    /**
+     * Observable stream of call duration changes (in seconds)
+     */
+    get duration$(): Observable<number>;
+    /**
+     * Observable that emits true when the call can be answered
+     */
+    get canAnswer$(): Observable<boolean>;
+    /**
+     * Observable that emits true when the call can be hung up
+     */
+    get canHangup$(): Observable<boolean>;
+    /**
+     * Observable that emits true when the call can be put on hold
+     */
+    get canHold$(): Observable<boolean>;
+    /**
+     * Observable that emits true when the call can be resumed from hold
+     */
+    get canResume$(): Observable<boolean>;
+    /**
+     * Answer the incoming call
+     * @param customHeaders Optional custom headers to include with the answer
+     */
+    answer(customHeaders?: {
+        name: string;
+        value: string;
+    }[]): Promise<void>;
+    /**
+     * Hang up the call
+     * @param customHeaders Optional custom headers to include with the hangup request
+     */
+    hangup(customHeaders?: {
+        name: string;
+        value: string;
+    }[]): Promise<void>;
+    /**
+     * Put the call on hold
+     */
+    hold(): Promise<void>;
+    /**
+     * Resume the call from hold
+     */
+    resume(): Promise<void>;
+    /**
+     * Mute the call
+     */
+    mute(): Promise<void>;
+    /**
+     * Unmute the call
+     */
+    unmute(): Promise<void>;
+    /**
+     * Toggle mute state
+     */
+    toggleMute(): Promise<void>;
+    /**
+     * Send DTMF tones on this call.
+     *
+     * Each character in `digits` is sent as a Verto INFO message to the Telnyx
+     * platform. Valid characters are `0-9`, `A-D`, `*`, and `#`; any other
+     * characters are silently dropped by the underlying SDK.
+     *
+     * Only valid while the call is `ACTIVE` — will throw otherwise. Safe to call
+     * with a single digit (e.g. for IVR dialpad presses) or a whole string
+     * (e.g. `"123#"`).
+     */
+    dtmf(digits: string): Promise<void>;
+    /**
+     * Set the call to connecting state (used for push notification calls when answered via CallKit)
+     * @internal
+     */
+    setConnecting(): void;
+    /**
+     * Clean up resources when the call is disposed
+     */
+    dispose(): void;
+    /**
+     * Set up listeners for the underlying Telnyx call
+     */
+    private _setupCallListeners;
+    /**
+     * Map Telnyx SDK call states to our simplified call states
+     */
+    private _mapToTelnyxCallState;
+    /**
+     * Start the duration timer
+     */
+    private _startDurationTimer;
+    /**
+     * Stop the duration timer
+     */
+    private _stopDurationTimer;
 }
