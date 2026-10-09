@@ -218,8 +218,8 @@ describe('Call Custom Headers', () => {
         callId: 'test-call-id',
         telnyxLegId: 'test-telnyx-leg-id',
         telnyxSessionId: 'test-telnyx-session-id',
-        cause: 'USER_BUSY',
-        causeCode: 17,
+        cause: 'NORMAL_CLEARING',
+        causeCode: 16,
         sessionId: 'test-session-id',
         customHeaders: undefined,
       });
@@ -241,8 +241,8 @@ describe('Call Custom Headers', () => {
         callId: 'test-call-id',
         telnyxLegId: 'test-telnyx-leg-id',
         telnyxSessionId: 'test-telnyx-session-id',
-        cause: 'USER_BUSY',
-        causeCode: 17,
+        cause: 'NORMAL_CLEARING',
+        causeCode: 16,
         sessionId: 'test-session-id',
         customHeaders,
       });

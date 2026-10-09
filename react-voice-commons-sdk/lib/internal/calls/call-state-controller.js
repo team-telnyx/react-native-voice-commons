@@ -178,11 +178,9 @@ class CallStateController {
             console.log('CallStateController: No telnyxClient available, skipping listener setup');
             return;
         }
-        // Skip redundant listener setup — SessionManager calls _onClientReady
+        // Guard against duplicate registration — SessionManager calls _onClientReady
         // twice during connect/reconnect (once before connection, once on
-        // telnyx.client.ready event). _setupClientListeners() already
-        // removes old listeners before re-adding, so this guard skips the
-        // redundant off→on churn rather than preventing actual duplicates.
+        // telnyx.client.ready event). Skip if already listening on the same client.
         if (this._listenerClient === telnyxClient) {
             console.log('CallStateController: Listeners already registered for this client instance, skipping');
             return;
