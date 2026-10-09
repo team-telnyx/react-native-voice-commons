@@ -1,301 +1,326 @@
-'use strict';
-Object.defineProperty(exports, '__esModule', { value: true });
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 exports.VoicePnBridgeNative = exports.VoicePnBridge = void 0;
-const react_native_1 = require('react-native');
+const react_native_1 = require("react-native");
 const NativeBridge = react_native_1.NativeModules.VoicePnBridge;
 exports.VoicePnBridgeNative = NativeBridge;
 /**
  * Enhanced VoicePnBridge with call control and event handling capabilities
  */
 class VoicePnBridge {
-  /**
-   * Get any pending push notification action from native side
-   */
-  static async getPendingPushAction() {
-    try {
-      const result = await NativeBridge.getPendingPushAction();
-      return {
-        action: result?.action || undefined,
-        metadata: result?.metadata || undefined,
-      };
-    } catch (error) {
-      console.error('VoicePnBridge: Error getting pending push action:', error);
-      return {};
+    /**
+     * Get any pending push notification action from native side
+     */
+    static async getPendingPushAction() {
+        try {
+            const result = await NativeBridge.getPendingPushAction();
+            return {
+                action: result?.action || undefined,
+                metadata: result?.metadata || undefined,
+            };
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error getting pending push action:', error);
+            return {};
+        }
     }
-  }
-  /**
-   * Set a pending push notification action to native side
-   */
-  static async setPendingPushAction(action, metadata) {
-    try {
-      return await NativeBridge.setPendingPushAction(action, metadata);
-    } catch (error) {
-      console.error('VoicePnBridge: Error setting pending push action:', error);
-      return false;
+    /**
+     * Set a pending push notification action to native side
+     */
+    static async setPendingPushAction(action, metadata) {
+        try {
+            return await NativeBridge.setPendingPushAction(action, metadata);
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error setting pending push action:', error);
+            return false;
+        }
     }
-  }
-  /**
-   * Get any pending call action from native side (reliable polling pattern)
-   */
-  static async getPendingCallAction() {
-    try {
-      const result = await NativeBridge.getPendingCallAction();
-      return {
-        action: result?.action || undefined,
-        callId: result?.callId || undefined,
-        timestamp: result?.timestamp || undefined,
-      };
-    } catch (error) {
-      console.error('VoicePnBridge: Error getting pending call action:', error);
-      return {};
+    /**
+     * Get any pending call action from native side (reliable polling pattern)
+     */
+    static async getPendingCallAction() {
+        try {
+            const result = await NativeBridge.getPendingCallAction();
+            return {
+                action: result?.action || undefined,
+                callId: result?.callId || undefined,
+                timestamp: result?.timestamp || undefined,
+            };
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error getting pending call action:', error);
+            return {};
+        }
     }
-  }
-  /**
-   * Clear any pending call action
-   */
-  static async clearPendingCallAction() {
-    try {
-      return await NativeBridge.clearPendingCallAction();
-    } catch (error) {
-      console.error('VoicePnBridge: Error clearing pending call action:', error);
-      return false;
+    /**
+     * Clear any pending call action
+     */
+    static async clearPendingCallAction() {
+        try {
+            return await NativeBridge.clearPendingCallAction();
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error clearing pending call action:', error);
+            return false;
+        }
     }
-  }
-  /**
-   * Clear any pending push notification action
-   */
-  static async clearPendingPushAction() {
-    try {
-      return await NativeBridge.clearPendingPushAction();
-    } catch (error) {
-      console.error('VoicePnBridge: Error clearing pending push action:', error);
-      return false;
+    /**
+     * Clear any pending push notification action
+     */
+    static async clearPendingPushAction() {
+        try {
+            return await NativeBridge.clearPendingPushAction();
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error clearing pending push action:', error);
+            return false;
+        }
     }
-  }
-  /**
-   * React Native → Android: End/hang up the current call
-   * This will hide the ongoing call notification and notify the native side
-   */
-  static async endCall(callId) {
-    try {
-      return await NativeBridge.endCall(callId || null);
-    } catch (error) {
-      console.error('VoicePnBridge: Error ending call:', error);
-      return false;
+    /**
+     * React Native → Android: End/hang up the current call
+     * This will hide the ongoing call notification and notify the native side
+     */
+    static async endCall(callId) {
+        try {
+            return await NativeBridge.endCall(callId || null);
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error ending call:', error);
+            return false;
+        }
     }
-  }
-  /**
-   * React Native → Android: Show ongoing call notification to keep app alive
-   * Should be called when a call becomes active to prevent background termination
-   */
-  static async showOngoingCallNotification(callerName, callerNumber, callId) {
-    try {
-      return await NativeBridge.showOngoingCallNotification(
-        callerName || null,
-        callerNumber || null,
-        callId || null
-      );
-    } catch (error) {
-      console.error('VoicePnBridge: Error showing ongoing call notification:', error);
-      return false;
+    /**
+     * React Native → Android: Show ongoing call notification to keep app alive
+     * Should be called when a call becomes active to prevent background termination
+     */
+    static async showOngoingCallNotification(callerName, callerNumber, callId) {
+        try {
+            return await NativeBridge.showOngoingCallNotification(callerName || null, callerNumber || null, callId || null);
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error showing ongoing call notification:', error);
+            return false;
+        }
     }
-  }
-  /**
-   * React Native → Android: Hide ongoing call notification
-   * Should be called when a call ends to clean up notifications
-   */
-  static async hideOngoingCallNotification() {
-    try {
-      return await NativeBridge.hideOngoingCallNotification();
-    } catch (error) {
-      console.error('VoicePnBridge: Error hiding ongoing call notification:', error);
-      return false;
+    /**
+     * React Native → Android: Hide ongoing call notification
+     * Should be called when a call ends to clean up notifications
+     */
+    static async hideOngoingCallNotification() {
+        try {
+            return await NativeBridge.hideOngoingCallNotification();
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error hiding ongoing call notification:', error);
+            return false;
+        }
     }
-  }
-  /**
-   * React Native → Android: Hide incoming call notification
-   * Useful for dismissing notifications when call is answered/rejected in app
-   */
-  static async hideIncomingCallNotification() {
-    try {
-      return await NativeBridge.hideIncomingCallNotification();
-    } catch (error) {
-      console.error('VoicePnBridge: Error hiding incoming call notification:', error);
-      return false;
+    /**
+     * React Native → Android: Hide incoming call notification
+     * Useful for dismissing notifications when call is answered/rejected in app
+     */
+    static async hideIncomingCallNotification() {
+        try {
+            return await NativeBridge.hideIncomingCallNotification();
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error hiding incoming call notification:', error);
+            return false;
+        }
     }
-  }
-  /**
-   * Configure Android's incoming-call ringtone using an app resource in `res/raw`.
-   * Pass no value to use the device's default phone ringtone.
-   */
-  static async setIncomingCallRingtone(resourceName) {
-    if (react_native_1.Platform.OS !== 'android') return true;
-    try {
-      return await NativeBridge.setIncomingCallRingtone(resourceName?.trim() || null);
-    } catch (error) {
-      console.error('VoicePnBridge: Error setting incoming call ringtone:', error);
-      return false;
+    /**
+     * Configure Android's incoming-call ringtone using an app resource in `res/raw`.
+     * Pass no value to use the device's default phone ringtone.
+     */
+    static async setIncomingCallRingtone(resourceName) {
+        if (react_native_1.Platform.OS !== 'android')
+            return true;
+        try {
+            return await NativeBridge.setIncomingCallRingtone(resourceName?.trim() || null);
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error setting incoming call ringtone:', error);
+            return false;
+        }
     }
-  }
-  /**
-   * Get pending CallKit answer UUID from native storage (iOS only).
-   * When the user answers a CallKit call before JS listeners are ready,
-   * the native side persists the answer UUID in UserDefaults so JS can detect it.
-   */
-  static async getPendingCallKitAnswer() {
-    if (react_native_1.Platform.OS !== 'ios') return null;
-    try {
-      return await NativeBridge.getPendingCallKitAnswer();
-    } catch (error) {
-      console.error('VoicePnBridge: Error getting pending CallKit answer:', error);
-      return null;
+    /**
+     * Get pending CallKit answer UUID from native storage (iOS only).
+     * When the user answers a CallKit call before JS listeners are ready,
+     * the native side persists the answer UUID in UserDefaults so JS can detect it.
+     */
+    static async getPendingCallKitAnswer() {
+        if (react_native_1.Platform.OS !== 'ios')
+            return null;
+        try {
+            return await NativeBridge.getPendingCallKitAnswer();
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error getting pending CallKit answer:', error);
+            return null;
+        }
     }
-  }
-  /**
-   * Clear pending CallKit answer from native storage (iOS only)
-   */
-  static async clearPendingCallKitAnswer() {
-    if (react_native_1.Platform.OS !== 'ios') return true;
-    try {
-      return await NativeBridge.clearPendingCallKitAnswer();
-    } catch (error) {
-      console.error('VoicePnBridge: Error clearing pending CallKit answer:', error);
-      return false;
+    /**
+     * Clear pending CallKit answer from native storage (iOS only)
+     */
+    static async clearPendingCallKitAnswer() {
+        if (react_native_1.Platform.OS !== 'ios')
+            return true;
+        try {
+            return await NativeBridge.clearPendingCallKitAnswer();
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error clearing pending CallKit answer:', error);
+            return false;
+        }
     }
-  }
-  /**
-   * Get VoIP token from native storage
-   */
-  static async getVoipToken() {
-    if (react_native_1.Platform.OS !== 'ios') return null;
-    try {
-      return await NativeBridge.getVoipToken();
-    } catch (error) {
-      console.error('VoicePnBridge: Error getting VoIP token:', error);
-      return null;
+    /**
+     * Get VoIP token from native storage
+     */
+    static async getVoipToken() {
+        if (react_native_1.Platform.OS !== 'ios')
+            return null;
+        try {
+            return await NativeBridge.getVoipToken();
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error getting VoIP token:', error);
+            return null;
+        }
     }
-  }
-  /**
-   * Get pending VoIP push from native storage (iOS only)
-   */
-  static async getPendingVoipPush() {
-    if (react_native_1.Platform.OS !== 'ios') return null;
-    try {
-      return await NativeBridge.getPendingVoipPush();
-    } catch (error) {
-      console.error('VoicePnBridge: Error getting pending VoIP push:', error);
-      return null;
+    /**
+     * Get pending VoIP push from native storage (iOS only)
+     */
+    static async getPendingVoipPush() {
+        if (react_native_1.Platform.OS !== 'ios')
+            return null;
+        try {
+            return await NativeBridge.getPendingVoipPush();
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error getting pending VoIP push:', error);
+            return null;
+        }
     }
-  }
-  /**
-   * Clear pending VoIP push from native storage (iOS only)
-   */
-  static async clearPendingVoipPush() {
-    if (react_native_1.Platform.OS !== 'ios') return true;
-    try {
-      return await NativeBridge.clearPendingVoipPush();
-    } catch (error) {
-      console.error('VoicePnBridge: Error clearing pending VoIP push:', error);
-      return false;
+    /**
+     * Clear pending VoIP push from native storage (iOS only)
+     */
+    static async clearPendingVoipPush() {
+        if (react_native_1.Platform.OS !== 'ios')
+            return true;
+        try {
+            return await NativeBridge.clearPendingVoipPush();
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error clearing pending VoIP push:', error);
+            return false;
+        }
     }
-  }
-  /**
-   * Get pending VoIP action from native storage (iOS only)
-   */
-  static async getPendingVoipAction() {
-    if (react_native_1.Platform.OS !== 'ios') return null;
-    try {
-      return await NativeBridge.getPendingVoipAction();
-    } catch (error) {
-      console.error('VoicePnBridge: Error getting pending VoIP action:', error);
-      return null;
+    /**
+     * Get pending VoIP action from native storage (iOS only)
+     */
+    static async getPendingVoipAction() {
+        if (react_native_1.Platform.OS !== 'ios')
+            return null;
+        try {
+            return await NativeBridge.getPendingVoipAction();
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error getting pending VoIP action:', error);
+            return null;
+        }
     }
-  }
-  /**
-   * Clear pending VoIP action from native storage (iOS only)
-   */
-  static async clearPendingVoipAction() {
-    if (react_native_1.Platform.OS !== 'ios') return true;
-    try {
-      return await NativeBridge.clearPendingVoipAction();
-    } catch (error) {
-      console.error('VoicePnBridge: Error clearing pending VoIP action:', error);
-      return false;
+    /**
+     * Clear pending VoIP action from native storage (iOS only)
+     */
+    static async clearPendingVoipAction() {
+        if (react_native_1.Platform.OS !== 'ios')
+            return true;
+        try {
+            return await NativeBridge.clearPendingVoipAction();
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error clearing pending VoIP action:', error);
+            return false;
+        }
     }
-  }
-  /**
-   * Enable or disable local missed call notifications on iOS.
-   * Missed-call VoIP pushes are still handled through CallKit either way.
-   */
-  static async setMissedCallNotificationsEnabled(enabled) {
-    try {
-      return await NativeBridge.setMissedCallNotificationsEnabled(enabled);
-    } catch (error) {
-      console.error('VoicePnBridge: Error setting missed call notifications:', error);
-      return false;
+    /**
+     * Enable or disable local missed call notifications on iOS.
+     * Missed-call VoIP pushes are still handled through CallKit either way.
+     */
+    static async setMissedCallNotificationsEnabled(enabled) {
+        try {
+            return await NativeBridge.setMissedCallNotificationsEnabled(enabled);
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error setting missed call notifications:', error);
+            return false;
+        }
     }
-  }
-  /**
-   * Returns true by default, matching the sample-app behavior for missed calls.
-   */
-  static async getMissedCallNotificationsEnabled() {
-    try {
-      return await NativeBridge.getMissedCallNotificationsEnabled();
-    } catch (error) {
-      console.error('VoicePnBridge: Error getting missed call notifications setting:', error);
-      return true;
+    /**
+     * Returns true by default, matching the sample-app behavior for missed calls.
+     */
+    static async getMissedCallNotificationsEnabled() {
+        try {
+            return await NativeBridge.getMissedCallNotificationsEnabled();
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error getting missed call notifications setting:', error);
+            return true;
+        }
     }
-  }
-  /**
-   * Route call audio through the loudspeaker when enabled, or back to the
-   * platform default voice route when disabled.
-   */
-  static async setSpeakerEnabled(enabled) {
-    try {
-      return await NativeBridge.setSpeakerEnabled(enabled);
-    } catch (error) {
-      console.error('VoicePnBridge: Error setting speaker route:', error);
-      throw error;
+    /**
+     * Route call audio through the loudspeaker when enabled, or back to the
+     * platform default voice route when disabled.
+     */
+    static async setSpeakerEnabled(enabled) {
+        try {
+            return await NativeBridge.setSpeakerEnabled(enabled);
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error setting speaker route:', error);
+            throw error;
+        }
     }
-  }
-  /**
-   * Returns whether the current audio route is using the loudspeaker.
-   */
-  static async isSpeakerEnabled() {
-    try {
-      return await NativeBridge.isSpeakerEnabled();
-    } catch (error) {
-      console.error('VoicePnBridge: Error getting speaker route:', error);
-      throw error;
+    /**
+     * Returns whether the current audio route is using the loudspeaker.
+     */
+    static async isSpeakerEnabled() {
+        try {
+            return await NativeBridge.isSpeakerEnabled();
+        }
+        catch (error) {
+            console.error('VoicePnBridge: Error getting speaker route:', error);
+            throw error;
+        }
     }
-  }
-  /**
-   * Toggle between loudspeaker and the platform default voice route.
-   */
-  static async toggleSpeaker() {
-    // This is intentionally read-then-write because route changes can also come from
-    // the OS, Bluetooth, wired accessories, or the active call session.
-    const enabled = await VoicePnBridge.isSpeakerEnabled();
-    return VoicePnBridge.setSpeakerEnabled(!enabled);
-  }
-  /**
-   * Android → React Native: Listen for immediate call action events from notification buttons
-   * Use this for active calls where immediate response is needed (e.g., ending ongoing calls)
-   */
-  static addCallActionListener(listener) {
-    return react_native_1.DeviceEventEmitter.addListener('TelnyxCallAction', listener);
-  }
-  /**
-   * Remove call action listener
-   */
-  static removeCallActionListener(subscription) {
-    subscription.remove();
-  }
-  /**
-   * Remove all call action listeners
-   */
-  static removeAllCallActionListeners() {
-    react_native_1.DeviceEventEmitter.removeAllListeners('TelnyxCallAction');
-  }
+    /**
+     * Toggle between loudspeaker and the platform default voice route.
+     */
+    static async toggleSpeaker() {
+        // This is intentionally read-then-write because route changes can also come from
+        // the OS, Bluetooth, wired accessories, or the active call session.
+        const enabled = await VoicePnBridge.isSpeakerEnabled();
+        return VoicePnBridge.setSpeakerEnabled(!enabled);
+    }
+    /**
+     * Android → React Native: Listen for immediate call action events from notification buttons
+     * Use this for active calls where immediate response is needed (e.g., ending ongoing calls)
+     */
+    static addCallActionListener(listener) {
+        return react_native_1.DeviceEventEmitter.addListener('TelnyxCallAction', listener);
+    }
+    /**
+     * Remove call action listener
+     */
+    static removeCallActionListener(subscription) {
+        subscription.remove();
+    }
+    /**
+     * Remove all call action listeners
+     */
+    static removeAllCallActionListeners() {
+        react_native_1.DeviceEventEmitter.removeAllListeners('TelnyxCallAction');
+    }
 }
 exports.VoicePnBridge = VoicePnBridge;
