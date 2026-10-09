@@ -4,8 +4,8 @@
 #   voice-sdk   -> voice-sdk-vX.Y.Z   -> @telnyx/react-native-voice-sdk
 #   commons-sdk -> commons-sdk-vX.Y.Z -> @telnyx/react-voice-commons-sdk
 #
-# The PR bumps package.json versions and lists the merged PRs that touched each
-# package. A maintainer writes each package's CHANGELOG.md section in the release PR;
+# The PR bumps package.json versions, rebuilds react-voice-commons-sdk/lib/ from src/,
+# and lists the merged PRs that touched each package. A maintainer writes each package's CHANGELOG.md section in the release PR;
 # release-pr-check blocks merging until package.json and CHANGELOG.md agree.
 #
 # Uses GITHUB_TOKEN. PRs opened with it don't trigger workflows, so CI starts when the
@@ -116,6 +116,20 @@ jobs:
             scripts/release/release_package.sh bump commons-sdk "$COMMONS_SDK_VERSION"
           fi
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+
+      # react-voice-commons-sdk/lib/ is committed build output. Rebuild it here so the
+      # release PR always carries lib/ compiled from src/, even if a contributor forgot
+      # to run `npm run build`. npm publishing builds lib/ again from the release tag.
+      - name: Rebuild commons-sdk lib/
+        working-directory: react-voice-commons-sdk
+        run: |
+          npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+          npm run build
+
       - name: Create release pull request
         uses: peter-evans/create-pull-request@v7
         with:
@@ -140,4 +154,5 @@ jobs:
           add-paths: |
             package/package.json
             react-voice-commons-sdk/package.json
+            react-voice-commons-sdk/lib
           labels: auto-generated
