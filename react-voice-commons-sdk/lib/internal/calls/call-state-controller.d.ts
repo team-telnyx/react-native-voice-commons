@@ -2,8 +2,8 @@ import { Observable } from 'rxjs';
 import { Call } from '../../models/call';
 import { SessionManager } from '../session/session-manager';
 export type CustomHeader = {
-  name: string;
-  value: string;
+    name: string;
+    value: string;
 };
 export type CustomHeaders = Record<string, string> | CustomHeader[];
 /**
@@ -13,131 +13,126 @@ export type CustomHeaders = Record<string, string> | CustomHeader[];
  * and provides reactive streams for call-related state changes.
  */
 export declare class CallStateController {
-  private readonly _sessionManager;
-  private readonly _calls;
-  private readonly _callMap;
-  private _disposed;
-  private _listenerClient?;
-  private _isWaitingForInvite?;
-  private _onInviteAutoAccepted?;
-  private _activeCallId;
-  constructor(_sessionManager: SessionManager);
-  /**
-   * Observable stream of all current calls
-   */
-  get calls$(): Observable<Call[]>;
-  /**
-   * Observable stream of the currently active call
-   */
-  get activeCall$(): Observable<Call | null>;
-  /**
-   * Current list of calls (synchronous access)
-   */
-  get currentCalls(): Call[];
-  /**
-   * Current active call (synchronous access)
-   */
-  get currentActiveCall(): Call | null;
-  /**
-   * Access any active call tracked by the client.
-   * A call will be accessible until it has ended (transitioned to the ENDED state).
-   * This matches the TelnyxRTC `getCall(callId)` method for multi-call support.
-   *
-   * @param callId The unique identifier of a call.
-   * @returns The Call object that matches the requested callId, or null if not found.
-   */
-  getCall(callId: string): Call | null;
-  /**
-   * Set a call to connecting state (used for push notification calls when answered via CallKit)
-   * @param callId The ID of the call to set to connecting state
-   */
-  setCallConnecting(callId: string): void;
-  /**
-   * Explicitly set the active call for multi-call scenarios.
-   * When set, activeCall$ and currentActiveCall prefer this call over
-   * the first-match heuristic. The ID is cleared automatically when the
-   * call reaches a terminal state.
-   * @param callId The ID of the call to mark as active
-   */
-  setActiveCall(callId: string): void;
-  /**
-   * Clear the explicitly-tracked active call ID, reverting to the
-   * first-match heuristic for active call selection.
-   */
-  clearActiveCall(): void;
-  /**
-   * Find a call by its underlying Telnyx call ID
-   * @param telnyxCall The Telnyx call object to find
-   */
-  findCallByTelnyxCall(telnyxCall: any): Call | null;
-  /**
-   * Select the active call, preferring the explicitly-tracked call ID
-   * over the first-match heuristic.
-   */
-  private _selectActiveCall;
-  /**
-   * Check if a call is in a non-terminal (active or connecting) state.
-   */
-  private _isNonTerminal;
-  /**
-   * Initialize client listeners when the Telnyx client becomes available
-   * This should be called by the session manager after client creation
-   */
-  initializeClientListeners(): void;
-  /**
-   * Initiate a new outgoing call
-   */
-  newCall(
-    destination: string,
-    callerName?: string,
-    callerNumber?: string,
-    customHeaders?: CustomHeaders
-  ): Promise<Call>;
-  /**
-   * Normalize public custom headers into the format expected by the underlying SDK.
-   */
-  private _normalizeCustomHeaders;
-  /**
-   * Set callbacks for waiting for invite logic (used for push notifications)
-   */
-  setWaitingForInviteCallbacks(callbacks: {
-    isWaitingForInvite: () => boolean;
-    onInviteAutoAccepted: () => void;
-  }): void;
-  /**
-   * Clear all tracked calls. Called when the session disconnects so that
-   * calls left in non-terminal states (because the socket died before
-   * their ENDED/FAILED events could arrive) don't accumulate as ghosts
-   * across reconnect cycles.
-   */
-  clearAllCalls(): void;
-  /**
-   * Dispose of the controller and clean up resources
-   */
-  dispose(): void;
-  /**
-   * Set up event listeners for the Telnyx client
-   */
-  private _setupClientListeners;
-  private _removeClientListeners;
-  private _handleTelnyxIncomingCall;
-  private _handleTelnyxReattachedCall;
-  private _handleTelnyxCallStateChanged;
-  private _handleTelnyxCallRemoved;
-  /**
-   * Handle incoming call or reattached call
-   */
-  private _handleIncomingCall;
-  /**
-   * Add a call to our tracking
-   */
-  private _addCall;
-  /**
-   * Remove a call from our tracking
-   */
-  private _removeCall;
-  /**
-   * Generate a unique call ID
-   */
-  private _generateCallId;
+    private readonly _sessionManager;
+    private readonly _calls;
+    private readonly _callMap;
+    private _disposed;
+    private _listenerClient?;
+    private _isWaitingForInvite?;
+    private _onInviteAutoAccepted?;
+    private _activeCallId;
+    constructor(_sessionManager: SessionManager);
+    /**
+     * Observable stream of all current calls
+     */
+    get calls$(): Observable<Call[]>;
+    /**
+     * Observable stream of the currently active call
+     */
+    get activeCall$(): Observable<Call | null>;
+    /**
+     * Current list of calls (synchronous access)
+     */
+    get currentCalls(): Call[];
+    /**
+     * Current active call (synchronous access)
+     */
+    get currentActiveCall(): Call | null;
+    /**
+     * Access any active call tracked by the client.
+     * A call will be accessible until it has ended (transitioned to the ENDED state).
+     * This matches the TelnyxRTC `getCall(callId)` method for multi-call support.
+     *
+     * @param callId The unique identifier of a call.
+     * @returns The Call object that matches the requested callId, or null if not found.
+     */
+    getCall(callId: string): Call | null;
+    /**
+     * Set a call to connecting state (used for push notification calls when answered via CallKit)
+     * @param callId The ID of the call to set to connecting state
+     */
+    setCallConnecting(callId: string): void;
+    /**
+     * Explicitly set the active call for multi-call scenarios.
+     * When set, activeCall$ and currentActiveCall prefer this call over
+     * the first-match heuristic. The ID is cleared automatically when the
+     * call reaches a terminal state.
+     * @param callId The ID of the call to mark as active
+     */
+    setActiveCall(callId: string): void;
+    /**
+     * Clear the explicitly-tracked active call ID, reverting to the
+     * first-match heuristic for active call selection.
+     */
+    clearActiveCall(): void;
+    /**
+     * Find a call by its underlying Telnyx call ID
+     * @param telnyxCall The Telnyx call object to find
+     */
+    findCallByTelnyxCall(telnyxCall: any): Call | null;
+    /**
+     * Select the active call, preferring the explicitly-tracked call ID
+     * over the first-match heuristic.
+     */
+    private _selectActiveCall;
+    /**
+     * Check if a call is in a non-terminal (active or connecting) state.
+     */
+    private _isNonTerminal;
+    /**
+     * Initialize client listeners when the Telnyx client becomes available
+     * This should be called by the session manager after client creation
+     */
+    initializeClientListeners(): void;
+    /**
+     * Initiate a new outgoing call
+     */
+    newCall(destination: string, callerName?: string, callerNumber?: string, customHeaders?: CustomHeaders): Promise<Call>;
+    /**
+     * Normalize public custom headers into the format expected by the underlying SDK.
+     */
+    private _normalizeCustomHeaders;
+    /**
+     * Set callbacks for waiting for invite logic (used for push notifications)
+     */
+    setWaitingForInviteCallbacks(callbacks: {
+        isWaitingForInvite: () => boolean;
+        onInviteAutoAccepted: () => void;
+    }): void;
+    /**
+     * Clear all tracked calls. Called when the session disconnects so that
+     * calls left in non-terminal states (because the socket died before
+     * their ENDED/FAILED events could arrive) don't accumulate as ghosts
+     * across reconnect cycles.
+     */
+    clearAllCalls(): void;
+    /**
+     * Dispose of the controller and clean up resources
+     */
+    dispose(): void;
+    /**
+     * Set up event listeners for the Telnyx client
+     */
+    private _setupClientListeners;
+    private _removeClientListeners;
+    private _handleTelnyxIncomingCall;
+    private _handleTelnyxReattachedCall;
+    private _handleTelnyxCallStateChanged;
+    private _handleTelnyxCallRemoved;
+    /**
+     * Handle incoming call or reattached call
+     */
+    private _handleIncomingCall;
+    /**
+     * Add a call to our tracking
+     */
+    private _addCall;
+    /**
+     * Remove a call from our tracking
+     */
+    private _removeCall;
+    /**
+     * Generate a unique call ID
+     */
+    private _generateCallId;
 }
