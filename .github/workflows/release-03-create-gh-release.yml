@@ -8,6 +8,10 @@
 #   - publishes the package through publish.yml. voice-sdk is published first
 #     because commons-sdk depends on it.
 #
+# Safe to re-run with the same versions: tags already on the release commit, existing
+# GitHub Releases and versions already on npm are skipped, so a run that failed partway
+# can be completed by dispatching it again.
+#
 # Uses GITHUB_TOKEN. Releases created with it don't trigger publish.yml's release
 # event, so publish.yml is called directly and still uses npm trusted publishing.
 name: release-03-create-gh-release
@@ -78,10 +82,15 @@ jobs:
           COMMONS_SDK_VERSION: ${{ steps.plan.outputs.commons_version }}
         run: |
           set -euo pipefail
+          release_sha=$(git rev-parse HEAD)
           for tag in $TAGS; do
-            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-              echo "::error::Tag $tag already exists"
-              exit 1
+            if tag_sha=$(git rev-parse -q --verify "refs/tags/$tag^{commit}"); then
+              # A tag on this release commit means an earlier run stopped partway; carry on.
+              if [[ "$tag_sha" != "$release_sha" ]]; then
+                echo "::error::Tag $tag already exists on a different commit ($tag_sha)"
+                exit 1
+              fi
+              echo "::warning::Tag $tag already exists on this release commit; resuming an earlier run"
             fi
           done
           if [[ -n "$VOICE_SDK_VERSION" ]]; then
@@ -105,6 +114,10 @@ jobs:
             local pkg=$1 version=$2 tag
             [[ -n "$version" ]] || return 0
             tag="$pkg-v$version"
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "::warning::GitHub Release $tag already exists; skipping"
+              return 0
+            fi
             args=("$tag" --target "$target_sha" --title "Release $tag" --notes-file "$RUNNER_TEMP/notes-$pkg.md")
             if [[ "$version" == *-* ]]; then
               args+=(--prerelease)

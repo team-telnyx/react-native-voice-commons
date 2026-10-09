@@ -12,6 +12,7 @@
 #       voice_tag, commons_version, commons_tag, tags, branch.
 #   release_package.sh parse-branch <branch>
 #       Print "<package> <version>" for each release tag in a release/... branch name.
+#       Fails if a voice-sdk-v/commons-sdk-v segment has an invalid version.
 #   release_package.sh ensure-new <package> <version>
 #       Fail if the release tag exists or <version> is not newer than package.json.
 #   release_package.sh bump <package> <version>
@@ -27,7 +28,11 @@
 #       Print the CHANGELOG.md section for <version>, without its heading.
 set -euo pipefail
 
-SEMVER_RE='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+# SemVer 2.0.0 without build metadata: no leading zeros in numeric identifiers and no
+# empty prerelease identifiers (rejects 01.2.3 and 1.2.3-beta..1).
+SEMVER_NUM='(0|[1-9][0-9]*)'
+SEMVER_PRE_ID="($SEMVER_NUM|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
+SEMVER_RE="^$SEMVER_NUM\\.$SEMVER_NUM\\.$SEMVER_NUM(-$SEMVER_PRE_ID(\\.$SEMVER_PRE_ID)*)?\$"
 
 # Errors go to stderr so they stay visible when stdout is captured or redirected.
 # GitHub Actions turns ::error:: lines on either stream into annotations.
@@ -130,7 +135,8 @@ cmd_parse_branch() {
     [[ "$part" =~ ^(voice-sdk|commons-sdk)-v(.+)$ ]] || continue
     pkg=${BASH_REMATCH[1]}
     version=${BASH_REMATCH[2]}
-    [[ "$version" =~ $SEMVER_RE ]] && echo "$pkg $version"
+    [[ "$version" =~ $SEMVER_RE ]] || fail "Branch $1 names $pkg version '$version', which is not valid semver"
+    echo "$pkg $version"
   done
   return 0
 }
