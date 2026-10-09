@@ -494,7 +494,7 @@ export class Call extends EventEmitter<CallEvents> {
    * close the peer connection, and set the call state to 'ended'.
    *
    * The cause code is state-dependent (backport of JS SDK PRs #506, #528):
-   * - Pre-answer states (new, ringing, connecting) → CALL_REJECTED/21 (signals rejection, prevents TeXML retries)
+   * - Pre-answer states (new, ringing, connecting) → USER_BUSY/17 (signals rejection, prevents TeXML retries)
    * - Post-answer states (active, held) → NORMAL_CLEARING/16 (normal call termination)
    *
    * This prevents the platform from retrying the INVITE when a user declines a ringing call,
@@ -504,12 +504,12 @@ export class Call extends EventEmitter<CallEvents> {
    */
   public hangup = (customHeaders?: { name: string; value: string }[]) => {
     // State-dependent default cause code (backport of JS SDK PR #528).
-    // CALL_REJECTED/21 for pre-answer (declined) calls instead of USER_BUSY/17
+    // USER_BUSY/17 for pre-answer (declined) calls — matches JS SDK PR #528
     // to prevent the platform from retrying the INVITE.
     const isPreAnswer =
       this.state === 'new' || this.state === 'ringing' || this.state === 'connecting';
-    const defaultCause = isPreAnswer ? 'CALL_REJECTED' : 'NORMAL_CLEARING';
-    const defaultCauseCode = isPreAnswer ? 21 : 16;
+    const defaultCause = isPreAnswer ? 'USER_BUSY' : 'NORMAL_CLEARING';
+    const defaultCauseCode = isPreAnswer ? 17 : 16;
 
     // Log local hangup to call report
     this.callReportCollector?.log('info', 'Call ended', {
