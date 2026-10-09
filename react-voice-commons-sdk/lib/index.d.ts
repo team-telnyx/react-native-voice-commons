@@ -21,6 +21,12 @@ export { TelnyxCallState, isTelnyxCallState, CallStateHelpers } from './models/c
 export { isCredentialConfig, isTokenConfig, validateConfig, validateCredentialConfig, validateTokenConfig, createCredentialConfig, createTokenConfig, } from './models/config';
 export type { Config, CredentialConfig, TokenConfig } from './models/config';
 export type { Call as TelnyxCall } from '@telnyx/react-native-voice-sdk';
+export { CallQualityLevel } from '@telnyx/react-native-voice-sdk';
+export type {
+  CallQualityMetrics,
+  AudioInboundQualityStats,
+  AudioOutboundQualityStats,
+} from '@telnyx/react-native-voice-sdk';
 export * from './callkit';
 export { VoicePnBridge } from './internal/voice-pn-bridge';
 export { useAppReadyNotifier } from './hooks/useAppReadyNotifier';

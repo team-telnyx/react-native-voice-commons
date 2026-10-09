@@ -24,7 +24,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.useAppReadyNotifier = exports.VoicePnBridge = exports.createTokenConfig = exports.createCredentialConfig = exports.validateTokenConfig = exports.validateCredentialConfig = exports.validateConfig = exports.isTokenConfig = exports.isCredentialConfig = exports.CallStateHelpers = exports.isTelnyxCallState = exports.TelnyxCallState = exports.isTransitioning = exports.isConnected = exports.canMakeCalls = exports.isTelnyxConnectionState = exports.TelnyxConnectionState = exports.Call = exports.useTelnyxVoice = exports.useAppStateHandler = exports.TelnyxVoiceApp = exports.createBackgroundTelnyxVoipClient = exports.destroyTelnyxVoipClient = exports.createTelnyxVoipClient = exports.TelnyxVoipClient = void 0;
+exports.useAppReadyNotifier = exports.VoicePnBridge = exports.CallQualityLevel = exports.createTokenConfig = exports.createCredentialConfig = exports.validateTokenConfig = exports.validateCredentialConfig = exports.validateConfig = exports.isTokenConfig = exports.isCredentialConfig = exports.CallStateHelpers = exports.isTelnyxCallState = exports.TelnyxCallState = exports.isTransitioning = exports.isConnected = exports.canMakeCalls = exports.isTelnyxConnectionState = exports.TelnyxConnectionState = exports.Call = exports.useTelnyxVoice = exports.useAppStateHandler = exports.TelnyxVoiceApp = exports.createBackgroundTelnyxVoipClient = exports.destroyTelnyxVoipClient = exports.createTelnyxVoipClient = exports.TelnyxVoipClient = void 0;
 require("react-native-url-polyfill/auto");
 // Main client
 var telnyx_voip_client_1 = require("./telnyx-voip-client");
@@ -61,6 +61,9 @@ Object.defineProperty(exports, "validateCredentialConfig", { enumerable: true, g
 Object.defineProperty(exports, "validateTokenConfig", { enumerable: true, get: function () { return config_1.validateTokenConfig; } });
 Object.defineProperty(exports, "createCredentialConfig", { enumerable: true, get: function () { return config_1.createCredentialConfig; } });
 Object.defineProperty(exports, "createTokenConfig", { enumerable: true, get: function () { return config_1.createTokenConfig; } });
+// Re-export call quality metrics types from the underlying SDK
+var react_native_voice_sdk_1 = require("@telnyx/react-native-voice-sdk");
+Object.defineProperty(exports, "CallQualityLevel", { enumerable: true, get: function () { return react_native_voice_sdk_1.CallQualityLevel; } });
 // Export CallKit functionality
 __exportStar(require("./callkit"), exports);
 // Native push notification helpers

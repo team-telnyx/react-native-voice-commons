@@ -31,3 +31,16 @@ export type {
   StatsInterval,
 } from './call-report-models';
 export { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
+
+// Call Quality Metrics
+export {
+  CallQualityLevel,
+  estimateMOS,
+  qualityLevelFromMOS,
+} from './quality-metrics';
+export type {
+  AudioInboundQualityStats,
+  AudioOutboundQualityStats,
+  CallQualityMetrics,
+} from './quality-metrics';
+export { QualityMetricsCollector } from './quality-metrics-collector';
