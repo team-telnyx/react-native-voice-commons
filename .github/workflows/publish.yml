@@ -4,7 +4,10 @@ name: Publish to npm
 # Use release tag prefixes to control which package(s) to publish:
 #   voice-sdk-v0.4.1   → publishes @telnyx/react-native-voice-sdk only
 #   commons-sdk-v0.2.0 → publishes @telnyx/react-voice-commons-sdk only
-#   v0.2.0             → publishes both packages
+#   v0.2.0             → publishes both packages (legacy; release-03 now tags each package)
+# Each job checks out the release tag, so the published code is exactly what was tagged.
+# Prerelease versions are published under their prerelease word (1.2.0-beta.1 → "beta"),
+# never as "latest".
 on:
   release:
     types: [published]
@@ -46,8 +49,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: npm-pub
     steps:
-      - name: Checkout code
+      - name: Checkout release tag
         uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve-release.outputs.tag_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -73,7 +78,16 @@ jobs:
 
       - name: Publish with provenance
         working-directory: package
-        run: npm publish --provenance --access public
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$VERSION" == *-* ]]; then
+            # 1.2.0-beta.1 -> "beta"; purely numeric prereleases (1.2.0-1) -> "next"
+            DIST_TAG=$(sed -E 's/^[^-]+-([A-Za-z]+).*$/\1/' <<< "$VERSION")
+            [[ "$DIST_TAG" =~ ^[A-Za-z]+$ ]] || DIST_TAG=next
+            npm publish --provenance --access public --tag "$DIST_TAG"
+          else
+            npm publish --provenance --access public
+          fi
 
   publish-commons-sdk:
     name: Publish @telnyx/react-voice-commons-sdk
@@ -86,8 +100,10 @@ jobs:
       (needs.publish-voice-sdk.result == 'success' || needs.publish-voice-sdk.result == 'skipped')
     environment: npm-pub
     steps:
-      - name: Checkout code
+      - name: Checkout release tag
         uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve-release.outputs.tag_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -119,4 +135,13 @@ jobs:
 
       - name: Publish with provenance
         working-directory: react-voice-commons-sdk
-        run: npm publish --provenance --access public
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$VERSION" == *-* ]]; then
+            # 1.2.0-beta.1 -> "beta"; purely numeric prereleases (1.2.0-1) -> "next"
+            DIST_TAG=$(sed -E 's/^[^-]+-([A-Za-z]+).*$/\1/' <<< "$VERSION")
+            [[ "$DIST_TAG" =~ ^[A-Za-z]+$ ]] || DIST_TAG=next
+            npm publish --provenance --access public --tag "$DIST_TAG"
+          else
+            npm publish --provenance --access public
+          fi
