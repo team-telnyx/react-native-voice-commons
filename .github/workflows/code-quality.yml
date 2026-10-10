@@ -52,10 +52,32 @@ jobs:
           echo "- 🎨 **Prettier**: All files (*.js, *.jsx, *.ts, *.tsx, *.json, *.md)" >> $GITHUB_STEP_SUMMARY
           echo "- 🔍 **ESLint**: react-voice-commons-sdk/ (non-blocking)" >> $GITHUB_STEP_SUMMARY
           echo "- 📝 **MDX Lint**: docs-markdown/ (strict MDX validation)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🏗️ **Build**: react-voice-commons-sdk compiles (same commands as release-01)" >> $GITHUB_STEP_SUMMARY
           echo "- 🔒 **Security**: npm audit on all projects" >> $GITHUB_STEP_SUMMARY
           echo "- 🛡️ **CodeQL**: All JavaScript/TypeScript files" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Workflow completed successfully" >> $GITHUB_STEP_SUMMARY
+
+  build-commons-sdk:
+    name: Build React Voice Commons SDK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # release-01 rebuilds the committed lib/ with these same commands, so compile on
+      # every PR to catch build breakage before release day.
+      - name: Build
+        working-directory: react-voice-commons-sdk
+        run: |
+          npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+          npm run build
 
   security-check:
     name: Security Check
