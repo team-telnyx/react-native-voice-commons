@@ -194,7 +194,9 @@ export class CallStateController {
     // removes old listeners before re-adding, so this guard skips the
     // redundant off→on churn rather than preventing actual duplicates.
     if (this._listenerClient === telnyxClient) {
-      console.log('CallStateController: Listeners already registered for this client instance, skipping');
+      console.log(
+        'CallStateController: Listeners already registered for this client instance, skipping'
+      );
       return;
     }
 

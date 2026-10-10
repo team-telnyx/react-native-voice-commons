@@ -87,7 +87,13 @@ npm run postpublish    # Switch back to local SDK + install
 
 ### Release Checklist
 
-- Update the relevant package `CHANGELOG.md` before creating the GitHub release or publishing to npm. The automated release workflows bump `package.json`, generate docs, create the GitHub release, and publish the package, but they do not update changelogs.
+Each package is released under its own tag: `voice-sdk-vX.Y.Z` (`package/`) and `commons-sdk-vX.Y.Z` (`react-voice-commons-sdk/`). One run can release either package or both, each with its own version.
+
+1. Run `release-01-create-pull-request` with the version for each package to release (leave the other blank). It opens a `release/...` PR that bumps `package.json`, rebuilds `react-voice-commons-sdk/lib/` from `src/`, and lists the merged PRs that touched each package.
+2. In that PR, add a `## [X.Y.Z] (YYYY-MM-DD)` section to each released package's `CHANGELOG.md`. `release-pr-check` blocks merging until `package.json` and `CHANGELOG.md` match the versions.
+3. Merge, then run `release-03-create-gh-release` with the same versions. It tags the release PR's merge commit, creates one GitHub Release per package from its CHANGELOG section, and publishes to npm (voice-sdk first, since commons-sdk depends on it).
+
+The release helpers live in `scripts/release/release_package.sh`. Prerelease versions (for example `1.2.0-beta.1`) become GitHub prereleases and are published to npm under their prerelease word (`beta`), not `latest`.
 
 ## Demo App (repo root)
 
