@@ -1,27 +1,36 @@
+# Creates a release pull request for one or both npm packages.
+#
+# Each package is released under its own tag, which publish.yml uses to pick the package:
+#   voice-sdk   -> voice-sdk-vX.Y.Z   -> @telnyx/react-native-voice-sdk
+#   commons-sdk -> commons-sdk-vX.Y.Z -> @telnyx/react-voice-commons-sdk
+#
+# The PR bumps package.json versions, rebuilds react-voice-commons-sdk/lib/ from src/,
+# and lists the merged PRs that touched each package. A maintainer writes each package's CHANGELOG.md section in the release PR;
+# release-pr-check blocks merging until package.json and CHANGELOG.md agree.
+#
+# Uses GITHUB_TOKEN. PRs opened with it don't trigger workflows, so CI starts when the
+# maintainer pushes the CHANGELOG commit. Requires the repository setting
+# "Allow GitHub Actions to create and approve pull requests".
 name: release-01-create-pull-request
 
 on:
   workflow_dispatch:
     inputs:
-      package:
-        description: 'Package to release'
-        required: true
-        default: 'commons-sdk'
-        type: choice
-        options:
-          - voice-sdk
-          - commons-sdk
-          - both
-      version:
-        description: 'Release version without prefix, for example 0.4.6'
-        required: true
+      voice_sdk_version:
+        description: '@telnyx/react-native-voice-sdk version, for example 1.2.0 (blank to skip)'
+        required: false
+        default: ''
+      commons_sdk_version:
+        description: '@telnyx/react-voice-commons-sdk version, for example 1.1.2 (blank to skip)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
   pull-requests: write
 
 concurrency:
-  group: release-pr-${{ github.event.inputs.package }}-${{ github.event.inputs.version }}
+  group: release-pr
   cancel-in-progress: false
 
 jobs:
@@ -30,128 +39,120 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository with full history
+      - name: Checkout main with full history and tags
         uses: actions/checkout@v5
         with:
+          ref: main
           fetch-depth: 0
 
-      - name: Validate version
+      - name: Plan release
+        id: plan
+        env:
+          VOICE_SDK_VERSION: ${{ github.event.inputs.voice_sdk_version }}
+          COMMONS_SDK_VERSION: ${{ github.event.inputs.commons_sdk_version }}
+        run: scripts/release/release_package.sh plan "$VOICE_SDK_VERSION" "$COMMONS_SDK_VERSION"
+
+      - name: Ensure release branch, tags and versions are new
+        env:
+          BRANCH: ${{ steps.plan.outputs.branch }}
+          VOICE_SDK_VERSION: ${{ steps.plan.outputs.voice_version }}
+          COMMONS_SDK_VERSION: ${{ steps.plan.outputs.commons_version }}
         run: |
-          VERSION="${{ github.event.inputs.version }}"
-          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
-            echo "::error::Version must be semver without a leading v, for example 0.4.6"
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+            echo "::error::$BRANCH already exists; update that PR instead of re-running release-01"
             exit 1
           fi
+          if [[ -n "$VOICE_SDK_VERSION" ]]; then
+            scripts/release/release_package.sh ensure-new voice-sdk "$VOICE_SDK_VERSION"
+          fi
+          if [[ -n "$COMMONS_SDK_VERSION" ]]; then
+            scripts/release/release_package.sh ensure-new commons-sdk "$COMMONS_SDK_VERSION"
+          fi
 
-      - name: Resolve release metadata
-        id: release
-        run: |
-          PACKAGE="${{ github.event.inputs.package }}"
-          VERSION="${{ github.event.inputs.version }}"
-
-          case "$PACKAGE" in
-            voice-sdk)
-              TAG="voice-sdk-v$VERSION"
-              PACKAGE_DIRS="package"
-              ;;
-            commons-sdk)
-              TAG="commons-sdk-v$VERSION"
-              PACKAGE_DIRS="react-voice-commons-sdk"
-              ;;
-            both)
-              TAG="v$VERSION"
-              PACKAGE_DIRS="package react-voice-commons-sdk"
-              ;;
-            *)
-              echo "::error::Unsupported package: $PACKAGE"
-              exit 1
-              ;;
-          esac
-
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "package_dirs=$PACKAGE_DIRS" >> "$GITHUB_OUTPUT"
-          echo "branch=release/$TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Find previous release tag
-        id: previous_tag
-        run: |
-          PACKAGE="${{ github.event.inputs.package }}"
-          case "$PACKAGE" in
-            voice-sdk)
-              PATTERN='^voice-sdk-v[0-9]+\.[0-9]+\.[0-9]+'
-              ;;
-            commons-sdk)
-              PATTERN='^commons-sdk-v[0-9]+\.[0-9]+\.[0-9]+'
-              ;;
-            both)
-              PATTERN='^(v|voice-sdk-v|commons-sdk-v)[0-9]+\.[0-9]+\.[0-9]+'
-              ;;
-          esac
-
-          PREVIOUS_TAG="$(git for-each-ref --sort=-creatordate --format='%(refname:short)' refs/tags | grep -E "$PATTERN" | head -n 1 || true)"
-          echo "previous_tag=$PREVIOUS_TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Generate changelog from merged pull requests
-        id: changelog
+      - name: Collect merged PRs for each package
+        id: notes
         env:
           GH_TOKEN: ${{ github.token }}
+          VOICE_SDK_VERSION: ${{ steps.plan.outputs.voice_version }}
+          COMMONS_SDK_VERSION: ${{ steps.plan.outputs.commons_version }}
         run: |
-          PREVIOUS_TAG="${{ steps.previous_tag.outputs.previous_tag }}"
-          if [ -n "$PREVIOUS_TAG" ]; then
-            RANGE="$PREVIOUS_TAG..HEAD"
-            git log --pretty=format:"%H" "$RANGE" > commits.txt
-          else
-            git log --pretty=format:"%H" > commits.txt
-          fi
+          set -euo pipefail
+          collect() {
+            local pkg=$1 version=$2 previous
+            [[ -n "$version" ]] || return 0
+            previous=$(scripts/release/release_package.sh previous-tag "$pkg")
+            scripts/release/release_package.sh pr-notes "$pkg" "$previous" > pr_notes.md
+            {
+              echo "### $pkg $version (changes since ${previous:-the first commit})"
+              if [[ -s pr_notes.md ]]; then cat pr_notes.md; else echo "- No merged PRs touched this package."; fi
+              echo
+            } >> release_notes.md
+          }
 
-          gh pr list --state merged --base main --limit 200 --json title,number,mergeCommit \
-            --jq ".[] | [.title, .number, .mergeCommit.oid] | @tsv" > pr_data.tsv
+          : > release_notes.md
+          collect voice-sdk "$VOICE_SDK_VERSION"
+          collect commons-sdk "$COMMONS_SDK_VERSION"
+          cat release_notes.md
 
-          > changelog.txt
-          while IFS=$'\t' read -r title number commit; do
-            if [ -n "$commit" ] && grep -q "$commit" commits.txt; then
-              echo "- PR #$number: $title" >> changelog.txt
-            fi
-          done < pr_data.tsv
-
-          if [ ! -s changelog.txt ]; then
-            echo "- No merged pull requests found in this range." > changelog.txt
-          fi
-
+          delimiter="EOF_$(openssl rand -hex 8)"
           {
-            echo "body<<EOF"
-            cat changelog.txt
-            echo "EOF"
+            echo "body<<$delimiter"
+            cat release_notes.md
+            echo "$delimiter"
           } >> "$GITHUB_OUTPUT"
+          rm -f pr_notes.md release_notes.md
 
       - name: Update package versions
+        env:
+          VOICE_SDK_VERSION: ${{ steps.plan.outputs.voice_version }}
+          COMMONS_SDK_VERSION: ${{ steps.plan.outputs.commons_version }}
         run: |
-          VERSION="${{ github.event.inputs.version }}"
-          for dir in ${{ steps.release.outputs.package_dirs }}; do
-            npm --prefix "$dir" version "$VERSION" --no-git-tag-version --allow-same-version
-          done
+          set -euo pipefail
+          if [[ -n "$VOICE_SDK_VERSION" ]]; then
+            scripts/release/release_package.sh bump voice-sdk "$VOICE_SDK_VERSION"
+          fi
+          if [[ -n "$COMMONS_SDK_VERSION" ]]; then
+            scripts/release/release_package.sh bump commons-sdk "$COMMONS_SDK_VERSION"
+          fi
 
-      - name: Create pull request
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+
+      # react-voice-commons-sdk/lib/ is committed build output. Rebuild it here so the
+      # release PR always carries lib/ compiled from src/, even if a contributor forgot
+      # to run `npm run build`. npm publishing builds lib/ again from the release tag.
+      - name: Rebuild commons-sdk lib/
+        working-directory: react-voice-commons-sdk
+        run: |
+          npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+          npm run build
+
+      - name: Create release pull request
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ github.token }}
-          branch: ${{ steps.release.outputs.branch }}
+          branch: ${{ steps.plan.outputs.branch }}
           base: main
           delete-branch: true
-          commit-message: "chore: release ${{ steps.release.outputs.tag }}"
-          title: "Release ${{ steps.release.outputs.tag }}"
+          commit-message: 'chore: release ${{ steps.plan.outputs.tags }}'
+          title: 'Release ${{ steps.plan.outputs.tags }}'
           body: |
-            Auto-created release pull request for `${{ steps.release.outputs.tag }}`.
+            Auto-created release pull request for `${{ steps.plan.outputs.tags }}`.
 
-            Package scope: `${{ github.event.inputs.package }}`
-            Previous tag: `${{ steps.previous_tag.outputs.previous_tag || 'none' }}`
+            ## Merged PRs since the previous release
 
-            Note: this PR is created with `GITHUB_TOKEN`, so GitHub will not automatically
-            trigger `pull_request` workflows for it. Run any required checks manually before merge.
+            ${{ steps.notes.outputs.body }}
 
-            Changes since previous release:
-            ${{ steps.changelog.outputs.body }}
+            ## Release checklist
+
+            - [ ] Add a `## [X.Y.Z] (YYYY-MM-DD)` section to the `CHANGELOG.md` of each package being released (`package/CHANGELOG.md` for voice-sdk, `react-voice-commons-sdk/CHANGELOG.md` for commons-sdk), for example by renaming `## Unreleased`.
+            - [ ] Wait for `release-pr-check` and the other checks. They start when you push the CHANGELOG commit, because PRs opened with `GITHUB_TOKEN` don't trigger workflows.
+            - [ ] After merging, run `release-03-create-gh-release` with the same versions (voice-sdk: `${{ steps.plan.outputs.voice_version || 'blank' }}`, commons-sdk: `${{ steps.plan.outputs.commons_version || 'blank' }}`).
           add-paths: |
             package/package.json
             react-voice-commons-sdk/package.json
+            react-voice-commons-sdk/lib
           labels: auto-generated
