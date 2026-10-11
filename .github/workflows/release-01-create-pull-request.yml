@@ -5,8 +5,18 @@
 #   commons-sdk -> commons-sdk-vX.Y.Z -> @telnyx/react-voice-commons-sdk
 #
 # The PR bumps package.json versions, rebuilds react-voice-commons-sdk/lib/ from src/,
-# and lists the merged PRs that touched each package. A maintainer writes each package's CHANGELOG.md section in the release PR;
-# release-pr-check blocks merging until package.json and CHANGELOG.md agree.
+# and lists the merged PRs that touched each package. release-pr-check blocks merging
+# until package.json and each package's CHANGELOG.md section agree.
+#
+# With the COPILOT_PAT secret set, GitHub Copilot drafts each released package's
+# CHANGELOG section from its "## Unreleased" notes and merged PRs, replacing the
+# Unreleased section. Each draft starts with an <!-- AI-DRAFT --> marker line, and
+# release-pr-check fails until a maintainer reviews the section and deletes that line.
+# Without the secret, or if Copilot fails, the PR is still created and the maintainer
+# writes the sections by hand.
+#
+# COPILOT_PAT: a fine-grained personal access token with the "Copilot Requests"
+# permission, from an account with a GitHub Copilot license (ideally a bot account).
 #
 # Uses GITHUB_TOKEN. PRs opened with it don't trigger workflows, so CI starts when the
 # maintainer pushes the CHANGELOG commit. Requires the repository setting
@@ -130,6 +140,85 @@ jobs:
           npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
           npm run build
 
+      - name: Check for Copilot token
+        id: copilot
+        env:
+          COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
+        run: |
+          if [[ -n "$COPILOT_PAT" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::COPILOT_PAT is not set; skipping Copilot CHANGELOG drafts"
+          fi
+
+      - name: Build CHANGELOG draft prompts
+        if: steps.copilot.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VOICE_SDK_VERSION: ${{ steps.plan.outputs.voice_version }}
+          COMMONS_SDK_VERSION: ${{ steps.plan.outputs.commons_version }}
+        run: |
+          set -euo pipefail
+          S=scripts/release/release_package.sh
+          if [[ -n "$VOICE_SDK_VERSION" ]]; then
+            $S draft-prompt voice-sdk "$VOICE_SDK_VERSION" "$($S previous-tag voice-sdk)" "$RUNNER_TEMP/changelog_prompt_voice-sdk.txt"
+          fi
+          if [[ -n "$COMMONS_SDK_VERSION" ]]; then
+            $S draft-prompt commons-sdk "$COMMONS_SDK_VERSION" "$($S previous-tag commons-sdk)" "$RUNNER_TEMP/changelog_prompt_commons-sdk.txt"
+          fi
+
+      - name: Install Copilot CLI
+        if: steps.copilot.outputs.enabled == 'true'
+        run: npm install -g @github/copilot@1.0.89
+
+      # Copilot runs without tools, so it can only return text. A failure here never
+      # blocks the release PR; the maintainer writes the section instead.
+      - name: Draft voice-sdk CHANGELOG with Copilot
+        id: draft_voice
+        if: steps.copilot.outputs.enabled == 'true' && steps.plan.outputs.voice_version != ''
+        continue-on-error: true
+        timeout-minutes: 10
+        uses: actions/ai-inference@v3
+        with:
+          prompt-file: ${{ runner.temp }}/changelog_prompt_voice-sdk.txt
+          model: gpt-4.1
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
+
+      - name: Draft commons-sdk CHANGELOG with Copilot
+        id: draft_commons
+        if: steps.copilot.outputs.enabled == 'true' && steps.plan.outputs.commons_version != ''
+        continue-on-error: true
+        timeout-minutes: 10
+        uses: actions/ai-inference@v3
+        with:
+          prompt-file: ${{ runner.temp }}/changelog_prompt_commons-sdk.txt
+          model: gpt-4.1
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
+
+      - name: Add CHANGELOG drafts
+        id: changelog
+        if: steps.copilot.outputs.enabled == 'true'
+        env:
+          VOICE_SDK_VERSION: ${{ steps.plan.outputs.voice_version }}
+          COMMONS_SDK_VERSION: ${{ steps.plan.outputs.commons_version }}
+          VOICE_OUTCOME: ${{ steps.draft_voice.outcome }}
+          COMMONS_OUTCOME: ${{ steps.draft_commons.outcome }}
+          VOICE_DRAFT: ${{ steps.draft_voice.outputs.response-file }}
+          COMMONS_DRAFT: ${{ steps.draft_commons.outputs.response-file }}
+        run: |
+          S=scripts/release/release_package.sh
+          drafted=()
+          if [[ "$VOICE_OUTCOME" == success ]] && $S insert-draft voice-sdk "$VOICE_SDK_VERSION" "$VOICE_DRAFT"; then
+            drafted+=(voice-sdk)
+          fi
+          if [[ "$COMMONS_OUTCOME" == success ]] && $S insert-draft commons-sdk "$COMMONS_SDK_VERSION" "$COMMONS_DRAFT"; then
+            drafted+=(commons-sdk)
+          fi
+          echo "drafted=${drafted[*]}" >> "$GITHUB_OUTPUT"
+
       - name: Create release pull request
         uses: peter-evans/create-pull-request@v7
         with:
@@ -148,11 +237,13 @@ jobs:
 
             ## Release checklist
 
-            - [ ] Add a `## [X.Y.Z] (YYYY-MM-DD)` section to the `CHANGELOG.md` of each package being released (`package/CHANGELOG.md` for voice-sdk, `react-voice-commons-sdk/CHANGELOG.md` for commons-sdk), for example by renaming `## Unreleased`.
+            - [ ] Make sure each released package's `CHANGELOG.md` (`package/` for voice-sdk, `react-voice-commons-sdk/` for commons-sdk) has a reviewed `## [X.Y.Z]` section. Copilot drafted: **${{ steps.changelog.outputs.drafted || 'none' }}**. Edit each draft, then delete its `<!-- AI-DRAFT ... -->` line (release-pr-check fails until you do). Write any missing section by hand, for example by renaming `## Unreleased`.
             - [ ] Wait for `release-pr-check` and the other checks. They start when you push the CHANGELOG commit, because PRs opened with `GITHUB_TOKEN` don't trigger workflows.
             - [ ] After merging, run `release-03-create-gh-release` with the same versions (voice-sdk: `${{ steps.plan.outputs.voice_version || 'blank' }}`, commons-sdk: `${{ steps.plan.outputs.commons_version || 'blank' }}`).
           add-paths: |
             package/package.json
             react-voice-commons-sdk/package.json
             react-voice-commons-sdk/lib
+            package/CHANGELOG.md
+            react-voice-commons-sdk/CHANGELOG.md
           labels: auto-generated
