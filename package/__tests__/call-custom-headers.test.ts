@@ -218,8 +218,8 @@ describe('Call Custom Headers', () => {
         callId: 'test-call-id',
         telnyxLegId: 'test-telnyx-leg-id',
         telnyxSessionId: 'test-telnyx-session-id',
-        cause: 'USER_BUSY',
-        causeCode: 17,
+        cause: 'NORMAL_CLEARING',
+        causeCode: 16,
         sessionId: 'test-session-id',
         customHeaders: undefined,
       });
@@ -241,8 +241,8 @@ describe('Call Custom Headers', () => {
         callId: 'test-call-id',
         telnyxLegId: 'test-telnyx-leg-id',
         telnyxSessionId: 'test-telnyx-session-id',
-        cause: 'USER_BUSY',
-        causeCode: 17,
+        cause: 'NORMAL_CLEARING',
+        causeCode: 16,
         sessionId: 'test-session-id',
         customHeaders,
       });
@@ -277,6 +277,74 @@ describe('Call Custom Headers', () => {
 
       // Verify
       expect(stateSpy).toHaveBeenCalledWith('telnyx.call.state', call, 'ended');
+    });
+
+    it('should use USER_BUSY/17 for ringing state (decline path)', () => {
+      // Setup — ringing = pre-answer = decline
+      call.state = 'ringing';
+      (createHangupRequest as jest.Mock).mockReturnValue('mock-hangup-request');
+
+      // Execute
+      call.hangup();
+
+      // Verify
+      expect(createHangupRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cause: 'USER_BUSY',
+          causeCode: 17,
+        })
+      );
+    });
+
+    it('should use USER_BUSY/17 for new state (pre-answer)', () => {
+      // Setup
+      call.state = 'new';
+      (createHangupRequest as jest.Mock).mockReturnValue('mock-hangup-request');
+
+      // Execute
+      call.hangup();
+
+      // Verify
+      expect(createHangupRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cause: 'USER_BUSY',
+          causeCode: 17,
+        })
+      );
+    });
+
+    it('should use USER_BUSY/17 for connecting state (pre-answer)', () => {
+      // Setup
+      call.state = 'connecting';
+      (createHangupRequest as jest.Mock).mockReturnValue('mock-hangup-request');
+
+      // Execute
+      call.hangup();
+
+      // Verify
+      expect(createHangupRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cause: 'USER_BUSY',
+          causeCode: 17,
+        })
+      );
+    });
+
+    it('should use NORMAL_CLEARING/16 for held state', () => {
+      // Setup
+      call.state = 'held';
+      (createHangupRequest as jest.Mock).mockReturnValue('mock-hangup-request');
+
+      // Execute
+      call.hangup();
+
+      // Verify
+      expect(createHangupRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cause: 'NORMAL_CLEARING',
+          causeCode: 16,
+        })
+      );
     });
   });
 
