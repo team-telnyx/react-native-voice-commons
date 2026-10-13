@@ -26,6 +26,8 @@
 #       Print merged PRs since <previous-tag> that touched <package> (needs GH_TOKEN).
 #   release_package.sh notes <package> <version>
 #       Print the CHANGELOG.md section for <version>, without its heading.
+#   release_package.sh unreleased-notes <package>
+#       Print the package's "## Unreleased" section, without its heading.
 #   release_package.sh draft-prompt <package> <version> <previous-tag> <prompt-file>
 #       Write a Copilot prompt for the <version> CHANGELOG section from the package's
 #       "## Unreleased" notes and the merged PRs that touched it (needs GH_TOKEN).
@@ -247,6 +249,11 @@ unreleased_section() {
   ' "$1"
 }
 
+cmd_unreleased_notes() {
+  require_package "$1"
+  unreleased_section "$(package_dir "$1")/CHANGELOG.md"
+}
+
 cmd_draft_prompt() {
   local pkg=$1 version=$2 previous=$3 out=$4 dir commits raw prs unreleased
   require_package "$pkg"
@@ -321,8 +328,14 @@ cmd_insert_draft() {
   dir=$(package_dir "$pkg")
   changelog="$dir/CHANGELOG.md"
   [[ -s "$draft_file" ]] || fail "Copilot returned an empty draft for $pkg"
-  # Drop code fences and any headings above level 3; this script writes the version heading.
-  draft=$(grep -vE '^```|^#{1,2} ' "$draft_file" | sed -e '/./,$!d')
+  # Start at the first expected section heading so conversational preambles cannot
+  # become release notes. Drop code fences and higher-level headings because this
+  # script writes the version heading itself.
+  draft=$(awk '
+    /^```/ || /^#{1,2} / {next}
+    !started && /^### / {started=1}
+    started {print}
+  ' "$draft_file")
   if ! grep -qE '^### ' <<<"$draft" || ! grep -qE '^- ' <<<"$draft"; then
     fail "Copilot draft for $pkg has no '### ' heading or '- ' bullet; not adding it"
   fi
@@ -367,6 +380,7 @@ case "$command" in
   previous-tag) cmd_previous_tag "${1:?package required}" ;;
   pr-notes) cmd_pr_notes "${1:?package required}" "${2:-}" ;;
   notes) cmd_notes "${1:?package required}" "${2:?version required}" ;;
+  unreleased-notes) cmd_unreleased_notes "${1:?package required}" ;;
   draft-prompt) cmd_draft_prompt "${1:?package required}" "${2:?version required}" "${3:-}" "${4:?prompt file required}" ;;
   insert-draft) cmd_insert_draft "${1:?package required}" "${2:?version required}" "${3:?draft file required}" ;;
   *) echo "Unknown command: $command" >&2; exit 1 ;;

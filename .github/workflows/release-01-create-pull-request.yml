@@ -89,18 +89,25 @@ jobs:
         run: |
           set -euo pipefail
           collect() {
-            local pkg=$1 version=$2 previous
+            local pkg=$1 version=$2 previous unreleased
             [[ -n "$version" ]] || return 0
             previous=$(scripts/release/release_package.sh previous-tag "$pkg")
             scripts/release/release_package.sh pr-notes "$pkg" "$previous" > pr_notes.md
+            unreleased=$(scripts/release/release_package.sh unreleased-notes "$pkg")
             {
               echo "### $pkg $version (changes since ${previous:-the first commit})"
               if [[ -s pr_notes.md ]]; then cat pr_notes.md; else echo "- No merged PRs touched this package."; fi
               echo
             } >> release_notes.md
+            {
+              echo "### $pkg $version"
+              if grep -q '[^[:space:]]' <<<"$unreleased"; then printf '%s\n' "$unreleased"; else echo "(none)"; fi
+              echo
+            } >> unreleased_notes.md
           }
 
           : > release_notes.md
+          : > unreleased_notes.md
           collect voice-sdk "$VOICE_SDK_VERSION"
           collect commons-sdk "$COMMONS_SDK_VERSION"
           cat release_notes.md
@@ -110,8 +117,11 @@ jobs:
             echo "body<<$delimiter"
             cat release_notes.md
             echo "$delimiter"
+            echo "unreleased<<$delimiter"
+            cat unreleased_notes.md
+            echo "$delimiter"
           } >> "$GITHUB_OUTPUT"
-          rm -f pr_notes.md release_notes.md
+          rm -f pr_notes.md release_notes.md unreleased_notes.md
 
       - name: Update package versions
         env:
@@ -153,6 +163,7 @@ jobs:
 
       - name: Build CHANGELOG draft prompts
         if: steps.copilot.outputs.enabled == 'true'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -169,14 +180,16 @@ jobs:
           fi
 
       - name: Install Copilot CLI
+        id: copilot_cli
         if: steps.copilot.outputs.enabled == 'true'
+        continue-on-error: true
         run: npm install -g @github/copilot@1.0.89
 
       # Copilot runs without tools, so it can only return text. A failure here never
       # blocks the release PR; the maintainer writes the section instead.
       - name: Draft voice-sdk CHANGELOG with Copilot
         id: draft_voice
-        if: steps.copilot.outputs.enabled == 'true' && steps.plan.outputs.voice_version != ''
+        if: steps.copilot.outputs.enabled == 'true' && steps.copilot_cli.outcome == 'success' && steps.plan.outputs.voice_version != ''
         continue-on-error: true
         timeout-minutes: 10
         uses: actions/ai-inference@v3
@@ -188,7 +201,7 @@ jobs:
 
       - name: Draft commons-sdk CHANGELOG with Copilot
         id: draft_commons
-        if: steps.copilot.outputs.enabled == 'true' && steps.plan.outputs.commons_version != ''
+        if: steps.copilot.outputs.enabled == 'true' && steps.copilot_cli.outcome == 'success' && steps.plan.outputs.commons_version != ''
         continue-on-error: true
         timeout-minutes: 10
         uses: actions/ai-inference@v3
@@ -234,6 +247,12 @@ jobs:
             ## Merged PRs since the previous release
 
             ${{ steps.notes.outputs.body }}
+
+            ## Original Unreleased notes
+
+            These are the maintainer-written source notes that Copilot was asked to preserve. Compare them with each generated draft before deleting its `<!-- AI-DRAFT ... -->` marker.
+
+            ${{ steps.notes.outputs.unreleased }}
 
             ## Release checklist
 
