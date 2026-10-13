@@ -2,6 +2,11 @@
 
 # dependencies
 node_modules/
+# symlinked node_modules (worktree/dev tooling links are files, not dirs —
+# the trailing-slash pattern above does not match them)
+/node_modules
+/package/node_modules
+/react-voice-commons-sdk/node_modules
 
 # Expo
 .expo/
