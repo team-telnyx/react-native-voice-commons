@@ -1,4 +1,5 @@
 import { TelnyxRTC } from '../lib/client';
+import { Call } from '../lib/call';
 
 jest.mock('@react-native-community/netinfo', () => ({
   addEventListener: jest.fn(() => jest.fn()),
@@ -25,8 +26,11 @@ function createMockCall(callId: string, state: string = 'active') {
     off: jest.fn(),
     hangup: jest.fn(),
     answer: jest.fn(),
-    setDropped: jest.fn(),
+    setDropped: jest.fn(function (this: any) {
+      this.state = 'dropped';
+    }),
     disposePeer: jest.fn(),
+    checkSignalingHealthForRecovery: jest.fn(),
   };
 }
 
@@ -94,10 +98,47 @@ describe('Recovery reattach fallback (VSDK-679 review fixes)', () => {
     expect(callA.off).toHaveBeenCalledWith('telnyx.call.state', stateListener);
     expect((client as any).callStateListeners.has('call-a')).toBe(false);
 
+    const clientError = jest.fn();
+    client.on('telnyx.client.error', clientError);
+
     // The fallback fails closed when no matching attach arrives.
     jest.advanceTimersByTime((TelnyxRTC as any).RECONNECT_TIMEOUT);
     await Promise.resolve();
     await Promise.resolve();
     await expect(fallback).resolves.toBe(false);
+    expect(callA.setDropped).toHaveBeenCalledTimes(1);
+    expect(client.calls.has('call-a')).toBe(false);
+    expect(clientError).toHaveBeenCalledWith(expect.any(Error));
+  });
+
+  it('does not emit reattached when answerAttach fails', async () => {
+    const answerError = new Error('answer attach failed');
+    const attachedCall = createMockCall('call-a', 'connecting');
+    (attachedCall as any).answerAttach = jest.fn().mockRejectedValue(answerError);
+    const createSpy = jest
+      .spyOn(Call, 'createInboundCall')
+      .mockResolvedValue(attachedCall as any);
+    (client as any).connection = {};
+    (client as any).sessionId = 'session-id';
+    const reattached = jest.fn();
+    const clientError = jest.fn();
+    client.on('telnyx.call.reattached', reattached);
+    client.on('telnyx.client.error', clientError);
+
+    await (client as any).handleCallAttach({
+      params: {
+        callID: 'call-a',
+        sdp: 'remote-sdp',
+        caller_id_number: '+15551234567',
+        dialogParams: {},
+      },
+    });
+
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(attachedCall.answerAttach).toHaveBeenCalledTimes(1);
+    expect(attachedCall.disposePeer).toHaveBeenCalledTimes(1);
+    expect(reattached).not.toHaveBeenCalled();
+    expect(client.calls.has('call-a')).toBe(false);
+    expect(clientError).toHaveBeenCalledWith(answerError);
   });
 });
