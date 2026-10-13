@@ -139,4 +139,27 @@ describe('Recovery reattach fallback (VSDK-679 review fixes)', () => {
     expect(client.calls.has('call-a')).toBe(false);
     expect(clientError).toHaveBeenCalledWith(answerError);
   });
+
+  it('stops the signaling monitor after an explicit disconnect (no post-disconnect recovery)', () => {
+    const call = createMockCall('call-a');
+    (client as any).addCall(call);
+
+    // Sanity: while a connection exists the monitor ticks and forwards to the
+    // active call's signaling health check.
+    (client as any).connection = {
+      isConnected: true,
+      inboundIdleMs: Infinity,
+      confirmedOutboundIdleMs: Infinity,
+    };
+    jest.advanceTimersByTime((TelnyxRTC as any).ACTIVE_CALL_HEALTH_CHECK_MS);
+    expect(call.checkSignalingHealthForRecovery).toHaveBeenCalledTimes(1);
+
+    // Explicit disconnect: the connection object is gone but the call is
+    // still tracked as active. The monitor must stop — recovery must not
+    // restart a session the consumer deliberately closed.
+    (client as any).connection = null;
+    jest.advanceTimersByTime((TelnyxRTC as any).ACTIVE_CALL_HEALTH_CHECK_MS * 3);
+    expect(call.checkSignalingHealthForRecovery).toHaveBeenCalledTimes(1);
+    expect((client as any).activeCallHealthCheckHandle).toBeNull();
+  });
 });

@@ -321,6 +321,13 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       if (this.reconnecting || this.recoveryReattachActive) {
         return;
       }
+      if (!this.connection) {
+        // Explicit disconnect (or post-recovery-failure teardown): recovery
+        // must not restart a session the consumer closed, so stop the
+        // monitor; the next addCall after a fresh connect re-arms it.
+        this.stopActiveCallHealthCheckTimer();
+        return;
+      }
       for (const call of this.calls.values()) {
         if (typeof call.checkSignalingHealthForRecovery === 'function') {
           call.checkSignalingHealthForRecovery();
