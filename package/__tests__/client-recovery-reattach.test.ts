@@ -115,9 +115,7 @@ describe('Recovery reattach fallback (VSDK-679 review fixes)', () => {
     const answerError = new Error('answer attach failed');
     const attachedCall = createMockCall('call-a', 'connecting');
     (attachedCall as any).answerAttach = jest.fn().mockRejectedValue(answerError);
-    const createSpy = jest
-      .spyOn(Call, 'createInboundCall')
-      .mockResolvedValue(attachedCall as any);
+    const createSpy = jest.spyOn(Call, 'createInboundCall').mockResolvedValue(attachedCall as any);
     (client as any).connection = {};
     (client as any).sessionId = 'session-id';
     const reattached = jest.fn();

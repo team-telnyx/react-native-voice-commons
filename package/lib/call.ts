@@ -328,7 +328,11 @@ export class Call extends EventEmitter<CallEvents> {
       callId: this.callId,
       callState: () => this.state,
       isSignalingFresh: () =>
-        this.connection.isConnected && this.connection.idleMs <= RECOVERY_RECENT_ACTIVITY_MS,
+        this.connection.isConnected &&
+        Math.max(
+          this.connection.inboundIdleMs,
+          this.connection.confirmedOutboundIdleMs
+        ) <= RECOVERY_RECENT_ACTIVITY_MS,
       isClientReconnecting: () => this.recoveryHooks?.isClientReconnecting() ?? false,
       sendSignalingProbe: () => this.sendRecoverySignalingProbe(),
       restartIce: async () => {
@@ -1282,7 +1286,14 @@ export class Call extends EventEmitter<CallEvents> {
     if (this.state !== 'active') {
       return;
     }
-    if (!this.connection.isConnected || this.connection.idleMs > RECOVERY_RECENT_ACTIVITY_MS) {
+    // Periodic health check: only confirmed traffic (inbound messages and
+    // sendAndWait responses) counts as freshness. One-way outbound sends are
+    // ignored so a dead link can't be masked by client-initiated heartbeats.
+    const stalestIdleMs = Math.max(
+      this.connection.inboundIdleMs,
+      this.connection.confirmedOutboundIdleMs
+    );
+    if (!this.connection.isConnected || stalestIdleMs > RECOVERY_RECENT_ACTIVITY_MS) {
       this.recoveryCoordinator?.notifySignalingUnhealthy();
     }
   };
