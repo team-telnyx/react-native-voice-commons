@@ -30,6 +30,8 @@ export class Connection extends EventEmitter<ConnectionEvents> {
   // been frozen by iOS (which can leave the JS side thinking it's still
   // connected while the kernel has already discarded the TLS session).
   private _lastActivityAt: number = 0;
+  private _lastInboundAt: number = 0;
+  private _lastConfirmedOutboundAt: number = 0;
 
   private transactions: Map<string, DeferredPromise<unknown>>;
   private messageQueue: unknown[];
@@ -107,12 +109,21 @@ export class Connection extends EventEmitter<ConnectionEvents> {
 
       const parsedMessage = this.safeParseMessage(message);
       log.debug('Received message:', parsedMessage);
-      this._lastActivityAt = Date.now();
+      const now = Date.now();
+      this._lastActivityAt = now;
+      // Inbound leg only: client-initiated sends never refresh this.
+      this._lastInboundAt = now;
 
       if (isMessage(parsedMessage)) {
         const transaction = this.transactions.get(parsedMessage.id);
-        transaction?.resolve(parsedMessage);
-        this.transactions.delete(parsedMessage.id);
+        if (transaction) {
+          // The response confirms the outbound leg of the correlated request
+          // end-to-end. One-way sends (heartbeats, queue flushes) deliberately
+          // don't count toward confirmed-outbound freshness.
+          this._lastConfirmedOutboundAt = now;
+          transaction.resolve(parsedMessage);
+          this.transactions.delete(parsedMessage.id);
+        }
       }
 
       if (parsedMessage.voice_sdk_id) {
@@ -204,6 +215,28 @@ export class Connection extends EventEmitter<ConnectionEvents> {
   public get idleMs(): number {
     if (this._lastActivityAt === 0) return Infinity;
     return Date.now() - this._lastActivityAt;
+  }
+
+  /**
+   * Milliseconds since the last message received from the gateway. Returns
+   * `Infinity` if nothing inbound has ever been observed. Unlike `idleMs`,
+   * this is never refreshed by client-initiated sends, so it reflects the
+   * inbound leg of the link only.
+   */
+  public get inboundIdleMs(): number {
+    if (this._lastInboundAt === 0) return Infinity;
+    return Date.now() - this._lastInboundAt;
+  }
+
+  /**
+   * Milliseconds since the last inbound message resolved a pending outbound
+   * request (a `sendAndWait` transaction). Returns `Infinity` when no request
+   * has ever been confirmed. This distinguishes a live request/response link
+   * from a socket that merely accepts one-way sends.
+   */
+  public get confirmedOutboundIdleMs(): number {
+    if (this._lastConfirmedOutboundAt === 0) return Infinity;
+    return Date.now() - this._lastConfirmedOutboundAt;
   }
 
   private buildWebsocketURL = () => {
