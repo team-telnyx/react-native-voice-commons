@@ -37,6 +37,7 @@ export type RecoveryFailureKind = 'failed' | 'disconnected';
  * we fail closed and do not alter transport policy.
  */
 export type CandidateEvidence = {
+  callId?: string;
   localCandidateType?: string;
   remoteCandidateType?: string;
   localNetworkType?: string;
@@ -89,7 +90,7 @@ export type CallRecoveryDeps = {
   getPeerIceState(): string | null;
 
   /** Selected candidate pair evidence captured from stats, if available. */
-  getSelectedCandidateEvidence(): CandidateEvidence | null;
+  getSelectedCandidateEvidence(): CandidateEvidence | null | Promise<CandidateEvidence | null>;
 
   /**
    * Client-owned fallback: one reconnect/register/reattach. Resolves true
@@ -237,6 +238,27 @@ export class CallRecoveryCoordinator {
     if (this.currentState === 'probing') {
       this.cancel('ice-recovered-before-restart');
     }
+  }
+
+  /**
+   * Observe stale or unavailable signaling while an active call still has
+   * healthy media. This intentionally bypasses the connected-ICE guard used
+   * by ICE-triggered episodes: the transport can remain connected while the
+   * WebSocket is silently dead, so signaling must be probed independently.
+   */
+  public notifySignalingUnhealthy(): void {
+    if (this.deps.callState() !== 'active' || this.deps.isClientReconnecting()) {
+      return;
+    }
+    if (this.currentState !== 'idle' || this.recoveryFailedLatch) {
+      return;
+    }
+    this.currentGeneration += 1;
+    this.currentState = 'probing';
+    this.logger.info('Signaling health check stale, probing active call', {
+      generation: this.currentGeneration,
+    });
+    void this.runProbe();
   }
 
   /**
@@ -448,7 +470,14 @@ export class CallRecoveryCoordinator {
     this.setState('reattaching');
     this.logger.info('Falling back to reconnect/register/reattach', { reason });
 
-    const evidence = this.deps.getSelectedCandidateEvidence();
+    let evidence: CandidateEvidence | null = null;
+    try {
+      evidence = await this.deps.getSelectedCandidateEvidence();
+    } catch (error) {
+      this.logger.debug('Unable to capture selected candidate evidence', {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
     if (evidence && this.deps.onCandidateEvidenceCaptured) {
       this.deps.onCandidateEvidenceCaptured(evidence);
     }
