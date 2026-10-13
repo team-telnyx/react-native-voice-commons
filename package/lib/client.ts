@@ -10,7 +10,7 @@ import type { ClientOptions } from './client-options';
 import type { CallReportConfig } from './call-report-models';
 import { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
 import { Connection } from './connection';
-import { setSDKVersion } from './env';
+import { setSDKIdentity } from './env';
 import { KeepAliveHandler } from './keep-alive-handler';
 import { eventBus } from './legacy-event-bus';
 import { LoginHandler } from './login-handler';
@@ -189,8 +189,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     super();
     this.options = opts;
 
-    if (opts.sdkVersion) {
-      setSDKVersion(opts.sdkVersion);
+    if (Boolean(opts.sdkName) !== Boolean(opts.sdkVersion)) {
+      throw new Error('[TelnyxRTC] sdkName and sdkVersion must be provided together');
+    }
+    if (opts.sdkName && opts.sdkVersion) {
+      setSDKIdentity(opts.sdkName, opts.sdkVersion);
     }
 
     this.connection = null;

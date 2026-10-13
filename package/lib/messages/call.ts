@@ -1,6 +1,6 @@
 import uuid from 'uuid-random';
 import type { CallOptions } from '../call-options';
-import { SDK_VERSION } from '../env';
+import { SDK_NAME, SDK_VERSION } from '../env';
 import { TelnyxRTCMethod } from './methods';
 
 type InviteACKMessage = {
@@ -37,6 +37,8 @@ export function createInviteMessage({
       sessid: sessionId,
       sdp,
       'User-Agent': `ReactNative-${SDK_VERSION}`,
+      mobile_sdk_name: SDK_NAME,
+      mobile_sdk_version: SDK_VERSION,
       dialogParams: {
         attach,
         callID: callId,
@@ -408,6 +410,8 @@ type AnswerMessage = {
       custom_headers?: { name: string; value: string }[];
     };
     'User-Agent': string;
+    mobile_sdk_name: string;
+    mobile_sdk_version: string;
     answered_device_token?: string;
   };
 };
@@ -449,6 +453,8 @@ export function createAnswerMessage({
         ...dialogParams,
       },
       'User-Agent': `ReactNative-${SDK_VERSION}`,
+      mobile_sdk_name: SDK_NAME,
+      mobile_sdk_version: SDK_VERSION,
     },
   };
 

@@ -1,5 +1,5 @@
 import uuid from 'uuid-random';
-import { SDK_VERSION } from '../env';
+import { SDK_NAME, SDK_VERSION } from '../env';
 
 export type LoginUserVariables = {
   push_device_token?: string;
@@ -84,6 +84,8 @@ export function createPasswordLoginMessage({
     passwd: password,
     reconnection,
     'User-Agent': userAgent(enableMissedCallNotifications),
+    mobile_sdk_name: SDK_NAME,
+    mobile_sdk_version: SDK_VERSION,
   };
 
   // Add from_push flag if this is a push-initiated connection (matching iOS SDK behavior)
@@ -126,6 +128,8 @@ export function createTokenLoginMessage({
     login_token,
     reconnection,
     'User-Agent': userAgent(enableMissedCallNotifications),
+    mobile_sdk_name: SDK_NAME,
+    mobile_sdk_version: SDK_VERSION,
   };
 
   // Add from_push flag if this is a push-initiated connection (matching iOS SDK behavior)

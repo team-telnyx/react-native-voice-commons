@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import uuid from 'uuid-random';
-import { SDK_VERSION } from '../env';
+import { SDK_NAME, SDK_VERSION } from '../env';
 import { TelnyxRTCMethod } from './methods';
 
 // const attachMessage = {
@@ -88,6 +88,8 @@ export function createAttachMessage({
       sdp,
       sessid: sessionId,
       'User-Agent': `ReactNative-${SDK_VERSION}`,
+      mobile_sdk_name: SDK_NAME,
+      mobile_sdk_version: SDK_VERSION,
     },
   };
 }
@@ -126,7 +128,10 @@ export function createAttachCallMessage(pushNotificationPayload?: any) {
     jsonrpc: '2.0' as const,
     id: Math.floor(Math.random() * 1000000),
     method: TelnyxRTCMethod.ATTACH_CALLS,
-    params: {} as Record<string, any>,
+    params: {
+      mobile_sdk_name: SDK_NAME,
+      mobile_sdk_version: SDK_VERSION,
+    } as Record<string, any>,
   };
 
   // Add push notification metadata if available
