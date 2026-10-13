@@ -489,6 +489,7 @@ export class SessionManager {
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
           callReportMaxLogEntries: config.callReportMaxLogEntries,
+          sdkName: 'react_native_commons',
           sdkVersion: pkg.version,
         };
         console.log(
@@ -510,6 +511,7 @@ export class SessionManager {
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
           callReportMaxLogEntries: config.callReportMaxLogEntries,
+          sdkName: 'react_native_commons',
           sdkVersion: pkg.version,
         };
         console.log(

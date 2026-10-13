@@ -1,6 +1,6 @@
 import * as TelnyxSDK from '@telnyx/react-native-voice-sdk';
 import { SessionManager } from '../../src/internal/session/session-manager';
-import { createCredentialConfig } from '../../src/models/config';
+import { createCredentialConfig, createTokenConfig } from '../../src/models/config';
 
 describe('SessionManager', () => {
   beforeEach(() => {
@@ -27,6 +27,27 @@ describe('SessionManager', () => {
       expect.objectContaining({
         pushNotificationDeviceToken: 'push-token',
         pushWhenActive: true,
+      })
+    );
+  });
+
+  it.each([
+    ['credential', createCredentialConfig('sip-user', 'sip-password')],
+    ['token', createTokenConfig('token')],
+  ])('passes React Native Commons identity for %s client creation', async (_kind, config) => {
+    const manager = new SessionManager();
+
+    if ('token' in config) {
+      await manager.connectWithToken(config as any);
+    } else {
+      await manager.connectWithCredential(config as any);
+    }
+
+    const TelnyxRTCMock = TelnyxSDK.TelnyxRTC as unknown as jest.Mock;
+    expect(TelnyxRTCMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sdkName: 'react_native_commons',
+        sdkVersion: '1.1.1',
       })
     );
   });
