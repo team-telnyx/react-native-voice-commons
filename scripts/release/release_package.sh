@@ -29,7 +29,7 @@
 #   release_package.sh unreleased-notes <package>
 #       Print the package's "## Unreleased" section, without its heading.
 #   release_package.sh draft-prompt <package> <version> <previous-tag> <prompt-file>
-#       Write a Copilot prompt for the <version> CHANGELOG section from the package's
+#       Write an AI prompt for the <version> CHANGELOG section from the package's
 #       "## Unreleased" notes and the merged PRs that touched it (needs GH_TOKEN).
 #   release_package.sh insert-draft <package> <version> <draft-file>
 #       Replace "## Unreleased" with a "## [<version>]" section holding the draft,
@@ -193,7 +193,7 @@ cmd_check() {
   current=$(package_version "$pkg")
   [[ "$current" == "$version" ]] || fail "$dir/package.json version is $current, expected $version"
   if grep -qF '<!-- AI-DRAFT' "$dir/CHANGELOG.md"; then
-    fail "Review the Copilot-drafted section in $dir/CHANGELOG.md, then delete its '<!-- AI-DRAFT' line"
+    fail "Review the AI-drafted section in $dir/CHANGELOG.md, then delete its '<!-- AI-DRAFT' line"
   fi
   changelog_section "$dir" "$version" >/dev/null
 }
@@ -327,7 +327,7 @@ cmd_insert_draft() {
   require_package "$pkg"
   dir=$(package_dir "$pkg")
   changelog="$dir/CHANGELOG.md"
-  [[ -s "$draft_file" ]] || fail "Copilot returned an empty draft for $pkg"
+  [[ -s "$draft_file" ]] || fail "The AI returned an empty draft for $pkg"
   # Start at the first expected section heading so conversational preambles cannot
   # become release notes. Drop code fences and higher-level headings because this
   # script writes the version heading itself.
@@ -337,7 +337,7 @@ cmd_insert_draft() {
     started {print}
   ' "$draft_file")
   if ! grep -qE '^### ' <<<"$draft" || ! grep -qE '^- ' <<<"$draft"; then
-    fail "Copilot draft for $pkg has no '### ' heading or '- ' bullet; not adding it"
+    fail "AI draft for $pkg has no '### ' heading or '- ' bullet; not adding it"
   fi
   if grep -qF "## [$version]" "$changelog"; then
     fail "$changelog already has a section for $version"
@@ -365,7 +365,7 @@ cmd_insert_draft() {
   ' "$changelog" >"$changelog.tmp"
   mv "$changelog.tmp" "$changelog"
   rm -f "$draft_file.clean"
-  echo "Added Copilot draft for $pkg $version to $changelog"
+  echo "Added AI draft for $pkg $version to $changelog"
 }
 
 command=${1:-}

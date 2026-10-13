@@ -8,15 +8,12 @@
 # and lists the merged PRs that touched each package. release-pr-check blocks merging
 # until package.json and each package's CHANGELOG.md section agree.
 #
-# With the COPILOT_PAT secret set, GitHub Copilot drafts each released package's
-# CHANGELOG section from its "## Unreleased" notes and merged PRs, replacing the
-# Unreleased section. Each draft starts with an <!-- AI-DRAFT --> marker line, and
-# release-pr-check fails until a maintainer reviews the section and deletes that line.
-# Without the secret, or if Copilot fails, the PR is still created and the maintainer
-# writes the sections by hand.
-#
-# COPILOT_PAT: a fine-grained personal access token with the "Copilot Requests"
-# permission, from an account with a GitHub Copilot license (ideally a bot account).
+# OpenAI Codex drafts each released package's CHANGELOG section from its
+# "## Unreleased" notes and merged PRs, replacing the Unreleased section. It uses the
+# same OPENAI_API_KEY secret as other Telnyx AI workflows. Each draft starts with an
+# <!-- AI-DRAFT --> marker line, and release-pr-check fails until a maintainer reviews
+# the section and deletes that line. Without the shared secret, or if Codex fails, the
+# PR is still created and the maintainer writes the sections by hand.
 #
 # Uses GITHUB_TOKEN. PRs opened with it don't trigger workflows, so CI starts when the
 # maintainer pushes the CHANGELOG commit. Requires the repository setting
@@ -150,19 +147,19 @@ jobs:
           npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
           npm run build
 
-      - name: Check for Copilot token
-        id: copilot
+      - name: Check for shared OpenAI API key
+        id: ai
         env:
-          COPILOT_PAT: ${{ secrets.COPILOT_PAT }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          if [[ -n "$COPILOT_PAT" ]]; then
+          if [[ -n "$OPENAI_API_KEY" ]]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::notice::COPILOT_PAT is not set; skipping Copilot CHANGELOG drafts"
+            echo "::notice::OPENAI_API_KEY is not available to this repository; skipping Codex CHANGELOG drafts"
           fi
 
       - name: Build CHANGELOG draft prompts
-        if: steps.copilot.outputs.enabled == 'true'
+        if: steps.ai.outputs.enabled == 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -179,48 +176,46 @@ jobs:
             $S draft-prompt commons-sdk "$COMMONS_SDK_VERSION" "$($S previous-tag commons-sdk)" "$RUNNER_TEMP/changelog_prompt_commons-sdk.txt"
           fi
 
-      - name: Install Copilot CLI
-        id: copilot_cli
-        if: steps.copilot.outputs.enabled == 'true'
-        continue-on-error: true
-        run: npm install -g @github/copilot@1.0.89
-
-      # Copilot runs without tools, so it can only return text. A failure here never
-      # blocks the release PR; the maintainer writes the section instead.
-      - name: Draft voice-sdk CHANGELOG with Copilot
+      # Codex is sandboxed read-only and receives a self-contained prompt. A failure
+      # here never blocks the release PR; the maintainer writes the section instead.
+      - name: Draft voice-sdk CHANGELOG with Codex
         id: draft_voice
-        if: steps.copilot.outputs.enabled == 'true' && steps.copilot_cli.outcome == 'success' && steps.plan.outputs.voice_version != ''
+        if: steps.ai.outputs.enabled == 'true' && steps.plan.outputs.voice_version != ''
         continue-on-error: true
         timeout-minutes: 10
-        uses: actions/ai-inference@v3
+        uses: openai/codex-action@v1.4
         with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: ${{ runner.temp }}/changelog_prompt_voice-sdk.txt
-          model: gpt-4.1
-        env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
+          output-file: ${{ runner.temp }}/changelog_response_voice-sdk.md
+          working-directory: ${{ runner.temp }}
+          sandbox: read-only
+          model: gpt-5.4
 
-      - name: Draft commons-sdk CHANGELOG with Copilot
+      - name: Draft commons-sdk CHANGELOG with Codex
         id: draft_commons
-        if: steps.copilot.outputs.enabled == 'true' && steps.copilot_cli.outcome == 'success' && steps.plan.outputs.commons_version != ''
+        if: steps.ai.outputs.enabled == 'true' && steps.plan.outputs.commons_version != ''
         continue-on-error: true
         timeout-minutes: 10
-        uses: actions/ai-inference@v3
+        uses: openai/codex-action@v1.4
         with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: ${{ runner.temp }}/changelog_prompt_commons-sdk.txt
-          model: gpt-4.1
-        env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
+          output-file: ${{ runner.temp }}/changelog_response_commons-sdk.md
+          working-directory: ${{ runner.temp }}
+          sandbox: read-only
+          model: gpt-5.4
 
       - name: Add CHANGELOG drafts
         id: changelog
-        if: steps.copilot.outputs.enabled == 'true'
+        if: always()
         env:
           VOICE_SDK_VERSION: ${{ steps.plan.outputs.voice_version }}
           COMMONS_SDK_VERSION: ${{ steps.plan.outputs.commons_version }}
           VOICE_OUTCOME: ${{ steps.draft_voice.outcome }}
           COMMONS_OUTCOME: ${{ steps.draft_commons.outcome }}
-          VOICE_DRAFT: ${{ steps.draft_voice.outputs.response-file }}
-          COMMONS_DRAFT: ${{ steps.draft_commons.outputs.response-file }}
+          VOICE_DRAFT: ${{ runner.temp }}/changelog_response_voice-sdk.md
+          COMMONS_DRAFT: ${{ runner.temp }}/changelog_response_commons-sdk.md
         run: |
           S=scripts/release/release_package.sh
           drafted=()
@@ -250,13 +245,13 @@ jobs:
 
             ## Original Unreleased notes
 
-            These are the maintainer-written source notes that Copilot was asked to preserve. Compare them with each generated draft before deleting its `<!-- AI-DRAFT ... -->` marker.
+            These are the maintainer-written source notes that Codex was asked to preserve. Compare them with each generated draft before deleting its `<!-- AI-DRAFT ... -->` marker.
 
             ${{ steps.notes.outputs.unreleased }}
 
             ## Release checklist
 
-            - [ ] Make sure each released package's `CHANGELOG.md` (`package/` for voice-sdk, `react-voice-commons-sdk/` for commons-sdk) has a reviewed `## [X.Y.Z]` section. Copilot drafted: **${{ steps.changelog.outputs.drafted || 'none' }}**. Edit each draft, then delete its `<!-- AI-DRAFT ... -->` line (release-pr-check fails until you do). Write any missing section by hand, for example by renaming `## Unreleased`.
+            - [ ] Make sure each released package's `CHANGELOG.md` (`package/` for voice-sdk, `react-voice-commons-sdk/` for commons-sdk) has a reviewed `## [X.Y.Z]` section. Codex drafted: **${{ steps.changelog.outputs.drafted || 'none' }}**. Edit each draft, then delete its `<!-- AI-DRAFT ... -->` line (release-pr-check fails until you do). Write any missing section by hand, for example by renaming `## Unreleased`.
             - [ ] Wait for `release-pr-check` and the other checks. They start when you push the CHANGELOG commit, because PRs opened with `GITHUB_TOKEN` don't trigger workflows.
             - [ ] After merging, run `release-03-create-gh-release` with the same versions (voice-sdk: `${{ steps.plan.outputs.voice_version || 'blank' }}`, commons-sdk: `${{ steps.plan.outputs.commons_version || 'blank' }}`).
           add-paths: |
