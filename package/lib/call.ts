@@ -335,13 +335,12 @@ export class Call extends EventEmitter<CallEvents> {
         if (!this.peer) {
           throw new Error('[Call] Recovery: no peer connection for recovery answer');
         }
-        await this.peer.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+        await this.peer.setRemoteDescriptionStrict({ type: 'answer', sdp: answerSdp });
         this.peer.finishIceRestart();
       },
       getInboundAudioPackets: () => this.getRecoveryInboundAudioPackets(),
       getPeerIceState: () => this.peer?.getIceConnectionState() ?? null,
-      getSelectedCandidateEvidence: () =>
-        this.callReportCollector?.getSelectedCandidateEvidence() ?? null,
+      getSelectedCandidateEvidence: () => this.getRecoverySelectedCandidateEvidence(),
       performReattachFallback: () =>
         this.recoveryHooks?.performReattachFallback(this.callId) ?? Promise.resolve(false),
       onCandidateEvidenceCaptured: (evidence: CandidateEvidence) => {
@@ -1180,6 +1179,89 @@ export class Call extends EventEmitter<CallEvents> {
     } catch (error) {
       log.debug('[Call] Failed to read inbound audio packets for recovery', error);
       return null;
+    }
+  };
+
+  private getRecoverySelectedCandidateEvidence = async (): Promise<CandidateEvidence | null> => {
+    const pc = this.peer?.getPeerConnection();
+    if (!pc) {
+      return this.callReportCollector?.getSelectedCandidateEvidence() ?? null;
+    }
+
+    try {
+      const stats = await (pc as any).getStats();
+      const evidence = this.extractSelectedCandidateEvidence(stats);
+      if (evidence) {
+        return evidence;
+      }
+    } catch (error) {
+      log.debug('[Call] Failed to read selected candidate evidence for recovery', error);
+    }
+
+    return this.callReportCollector?.getSelectedCandidateEvidence() ?? null;
+  };
+
+  private extractSelectedCandidateEvidence(stats: any): CandidateEvidence | null {
+    let selectedPair: any = null;
+    let transportSelectedPairId: string | null = null;
+
+    stats.forEach((report: any) => {
+      if (!report) {
+        return;
+      }
+      if (report.type === 'transport' && report.selectedCandidatePairId) {
+        transportSelectedPairId = report.selectedCandidatePairId;
+      }
+    });
+
+    stats.forEach((report: any) => {
+      if (!report || report.type !== 'candidate-pair') {
+        return;
+      }
+      if (transportSelectedPairId && report.id === transportSelectedPairId) {
+        selectedPair = report;
+        return;
+      }
+      if (!transportSelectedPairId && (report.selected || report.nominated)) {
+        selectedPair = report;
+      }
+    });
+
+    if (!selectedPair) {
+      return null;
+    }
+
+    const localCandidate = this.resolveStatsCandidate(stats, selectedPair.localCandidateId);
+    const remoteCandidate = this.resolveStatsCandidate(stats, selectedPair.remoteCandidateId);
+    return {
+      callId: this.callId,
+      localCandidateType: localCandidate?.candidateType,
+      remoteCandidateType: remoteCandidate?.candidateType,
+      localNetworkType: localCandidate?.networkType,
+      localAddress: localCandidate?.address,
+      localProtocol: localCandidate?.protocol,
+    };
+  }
+
+  private resolveStatsCandidate(stats: any, candidateId?: string): any | null {
+    if (!candidateId) {
+      return null;
+    }
+    let candidate: any | null = null;
+    stats.forEach((report: any) => {
+      if (report?.id === candidateId) {
+        candidate = report;
+      }
+    });
+    return candidate;
+  }
+
+  public checkSignalingHealthForRecovery = (): void => {
+    if (this.state !== 'active') {
+      return;
+    }
+    if (!this.connection.isConnected || this.connection.idleMs > RECOVERY_RECENT_ACTIVITY_MS) {
+      this.recoveryCoordinator?.notifySignalingUnhealthy();
     }
   };
 

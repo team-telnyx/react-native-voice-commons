@@ -103,7 +103,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   // True while a recovery fallback owns the reconnect flow.
   private recoveryReattachActive: boolean = false;
   // One-shot relay-only override captured from the recovering call's stats.
-  private lastRecoveryCandidateEvidence: CandidateEvidence | null = null;
+  private recoveryCandidateEvidenceByCallId: Map<string, CandidateEvidence> = new Map();
+  private activeCallHealthCheckHandle: ReturnType<typeof setInterval> | null = null;
+  private static readonly ACTIVE_CALL_HEALTH_CHECK_MS = 3000;
   private static readonly RECONNECT_DELAY = 3000; // 3 seconds
   private static readonly RECONNECT_TIMEOUT = 60000; // 30 seconds
 
@@ -302,8 +304,38 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     call.on('telnyx.call.state', stateListener);
 
     this.drainPendingTrickleEvents(callId);
+    this.ensureActiveCallHealthCheckTimer();
 
     log.debug(`[TelnyxRTC] Total calls tracked: ${this.calls.size}`);
+  }
+
+  private ensureActiveCallHealthCheckTimer(): void {
+    if (this.activeCallHealthCheckHandle || !this.hasActiveCalls) {
+      return;
+    }
+    this.activeCallHealthCheckHandle = setInterval(() => {
+      if (!this.hasActiveCalls) {
+        this.stopActiveCallHealthCheckTimer();
+        return;
+      }
+      if (this.reconnecting || this.recoveryReattachActive) {
+        return;
+      }
+      for (const call of this.calls.values()) {
+        if (typeof call.checkSignalingHealthForRecovery === 'function') {
+          call.checkSignalingHealthForRecovery();
+        }
+      }
+    }, TelnyxRTC.ACTIVE_CALL_HEALTH_CHECK_MS);
+    (this.activeCallHealthCheckHandle as any)?.unref?.();
+  }
+
+  private stopActiveCallHealthCheckTimer(): void {
+    if (!this.activeCallHealthCheckHandle) {
+      return;
+    }
+    clearInterval(this.activeCallHealthCheckHandle);
+    this.activeCallHealthCheckHandle = null;
   }
 
   private updateTrackedCallId(previousCallId: string, call: Call): void {
@@ -393,7 +425,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
       log.debug(`[TelnyxRTC] Removing call from tracking: ${callId}`);
       this.calls.delete(callId);
+      this.recoveryCandidateEvidenceByCallId.delete(callId);
       this.emit('telnyx.call.removed', callId);
+      if (!this.hasActiveCalls) {
+        this.stopActiveCallHealthCheckTimer();
+      }
       log.debug(`[TelnyxRTC] Total calls tracked: ${this.calls.size}`);
     }
   }
@@ -1290,7 +1326,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
           // candidate evidence explicitly reports a VPN, force the replacement
           // call's media through a TURN relay once, then clear the evidence so
           // normal reattaches are not affected.
-          ...(this.consumeRelayOverride() ? { iceTransportPolicy: 'relay' as const } : {}),
+          ...(this.consumeRelayOverride(msg.params.callID) ? { iceTransportPolicy: 'relay' as const } : {}),
         },
       },
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
@@ -1305,14 +1341,19 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     // Add to calls tracking (matches iOS SDK behavior)
     this.addCall(attachedCall);
 
-    await attachedCall
-      .answerAttach()
-      .then(() => {
-        log.debug('[TelnyxRTC] AnswerAttach completed successfully');
-      })
-      .catch((error: Error) => {
-        log.error('[TelnyxRTC] Failed to execute answerAttach:', error);
-      });
+    try {
+      await attachedCall.answerAttach();
+      log.debug('[TelnyxRTC] AnswerAttach completed successfully');
+    } catch (error) {
+      log.error('[TelnyxRTC] Failed to execute answerAttach:', error);
+      attachedCall.disposePeer();
+      this.removeCall(attachedCall.callId);
+      this.emit(
+        'telnyx.client.error',
+        error instanceof Error ? error : new Error(String(error))
+      );
+      return;
+    }
 
     log.debug('[TelnyxRTC] Emitting telnyx.call.reattached event for reattached call');
     log.debug(
@@ -1624,7 +1665,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       performReattachFallback: (callId: string) =>
         this.performReattachFallbackForRecovery(callId),
       captureCandidateEvidence: (evidence: CandidateEvidence) => {
-        this.lastRecoveryCandidateEvidence = evidence;
+        if (evidence.callId) {
+          this.recoveryCandidateEvidenceByCallId.set(evidence.callId, evidence);
+        }
       },
     };
   }
@@ -1634,15 +1677,28 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * true only when the pre-failure candidate evidence explicitly reports a
    * VPN network; without evidence recovery fails closed (no override).
    */
-  private consumeRelayOverride(): boolean {
-    if (this.lastRecoveryCandidateEvidence?.localNetworkType === 'vpn') {
-      this.lastRecoveryCandidateEvidence = null;
+  private consumeRelayOverride(callId: string): boolean {
+    const evidence = this.recoveryCandidateEvidenceByCallId.get(callId);
+    this.recoveryCandidateEvidenceByCallId.delete(callId);
+
+    if (evidence?.localNetworkType === 'vpn' && evidence.localCandidateType !== 'relay') {
       log.debug(
         '[TelnyxRTC] Applying one-shot relay-only override to reattached call (VPN evidence)'
       );
       return true;
     }
     return false;
+  }
+
+  private failRecoveryReattach(callId: string): void {
+    const call = this.calls.get(callId);
+    if (!call) {
+      return;
+    }
+    log.warn(`[TelnyxRTC] Recovery fallback exhausted for call ${callId}`);
+    call.setDropped();
+    this.removeCall(callId);
+    this.emit('telnyx.client.error', new Error(`Recovery reattach failed for call ${callId}`));
   }
 
   /**
@@ -1692,6 +1748,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         this.removeListener('telnyx.call.reattached', onReattach);
         this.reconnecting = false;
         this.recoveryReattachActive = false;
+        if (!value) {
+          this.failRecoveryReattach(callId);
+        }
         resolve(value);
       };
       this.addListener('telnyx.call.reattached', onReattach);

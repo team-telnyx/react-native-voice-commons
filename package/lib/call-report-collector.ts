@@ -274,6 +274,7 @@ export class CallReportCollector {
     let ice: IceCandidatePairStats | undefined;
     let transport: TransportStats | undefined;
     let selectedCandidatePair: any = null;
+    let transportSelectedCandidatePairId: string | null = null;
     let outboundReport: any = null;
 
     // Accumulate samples during this interval
@@ -355,7 +356,7 @@ export class CallReportCollector {
           break;
 
         case 'candidate-pair':
-          if (report.nominated || report.state === 'succeeded') {
+          if (report.selected || report.nominated) {
             selectedCandidatePair = report;
             if (report.currentRoundTripTime != null) {
               rtts.push(report.currentRoundTripTime);
@@ -372,6 +373,9 @@ export class CallReportCollector {
 
         case 'transport':
           transport = this.buildTransportStats(report);
+          if (report.selectedCandidatePairId) {
+            transportSelectedCandidatePairId = report.selectedCandidatePairId;
+          }
           break;
 
         case 'media-source':
@@ -381,6 +385,13 @@ export class CallReportCollector {
           break;
       }
     });
+
+    if (transportSelectedCandidatePairId && typeof stats.get === 'function') {
+      const selectedByTransport = stats.get(transportSelectedCandidatePairId);
+      if (selectedByTransport?.type === 'candidate-pair') {
+        selectedCandidatePair = selectedByTransport;
+      }
+    }
 
     if (selectedCandidatePair) {
       const localCandidate = this.resolveCandidate(stats, selectedCandidatePair.localCandidateId);

@@ -131,13 +131,20 @@ export class Peer {
   };
 
   public setRemoteDescription = async (session: RTCSessionDescriptionInit) => {
+    try {
+      return await this.setRemoteDescriptionStrict(session);
+    } catch (error) {
+      log.error('[Peer] Error setting remote description', error);
+      return this;
+    }
+  };
+
+  public setRemoteDescriptionStrict = async (session: RTCSessionDescriptionInit) => {
     if (!this.instance) {
       throw new Error('[Peer] Peer connection not created');
     }
     log.debug('[Peer] Setting remote description', session);
-    await this.instance.setRemoteDescription(new RTCSessionDescription(session)).catch((error) => {
-      log.error('[Peer] Error setting remote description', error);
-    });
+    await this.instance.setRemoteDescription(new RTCSessionDescription(session));
     await this.flushPendingRemoteCandidates();
     return this;
   };
