@@ -1,6 +1,7 @@
 import * as TelnyxSDK from '@telnyx/react-native-voice-sdk';
+import * as commonsPkg from '../../package.json';
 import { SessionManager } from '../../src/internal/session/session-manager';
-import { createCredentialConfig } from '../../src/models/config';
+import { createCredentialConfig, createTokenConfig } from '../../src/models/config';
 
 describe('SessionManager', () => {
   beforeEach(() => {
@@ -27,6 +28,48 @@ describe('SessionManager', () => {
       expect.objectContaining({
         pushNotificationDeviceToken: 'push-token',
         pushWhenActive: true,
+      })
+    );
+  });
+
+  it('passes the Commons identity pair to the low-level SDK client on credential login', async () => {
+    const manager = new SessionManager();
+    await manager.connectWithCredential(createCredentialConfig('sip-user', 'sip-password'));
+
+    const TelnyxRTCMock = TelnyxSDK.TelnyxRTC as unknown as jest.Mock;
+    expect(TelnyxRTCMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sdkName: 'react_native_commons',
+        sdkVersion: commonsPkg.version,
+      })
+    );
+  });
+
+  it('passes the Commons identity pair to the low-level SDK client on token login', async () => {
+    const manager = new SessionManager();
+    await manager.connectWithToken(createTokenConfig('token-value'));
+
+    const TelnyxRTCMock = TelnyxSDK.TelnyxRTC as unknown as jest.Mock;
+    expect(TelnyxRTCMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sdkName: 'react_native_commons',
+        sdkVersion: commonsPkg.version,
+      })
+    );
+  });
+
+  it('keeps the Commons identity pair when rebuilding the client from a push notification', async () => {
+    const manager = new SessionManager();
+    await manager.connectWithCredential(createCredentialConfig('sip-user', 'sip-password'));
+
+    const TelnyxRTCMock = TelnyxSDK.TelnyxRTC as unknown as jest.Mock;
+    await manager.handlePushNotification({ metadata: { call_id: 'call-id' } });
+
+    expect(TelnyxRTCMock).toHaveBeenCalledTimes(2);
+    expect(TelnyxRTCMock.mock.calls[1][0]).toEqual(
+      expect.objectContaining({
+        sdkName: 'react_native_commons',
+        sdkVersion: commonsPkg.version,
       })
     );
   });

@@ -41,6 +41,12 @@ declare module '@telnyx/react-native-voice-sdk' {
     callReportInterval?: number;
     callReportLogLevel?: string;
     callReportMaxLogEntries?: number;
+    /**
+     * Override the public SDK identity atomically with sdkVersion.
+     * Wrapper SDKs must provide both values; partial overrides are rejected.
+     */
+    sdkName?: string;
+    /** @deprecated Use sdkName and sdkVersion together to override SDK identity. */
     sdkVersion?: string;
   }
 

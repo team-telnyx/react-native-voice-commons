@@ -16,6 +16,14 @@ const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
 const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
 
 /**
+ * Public SDK identity emitted by this wrapper. The core client serializes
+ * `mobile_sdk_name` / `mobile_sdk_version` on the wire when the identity pair
+ * is provided (see @telnyx/react-native-voice-sdk ClientOptions), while the
+ * legacy `User-Agent` behavior stays untouched.
+ */
+const COMMONS_SDK_NAME = 'react_native_commons';
+
+/**
  * Manages the connection lifecycle to the Telnyx platform.
  *
  * This class handles authentication, connection state management,
@@ -489,6 +497,7 @@ export class SessionManager {
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
           callReportMaxLogEntries: config.callReportMaxLogEntries,
+          sdkName: COMMONS_SDK_NAME,
           sdkVersion: pkg.version,
         };
         console.log(
@@ -510,6 +519,7 @@ export class SessionManager {
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
           callReportMaxLogEntries: config.callReportMaxLogEntries,
+          sdkName: COMMONS_SDK_NAME,
           sdkVersion: pkg.version,
         };
         console.log(
