@@ -107,6 +107,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   // Active-call ICE restart recovery (VSDK-679)
   // True while a recovery fallback owns the reconnect flow.
   private recoveryReattachActive: boolean = false;
+  // Invalidates any pending recovery fallback when the consumer explicitly disconnects.
+  private recoveryReattachGeneration: number = 0;
+  private explicitDisconnectRequested: boolean = false;
   // One-shot relay-only override captured from the recovering call's stats.
   private recoveryCandidateEvidenceByCallId: Map<string, CandidateEvidence> = new Map();
   private activeCallHealthCheckHandle: ReturnType<typeof setInterval> | null = null;
@@ -770,6 +773,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
 
     const connectionGeneration = (this.connectionGeneration += 1);
+    this.explicitDisconnectRequested = false;
     log.debug('[TelnyxRTC] Starting connection process...');
 
     // Store login configuration for potential reconnection
@@ -980,6 +984,17 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    */
   public disconnect(fromReconnection: boolean = false) {
     this.connectionGeneration += 1;
+
+    if (!fromReconnection) {
+      this.stopActiveCallHealthCheckTimer();
+      for (const call of this.calls.values()) {
+        call.cancelRecovery('client-disconnect');
+      }
+      this.recoveryReattachGeneration += 1;
+      this.explicitDisconnectRequested = true;
+      this.recoveryReattachActive = false;
+      this.reconnecting = false;
+    }
 
     this.cancelReconnectionTimer();
 
@@ -1813,11 +1828,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * (replacement call initiated); an attach for any other call is ignored.
    */
   private performReattachFallbackForRecovery(callId: string): Promise<boolean> {
-    if (this.recoveryReattachActive || this.reconnecting) {
-      log.debug('[TelnyxRTC] Recovery fallback skipped: a reconnect flow is already running');
+    if (this.recoveryReattachActive || this.reconnecting || this.explicitDisconnectRequested) {
+      log.debug('[TelnyxRTC] Recovery fallback skipped: a reconnect flow is already running or disconnected');
       return Promise.resolve(false);
     }
 
+    const recoveryGeneration = this.recoveryReattachGeneration;
     this.recoveryReattachActive = true;
     // Reuse the existing reconnect-flow guard semantics: keeps push flags and
     // listeners intact while the teardown runs, and signals reconnecting to
@@ -1861,6 +1877,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
       log.debug('[TelnyxRTC] Recovery fallback: running one reconnect/register/reattach cycle');
       try {
+        if (recoveryGeneration !== this.recoveryReattachGeneration || this.explicitDisconnectRequested) {
+          log.debug('[TelnyxRTC] Recovery fallback: cancelled before reconnect teardown');
+          settle(false);
+          return;
+        }
         this.disconnect(true);
         // Mirror onNetworkUnavailable's peer teardown before the reconnect:
         // the attach creates replacement Call objects keyed by the same call
@@ -1878,8 +1899,18 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
           }
           call.disposePeer();
         }
+        if (recoveryGeneration !== this.recoveryReattachGeneration || this.explicitDisconnectRequested) {
+          log.debug('[TelnyxRTC] Recovery fallback: cancelled before reconnect');
+          settle(false);
+          return;
+        }
         this.connect()
           .then(() => {
+            if (recoveryGeneration !== this.recoveryReattachGeneration || this.explicitDisconnectRequested) {
+              log.debug('[TelnyxRTC] Recovery fallback: cancelled after reconnect');
+              settle(false);
+              return;
+            }
             log.debug(
               '[TelnyxRTC] Recovery fallback: reconnected, waiting for backend attach'
             );

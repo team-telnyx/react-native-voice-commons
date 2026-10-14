@@ -45,11 +45,13 @@ type CallEvents = {
 };
 
 /**
- * Signaling is considered fresh when the socket has seen traffic within this
- * window (mirrors the production JS SDK's RECENT_ACTIVITY_THRESHOLD_MS).
- * Fresh signaling lets ICE restart recovery skip the correlated ping probe.
+ * Media recovery can skip the correlated probe only when inbound signaling was
+ * very recent and request/response signaling has been confirmed recently.
+ * Periodic health checks use the wider iOS staleness windows below.
  */
-const RECOVERY_RECENT_ACTIVITY_MS = 3000;
+const RECOVERY_RECENT_INBOUND_MS = 3000;
+const RECOVERY_CONFIRMED_OUTBOUND_MS = 45_000;
+const RECOVERY_STALE_INBOUND_MS = 20_000;
 
 /**
  * Possible states a call can be in.
@@ -329,10 +331,8 @@ export class Call extends EventEmitter<CallEvents> {
       callState: () => this.state,
       isSignalingFresh: () =>
         this.connection.isConnected &&
-        Math.max(
-          this.connection.inboundIdleMs,
-          this.connection.confirmedOutboundIdleMs
-        ) <= RECOVERY_RECENT_ACTIVITY_MS,
+        this.connection.inboundIdleMs <= RECOVERY_RECENT_INBOUND_MS &&
+        this.connection.confirmedOutboundIdleMs <= RECOVERY_CONFIRMED_OUTBOUND_MS,
       isClientReconnecting: () => this.recoveryHooks?.isClientReconnecting() ?? false,
       sendSignalingProbe: () => this.sendRecoverySignalingProbe(),
       restartIce: async () => {
@@ -1282,18 +1282,24 @@ export class Call extends EventEmitter<CallEvents> {
     return candidate;
   }
 
+  public cancelRecovery(reason: string): void {
+    this.recoveryCoordinator?.cancel(reason);
+  }
+
   public checkSignalingHealthForRecovery = (): void => {
     if (this.state !== 'active') {
       return;
     }
-    // Periodic health check: only confirmed traffic (inbound messages and
-    // sendAndWait responses) counts as freshness. One-way outbound sends are
-    // ignored so a dead link can't be masked by client-initiated heartbeats.
-    const stalestIdleMs = Math.max(
-      this.connection.inboundIdleMs,
-      this.connection.confirmedOutboundIdleMs
-    );
-    if (!this.connection.isConnected || stalestIdleMs > RECOVERY_RECENT_ACTIVITY_MS) {
+    // Periodic health check: mirror iOS staleness thresholds. Inbound gateway
+    // traffic can be quiet for up to 20s, and a confirmed request/response leg
+    // can be quiet for up to 45s before we probe. Do not reuse the 3s media
+    // recovery freshness window here, or healthy quiet calls will probe too
+    // aggressively.
+    if (
+      !this.connection.isConnected ||
+      this.connection.inboundIdleMs >= RECOVERY_STALE_INBOUND_MS ||
+      this.connection.confirmedOutboundIdleMs >= RECOVERY_CONFIRMED_OUTBOUND_MS
+    ) {
       this.recoveryCoordinator?.notifySignalingUnhealthy();
     }
   };

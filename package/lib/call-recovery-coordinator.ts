@@ -28,6 +28,7 @@ export type CallRecoveryState =
   | 'reattaching';
 
 export type RecoveryFailureKind = 'failed' | 'disconnected';
+type SignalingProbePurpose = 'mediaRecovery' | 'healthCheck';
 
 /**
  * Snapshot of the selected ICE candidate pair captured when media failed.
@@ -258,7 +259,7 @@ export class CallRecoveryCoordinator {
     this.logger.info('Signaling health check stale, probing active call', {
       generation: this.currentGeneration,
     });
-    void this.runProbe();
+    void this.runProbe('healthCheck');
   }
 
   /**
@@ -318,10 +319,10 @@ export class CallRecoveryCoordinator {
       return;
     }
 
-    void this.runProbe();
+    void this.runProbe('mediaRecovery');
   }
 
-  private async runProbe(): Promise<void> {
+  private async runProbe(purpose: SignalingProbePurpose): Promise<void> {
     const generation = this.currentGeneration;
     this.logger.info('Signaling stale or unknown, sending correlated ping probe');
 
@@ -340,6 +341,12 @@ export class CallRecoveryCoordinator {
         result,
       });
       await this.performFallback(`signaling-probe-${result}`);
+      return;
+    }
+
+    if (purpose === 'healthCheck') {
+      this.logger.info('Signaling health probe answered, recovery returning to idle');
+      this.setState('idle');
       return;
     }
 
@@ -477,6 +484,13 @@ export class CallRecoveryCoordinator {
       this.logger.debug('Unable to capture selected candidate evidence', {
         reason: error instanceof Error ? error.message : String(error),
       });
+    }
+    if (
+      generation !== this.currentGeneration ||
+      (this.currentState as CallRecoveryState) !== 'reattaching' ||
+      this.deps.callState() !== 'active'
+    ) {
+      return;
     }
     if (evidence && this.deps.onCandidateEvidenceCaptured) {
       this.deps.onCandidateEvidenceCaptured(evidence);
