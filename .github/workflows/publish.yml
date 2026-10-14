@@ -4,7 +4,11 @@ name: Publish to npm
 # Use release tag prefixes to control which package(s) to publish:
 #   voice-sdk-v0.4.1   → publishes @telnyx/react-native-voice-sdk only
 #   commons-sdk-v0.2.0 → publishes @telnyx/react-voice-commons-sdk only
-#   v0.2.0             → publishes both packages
+#   v0.2.0             → publishes both packages (legacy; release-03 now tags each package)
+# Each job checks out the release tag, so the published code is exactly what was tagged.
+# Prerelease versions are published under their prerelease word, lowercased
+# (1.2.0-beta.1 → "beta"), never as "latest". Versions already on npm are skipped, so
+# release-03 can be re-run after a partial failure.
 on:
   release:
     types: [published]
@@ -46,8 +50,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: npm-pub
     steps:
-      - name: Checkout code
+      - name: Checkout release tag
         uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve-release.outputs.tag_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -67,13 +73,35 @@ jobs:
             exit 1
           fi
 
+      - name: Skip if this version is already on npm
+        id: npm_check
+        working-directory: package
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ -n "$(npm view "$NAME@$VERSION" version 2>/dev/null)" ]]; then
+            echo "::warning::$NAME@$VERSION is already on npm; skipping publish"
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install dependencies
+        if: steps.npm_check.outputs.published != 'true'
         working-directory: package
         run: npm install --legacy-peer-deps
 
       - name: Publish with provenance
+        if: steps.npm_check.outputs.published != 'true'
         working-directory: package
-        run: npm publish --provenance --access public
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$VERSION" == *-* ]]; then
+            # 1.2.0-beta.1 -> "beta", 1.2.0-RC.1 -> "rc"; numeric prereleases (1.2.0-1) -> "next"
+            DIST_TAG=$(sed -E 's/^[^-]+-([A-Za-z]+).*$/\1/' <<< "$VERSION" | tr '[:upper:]' '[:lower:]')
+            [[ "$DIST_TAG" =~ ^[a-z]+$ ]] || DIST_TAG=next
+            npm publish --provenance --access public --tag "$DIST_TAG"
+          else
+            npm publish --provenance --access public
+          fi
 
   publish-commons-sdk:
     name: Publish @telnyx/react-voice-commons-sdk
@@ -86,8 +114,10 @@ jobs:
       (needs.publish-voice-sdk.result == 'success' || needs.publish-voice-sdk.result == 'skipped')
     environment: npm-pub
     steps:
-      - name: Checkout code
+      - name: Checkout release tag
         uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve-release.outputs.tag_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -106,7 +136,19 @@ jobs:
             exit 1
           fi
 
+      - name: Skip if this version is already on npm
+        id: npm_check
+        working-directory: react-voice-commons-sdk
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ -n "$(npm view "$NAME@$VERSION" version 2>/dev/null)" ]]; then
+            echo "::warning::$NAME@$VERSION is already on npm; skipping publish"
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install dependencies
+        if: steps.npm_check.outputs.published != 'true'
         working-directory: react-voice-commons-sdk
         run: |
           # Switch from local file dependency to published version
@@ -114,9 +156,20 @@ jobs:
           npm install --legacy-peer-deps
 
       - name: Build
+        if: steps.npm_check.outputs.published != 'true'
         working-directory: react-voice-commons-sdk
         run: npm run build
 
       - name: Publish with provenance
+        if: steps.npm_check.outputs.published != 'true'
         working-directory: react-voice-commons-sdk
-        run: npm publish --provenance --access public
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$VERSION" == *-* ]]; then
+            # 1.2.0-beta.1 -> "beta", 1.2.0-RC.1 -> "rc"; numeric prereleases (1.2.0-1) -> "next"
+            DIST_TAG=$(sed -E 's/^[^-]+-([A-Za-z]+).*$/\1/' <<< "$VERSION" | tr '[:upper:]' '[:lower:]')
+            [[ "$DIST_TAG" =~ ^[a-z]+$ ]] || DIST_TAG=next
+            npm publish --provenance --access public --tag "$DIST_TAG"
+          else
+            npm publish --provenance --access public
+          fi

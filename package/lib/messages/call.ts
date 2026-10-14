@@ -1,6 +1,6 @@
 import uuid from 'uuid-random';
 import type { CallOptions } from '../call-options';
-import { SDK_VERSION } from '../env';
+import { DEFAULT_SDK_IDENTITY, SDK_VERSION, type SDKIdentity } from '../env';
 import { TelnyxRTCMethod } from './methods';
 
 type InviteACKMessage = {
@@ -28,7 +28,7 @@ export function createInviteMessage({
   attach,
   callId,
   callOptions,
-}: CreateInviteMessageParams) {
+}: CreateInviteMessageParams, sdkIdentity: SDKIdentity = DEFAULT_SDK_IDENTITY) {
   return {
     id: uuid(),
     jsonrpc: '2.0',
@@ -36,7 +36,9 @@ export function createInviteMessage({
     params: {
       sessid: sessionId,
       sdp,
-      'User-Agent': `ReactNative-${SDK_VERSION}`,
+      'User-Agent': `ReactNative-${sdkIdentity.version}`,
+      mobile_sdk_name: sdkIdentity.name,
+      mobile_sdk_version: sdkIdentity.version,
       dialogParams: {
         attach,
         callID: callId,
@@ -408,6 +410,8 @@ type AnswerMessage = {
       custom_headers?: { name: string; value: string }[];
     };
     'User-Agent': string;
+    mobile_sdk_name: string;
+    mobile_sdk_version: string;
     answered_device_token?: string;
   };
 };
@@ -433,7 +437,7 @@ export function createAnswerMessage({
   customHeaders,
   pushWhenActive = false,
   pushDeviceToken,
-}: CreateAnswerMessageParams): AnswerMessage {
+}: CreateAnswerMessageParams, sdkIdentity: SDKIdentity = DEFAULT_SDK_IDENTITY): AnswerMessage {
   const message: AnswerMessage = {
     id: uuid(),
     jsonrpc: '2.0',
@@ -448,7 +452,9 @@ export function createAnswerMessage({
         custom_headers: customHeaders || [],
         ...dialogParams,
       },
-      'User-Agent': `ReactNative-${SDK_VERSION}`,
+      'User-Agent': `ReactNative-${sdkIdentity.version}`,
+      mobile_sdk_name: sdkIdentity.name,
+      mobile_sdk_version: sdkIdentity.version,
     },
   };
 

@@ -12,7 +12,7 @@ import type { ClientOptions } from './client-options';
 import type { CallReportConfig } from './call-report-models';
 import { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
 import { Connection } from './connection';
-import { setSDKVersion } from './env';
+import { DEFAULT_SDK_IDENTITY, type SDKIdentity } from './env';
 import { KeepAliveHandler } from './keep-alive-handler';
 import { eventBus } from './legacy-event-bus';
 import { LoginHandler } from './login-handler';
@@ -56,6 +56,7 @@ type PendingTrickleEvent =
 export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   public options: ClientOptions;
   public sessionId: string | null;
+  private readonly sdkIdentity: SDKIdentity;
 
   /**
    * Dictionary of all active calls tracked by their UUIDs.
@@ -202,9 +203,14 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     super();
     this.options = opts;
 
-    if (opts.sdkVersion) {
-      setSDKVersion(opts.sdkVersion);
+    if (Boolean(opts.sdkName) !== Boolean(opts.sdkVersion)) {
+      throw new Error('[TelnyxRTC] sdkName and sdkVersion must be provided together');
     }
+    this.sdkIdentity = Object.freeze(
+      opts.sdkName && opts.sdkVersion
+        ? { name: opts.sdkName, version: opts.sdkVersion }
+        : { ...DEFAULT_SDK_IDENTITY }
+    );
 
     this.connection = null;
     this.sessionId = null;
@@ -490,6 +496,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       callReportConfig: this.getCallReportConfig(),
       pushWhenActive: this.options.pushWhenActive,
       pushDeviceToken: this.options.pushNotificationDeviceToken,
+      sdkIdentity: this.sdkIdentity,
       recoveryHooks: this.buildRecoveryHooks(),
     });
 
@@ -904,7 +911,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     this.throwIfConnectCanceled(connectionGeneration);
 
-    this.loginHandler = new LoginHandler(this.connection);
+    this.loginHandler = new LoginHandler(this.connection, this.sdkIdentity);
     this.keepAliveHandler = new KeepAliveHandler(this.connection);
     this.keepAliveHandler.start();
 
@@ -1199,6 +1206,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         callReportConfig: this.getCallReportConfig(),
         pushWhenActive: this.options.pushWhenActive,
         pushDeviceToken: this.options.pushNotificationDeviceToken,
+        sdkIdentity: this.sdkIdentity,
         recoveryHooks: this.buildRecoveryHooks(),
       });
     } catch (error) {
@@ -1357,6 +1365,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       callReportConfig: this.getCallReportConfig(),
       pushWhenActive: this.options.pushWhenActive,
       pushDeviceToken: this.options.pushNotificationDeviceToken,
+      sdkIdentity: this.sdkIdentity,
       recoveryHooks: this.buildRecoveryHooks(),
     });
 

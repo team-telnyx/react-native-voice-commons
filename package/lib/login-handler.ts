@@ -2,6 +2,7 @@ import log from 'loglevel';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ClientOptions } from './client-options';
+import type { SDKIdentity } from './env';
 import { Connection } from './connection';
 import {
   createGetGatewayStateMessage,
@@ -24,12 +25,14 @@ export class LoginHandler {
   private shouldAttachCall: boolean = false;
   private isFromPush: boolean = false;
   private lastSessionId: string | null = null; // Store sessid from login response
+  private readonly sdkIdentity: SDKIdentity;
 
   // AsyncStorage key for persisting sessid
   private static readonly SESSID_STORAGE_KEY = '@telnyx_last_sessid';
 
-  constructor(con: Connection) {
+  constructor(con: Connection, sdkIdentity: SDKIdentity) {
     this.connection = con;
+    this.sdkIdentity = sdkIdentity;
     this.connection.addListener('telnyx.socket.message', this.onSocketMessage);
     this.connection.addListener('telnyx.socket.close', this.onSocketClose);
     this.connection.addListener('telnyx.socket.error', this.onSocketError);
@@ -153,7 +156,7 @@ export class LoginHandler {
         enableMissedCallNotifications: options.enableMissedCallNotifications ?? false,
         userVariables,
         sessid,
-      });
+      }, this.sdkIdentity);
     }
 
     if (options.login_token) {
@@ -164,7 +167,7 @@ export class LoginHandler {
         enableMissedCallNotifications: options.enableMissedCallNotifications ?? false,
         userVariables,
         sessid,
-      });
+      }, this.sdkIdentity);
     }
     throw new Error(
       'Login credentials are required. Please provide either login and password or a login token.'

@@ -1,5 +1,5 @@
 import uuid from 'uuid-random';
-import { SDK_VERSION } from '../env';
+import { DEFAULT_SDK_IDENTITY, SDK_VERSION, type SDKIdentity } from '../env';
 
 export type LoginUserVariables = {
   push_device_token?: string;
@@ -34,8 +34,8 @@ export function createLoginUserVariables({
   return userVariables;
 }
 
-function userAgent(enableMissedCallNotifications: boolean = false) {
-  return `ReactNative${enableMissedCallNotifications ? '-mpn' : ''}-${SDK_VERSION}`;
+function userAgent(enableMissedCallNotifications: boolean = false, sdkVersion: string = SDK_VERSION) {
+  return `ReactNative${enableMissedCallNotifications ? '-mpn' : ''}-${sdkVersion}`;
 }
 
 export type LoginWithPasswordParams = {
@@ -77,13 +77,15 @@ export function createPasswordLoginMessage({
   enableMissedCallNotifications = false,
   userVariables,
   sessid,
-}: LoginWithPasswordParams) {
+}: LoginWithPasswordParams, sdkIdentity: SDKIdentity = DEFAULT_SDK_IDENTITY) {
   const params: any = {
     userVariables,
     login,
     passwd: password,
     reconnection,
-    'User-Agent': userAgent(enableMissedCallNotifications),
+    'User-Agent': userAgent(enableMissedCallNotifications, sdkIdentity.version),
+    mobile_sdk_name: sdkIdentity.name,
+    mobile_sdk_version: sdkIdentity.version,
   };
 
   // Add from_push flag if this is a push-initiated connection (matching iOS SDK behavior)
@@ -120,12 +122,14 @@ export function createTokenLoginMessage({
   fromPush = false,
   enableMissedCallNotifications = false,
   sessid,
-}: LoginWithTokenParams) {
+}: LoginWithTokenParams, sdkIdentity: SDKIdentity = DEFAULT_SDK_IDENTITY) {
   const params: any = {
     userVariables,
     login_token,
     reconnection,
-    'User-Agent': userAgent(enableMissedCallNotifications),
+    'User-Agent': userAgent(enableMissedCallNotifications, sdkIdentity.version),
+    mobile_sdk_name: sdkIdentity.name,
+    mobile_sdk_version: sdkIdentity.version,
   };
 
   // Add from_push flag if this is a push-initiated connection (matching iOS SDK behavior)

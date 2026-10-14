@@ -178,8 +178,28 @@ export class CallStateController {
    * This should be called by the session manager after client creation
    */
   initializeClientListeners(): void {
+    const telnyxClient = this._sessionManager.telnyxClient;
+
     console.log('CallStateController: initializeClientListeners called');
-    console.log('CallStateController: Current client exists:', !!this._sessionManager.telnyxClient);
+    console.log('CallStateController: Current client exists:', !!telnyxClient);
+
+    if (!telnyxClient) {
+      console.log('CallStateController: No telnyxClient available, skipping listener setup');
+      return;
+    }
+
+    // Skip redundant listener setup — SessionManager calls _onClientReady
+    // twice during connect/reconnect (once before connection, once on
+    // telnyx.client.ready event). _setupClientListeners() already
+    // removes old listeners before re-adding, so this guard skips the
+    // redundant off→on churn rather than preventing actual duplicates.
+    if (this._listenerClient === telnyxClient) {
+      console.log(
+        'CallStateController: Listeners already registered for this client instance, skipping'
+      );
+      return;
+    }
+
     this._setupClientListeners();
 
     // CallKit integration now handled by CallKitCoordinator

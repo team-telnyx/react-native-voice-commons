@@ -9,105 +9,105 @@ import { Config, CredentialConfig, TokenConfig } from '../../models/config';
  * and automatic reconnection logic.
  */
 export declare class SessionManager {
-  private readonly _connectionState;
-  private _telnyxClient?;
-  private _currentConfig?;
-  private _sessionId;
-  private _disposed;
-  private _disposing;
-  private _connectionGeneration;
-  private _disposePromise?;
-  private _connectPromise?;
-  private _onClientReady?;
-  private _onDisconnect?;
-  constructor();
-  /**
-   * Observable stream of connection state changes
-   */
-  get connectionState$(): Observable<TelnyxConnectionState>;
-  /**
-   * Set callback to be called when the Telnyx client is ready
-   */
-  setOnClientReady(callback: () => void): void;
-  /**
-   * Set callback to be called when the session disconnects, so dependent
-   * subsystems (e.g. the call state controller) can clear their state.
-   */
-  setOnDisconnect(callback: () => void): void;
-  /**
-   * Current connection state (synchronous access)
-   */
-  get currentState(): TelnyxConnectionState;
-  /**
-   * Current session ID
-   */
-  get sessionId(): string;
-  /**
-   * Get the underlying Telnyx client instance
-   */
-  get telnyxClient(): TelnyxSDK.TelnyxRTC | undefined;
-  get useTrickleIce(): boolean;
-  /**
-   * Connect using credential authentication
-   */
-  connectWithCredential(config: CredentialConfig): Promise<void>;
-  /**
-   * Connect using token authentication
-   */
-  connectWithToken(config: TokenConfig): Promise<void>;
-  /**
-   * Disconnect from the Telnyx platform.
-   *
-   * The DISCONNECTED state is emitted BEFORE awaiting the underlying
-   * client teardown so that observers (including the auto-reconnect logic
-   * in TelnyxVoiceApp) cannot read a stale CONNECTED value during the
-   * short window while the socket is being torn down. Tracked calls are
-   * cleared here too, since a torn-down socket will never emit the
-   * ENDED/FAILED events that normally trigger per-call cleanup.
-   */
-  disconnect(): Promise<void>;
-  /**
-   * Disable push notifications for the current session.
-   * Delegates to the TelnyxRTC client's disablePushNotification() method
-   * which sends a 'telnyx_rtc.disable_push_notification' message via the socket.
-   */
-  disablePushNotifications(): void;
-  /**
-   * Handle push notification with stored config
-   */
-  handlePushNotificationWithConfig(pushMetaData: any, config: Config): void;
-  /**
-   * Handle push notification (async version)
-   */
-  handlePushNotification(payload: Record<string, any>): Promise<void>;
-  private _hasActiveOrHeldCall;
-  /**
-   * Dispose of the session manager and clean up resources
-   */
-  dispose(): Promise<void>;
-  /**
-   * Internal method to establish connection with or without push notification handling
-   */
-  private _connect;
-  private _dispose;
-  private _runConnect;
-  /**
-   * Set up event listeners for the Telnyx client
-   */
-  private _setupClientListeners;
-  /**
-   * Extract the actual payload metadata from wrapped push notification payload
-   */
-  private _extractPushPayload;
-  /**
-   * Generate a unique session ID
-   */
-  private _generateSessionId;
-  private _assertCanStartConnection;
-  private _isTeardownActive;
-  private _isConnectCanceled;
-  private _throwIfConnectCanceled;
-  private _createConnectCanceledError;
-  private _disconnectClient;
-  private _disconnectAndForgetClient;
+    private readonly _connectionState;
+    private _telnyxClient?;
+    private _currentConfig?;
+    private _sessionId;
+    private _disposed;
+    private _disposing;
+    private _connectionGeneration;
+    private _disposePromise?;
+    private _connectPromise?;
+    private _onClientReady?;
+    private _onDisconnect?;
+    constructor();
+    /**
+     * Observable stream of connection state changes
+     */
+    get connectionState$(): Observable<TelnyxConnectionState>;
+    /**
+     * Set callback to be called when the Telnyx client is ready
+     */
+    setOnClientReady(callback: () => void): void;
+    /**
+     * Set callback to be called when the session disconnects, so dependent
+     * subsystems (e.g. the call state controller) can clear their state.
+     */
+    setOnDisconnect(callback: () => void): void;
+    /**
+     * Current connection state (synchronous access)
+     */
+    get currentState(): TelnyxConnectionState;
+    /**
+     * Current session ID
+     */
+    get sessionId(): string;
+    /**
+     * Get the underlying Telnyx client instance
+     */
+    get telnyxClient(): TelnyxSDK.TelnyxRTC | undefined;
+    get useTrickleIce(): boolean;
+    /**
+     * Connect using credential authentication
+     */
+    connectWithCredential(config: CredentialConfig): Promise<void>;
+    /**
+     * Connect using token authentication
+     */
+    connectWithToken(config: TokenConfig): Promise<void>;
+    /**
+     * Disconnect from the Telnyx platform.
+     *
+     * The DISCONNECTED state is emitted BEFORE awaiting the underlying
+     * client teardown so that observers (including the auto-reconnect logic
+     * in TelnyxVoiceApp) cannot read a stale CONNECTED value during the
+     * short window while the socket is being torn down. Tracked calls are
+     * cleared here too, since a torn-down socket will never emit the
+     * ENDED/FAILED events that normally trigger per-call cleanup.
+     */
+    disconnect(): Promise<void>;
+    /**
+     * Disable push notifications for the current session.
+     * Delegates to the TelnyxRTC client's disablePushNotification() method
+     * which sends a 'telnyx_rtc.disable_push_notification' message via the socket.
+     */
+    disablePushNotifications(): void;
+    /**
+     * Handle push notification with stored config
+     */
+    handlePushNotificationWithConfig(pushMetaData: any, config: Config): void;
+    /**
+     * Handle push notification (async version)
+     */
+    handlePushNotification(payload: Record<string, any>): Promise<void>;
+    private _hasActiveOrHeldCall;
+    /**
+     * Dispose of the session manager and clean up resources
+     */
+    dispose(): Promise<void>;
+    /**
+     * Internal method to establish connection with or without push notification handling
+     */
+    private _connect;
+    private _dispose;
+    private _runConnect;
+    /**
+     * Set up event listeners for the Telnyx client
+     */
+    private _setupClientListeners;
+    /**
+     * Extract the actual payload metadata from wrapped push notification payload
+     */
+    private _extractPushPayload;
+    /**
+     * Generate a unique session ID
+     */
+    private _generateSessionId;
+    private _assertCanStartConnection;
+    private _isTeardownActive;
+    private _isConnectCanceled;
+    private _throwIfConnectCanceled;
+    private _createConnectCanceledError;
+    private _disconnectClient;
+    private _disconnectAndForgetClient;
 }
