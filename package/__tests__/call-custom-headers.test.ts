@@ -74,15 +74,18 @@ describe('Call Custom Headers', () => {
       await call.answer();
 
       // Verify
-      expect(createAnswerMessage).toHaveBeenCalledWith({
-        callId: 'test-call-id',
-        dialogParams: {},
-        sdp: 'mock-sdp',
-        telnyxLegId: 'test-telnyx-leg-id',
-        telnyxSessionId: 'test-telnyx-session-id',
-        sessionId: 'test-session-id',
-        customHeaders: undefined,
-      });
+      expect(createAnswerMessage).toHaveBeenCalledWith(
+        {
+          callId: 'test-call-id',
+          dialogParams: {},
+          sdp: 'mock-sdp',
+          telnyxLegId: 'test-telnyx-leg-id',
+          telnyxSessionId: 'test-telnyx-session-id',
+          sessionId: 'test-session-id',
+          customHeaders: undefined,
+        },
+        { name: 'react_native', version: '1.1.0' }
+      );
     });
 
     it('should call createAnswerMessage with custom headers when provided', async () => {
@@ -98,15 +101,18 @@ describe('Call Custom Headers', () => {
       await call.answer(customHeaders);
 
       // Verify
-      expect(createAnswerMessage).toHaveBeenCalledWith({
-        callId: 'test-call-id',
-        dialogParams: {},
-        sdp: 'mock-sdp',
-        telnyxLegId: 'test-telnyx-leg-id',
-        telnyxSessionId: 'test-telnyx-session-id',
-        sessionId: 'test-session-id',
-        customHeaders,
-      });
+      expect(createAnswerMessage).toHaveBeenCalledWith(
+        {
+          callId: 'test-call-id',
+          dialogParams: {},
+          sdp: 'mock-sdp',
+          telnyxLegId: 'test-telnyx-leg-id',
+          telnyxSessionId: 'test-telnyx-session-id',
+          sessionId: 'test-session-id',
+          customHeaders,
+        },
+        { name: 'react_native', version: '1.1.0' }
+      );
     });
 
     it('should include the answering device token when push-when-active is enabled', async () => {
@@ -131,7 +137,8 @@ describe('Call Custom Headers', () => {
         expect.objectContaining({
           pushWhenActive: true,
           pushDeviceToken: 'push-token',
-        })
+        }),
+        { name: 'react_native', version: '1.1.0' }
       );
     });
 

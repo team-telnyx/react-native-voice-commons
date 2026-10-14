@@ -84,10 +84,9 @@ export interface ClientOptions {
    */
   callReportMaxLogEntries?: number;
   /**
-   * Override the SDK version used in User-Agent strings.
-   * When used as a dependency of a higher-level SDK, the parent SDK
-   * can pass its own version here so the User-Agent reflects the
-   * consumer-facing version rather than the internal package version.
+   * Override the public SDK identity atomically. Wrapper SDKs must provide
+   * both sdkName and sdkVersion; partial overrides are rejected.
    */
+  sdkName?: string;
   sdkVersion?: string;
 }
