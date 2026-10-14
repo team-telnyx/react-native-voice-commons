@@ -445,6 +445,30 @@ describe('CallRecoveryCoordinator', () => {
   });
 
   describe('cancel and stale continuations', () => {
+    it('explicit disconnect during a pending probe never runs reattach', async () => {
+      let resolveProbe: (value: 'ok' | 'timeout' | 'error') => void = () => {};
+      const { deps, mocks } = createDeps({
+        sendSignalingProbe: jest.fn().mockReturnValue(
+          new Promise((resolve) => {
+            resolveProbe = resolve;
+          })
+        ),
+      });
+      const coordinator = new CallRecoveryCoordinator(deps);
+
+      coordinator.notifySignalingUnhealthy();
+      await flush();
+      expect(coordinator.state).toBe('probing');
+
+      coordinator.cancel('client-disconnect');
+      resolveProbe('error');
+      await flush();
+
+      expect(mocks.performReattachFallback).not.toHaveBeenCalled();
+      expect(mocks.restartIce).not.toHaveBeenCalled();
+      expect(coordinator.isRecoveryActive).toBe(false);
+    });
+
     it('cancels pending timers and invalidates stale restart continuations', async () => {
       const { deps, mocks } = createDeps({ isSignalingFresh: jest.fn().mockReturnValue(true) });
       let resolveRestart: (sdp: string) => void = () => {};
