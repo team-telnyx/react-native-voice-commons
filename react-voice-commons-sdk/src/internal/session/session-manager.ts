@@ -14,6 +14,7 @@ import {
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
 const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
 const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
+const COMMONS_SDK_NAME = 'react_native_commons';
 
 /**
  * Manages the connection lifecycle to the Telnyx platform.
@@ -489,6 +490,7 @@ export class SessionManager {
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
           callReportMaxLogEntries: config.callReportMaxLogEntries,
+          sdkName: COMMONS_SDK_NAME,
           sdkVersion: pkg.version,
         };
         console.log(
@@ -510,6 +512,7 @@ export class SessionManager {
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
           callReportMaxLogEntries: config.callReportMaxLogEntries,
+          sdkName: COMMONS_SDK_NAME,
           sdkVersion: pkg.version,
         };
         console.log(

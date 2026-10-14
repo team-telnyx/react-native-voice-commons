@@ -31,6 +31,20 @@ describe('SessionManager', () => {
     );
   });
 
+  it('passes the commons SDK name and version together', async () => {
+    const manager = new SessionManager();
+
+    await manager.connectWithCredential(createCredentialConfig('sip-user', 'sip-password'));
+
+    const TelnyxRTCMock = TelnyxSDK.TelnyxRTC as unknown as jest.Mock;
+    expect(TelnyxRTCMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sdkName: 'react_native_commons',
+        sdkVersion: expect.any(String),
+      })
+    );
+  });
+
   it('disconnects the underlying TelnyxRTC client before marking itself disposed', async () => {
     const manager = new SessionManager();
 
