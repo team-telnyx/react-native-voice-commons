@@ -159,6 +159,22 @@ describe('CallRecoveryCoordinator', () => {
       expect(mocks.sendSignalingProbe).toHaveBeenCalledTimes(1);
       expect(mocks.performReattachFallback).toHaveBeenCalledTimes(1);
     });
+
+    it('returns to idle after a successful periodic health probe without restarting ICE', async () => {
+      const { deps, mocks } = createDeps({
+        getPeerIceState: jest.fn().mockReturnValue('connected'),
+        sendSignalingProbe: jest.fn().mockResolvedValue('ok' as const),
+      });
+      const coordinator = new CallRecoveryCoordinator(deps);
+
+      coordinator.notifySignalingUnhealthy();
+      await flush();
+
+      expect(mocks.sendSignalingProbe).toHaveBeenCalledTimes(1);
+      expect(mocks.restartIce).not.toHaveBeenCalled();
+      expect(mocks.performReattachFallback).not.toHaveBeenCalled();
+      expect(coordinator.isRecoveryActive).toBe(false);
+    });
   });
 
   describe('probe correlation', () => {
@@ -400,6 +416,31 @@ describe('CallRecoveryCoordinator', () => {
 
       expect(mocks.performReattachFallback).toHaveBeenCalledTimes(1);
       expect(mocks.onRecoveryFailed).toHaveBeenCalledTimes(1);
+    });
+    it('does not reattach if recovery is cancelled while candidate evidence is pending', async () => {
+      let resolveEvidence: (value: any) => void = () => {};
+      const { deps, mocks } = createDeps({
+        sendSignalingProbe: jest.fn().mockResolvedValue('error' as const),
+        getSelectedCandidateEvidence: jest.fn().mockReturnValue(
+          new Promise((resolve) => {
+            resolveEvidence = resolve;
+          })
+        ),
+      });
+      const coordinator = new CallRecoveryCoordinator(deps);
+
+      coordinator.notifyIceFailure('failed');
+      await flush();
+      expect(coordinator.state).toBe('reattaching');
+
+      coordinator.cancel('call-state:ended');
+      resolveEvidence({ localNetworkType: 'vpn', localCandidateType: 'relay' });
+      await flush();
+
+      expect(mocks.onCandidateEvidenceCaptured).not.toHaveBeenCalled();
+      expect(mocks.performReattachFallback).not.toHaveBeenCalled();
+      expect(mocks.onRecoveryFailed).not.toHaveBeenCalled();
+      expect(coordinator.isRecoveryActive).toBe(false);
     });
   });
 

@@ -28,17 +28,17 @@ function buildCall() {
 }
 
 describe('Call signaling health checks (ICE restart recovery)', () => {
-  it('treats a confirmed request/response exchange as fresh signaling', () => {
-    const { call, connection, coordinator } = buildCall();
-    connection.inboundIdleMs = 10;
-    connection.confirmedOutboundIdleMs = 10;
+  it('treats a confirmed request/response exchange as fresh signaling for media recovery', () => {
+    const { connection, coordinator } = buildCall();
+    connection.inboundIdleMs = 2;
+    connection.confirmedOutboundIdleMs = 10_000;
 
     const isSignalingFresh = coordinator.deps.isSignalingFresh;
     expect(isSignalingFresh()).toBe(true);
   });
 
   it('does not let one-way outbound sends mask a dead link', () => {
-    const { call, connection, coordinator } = buildCall();
+    const { connection, coordinator } = buildCall();
 
     // Only a client-initiated send happened (total idle is fresh), but no
     // inbound message and no confirmed outbound response were ever observed.
@@ -50,9 +50,9 @@ describe('Call signaling health checks (ICE restart recovery)', () => {
     expect(isSignalingFresh()).toBe(false);
   });
 
-  it('treats inbound traffic without a confirmed outbound exchange as stale', () => {
-    const { call, connection, coordinator } = buildCall();
-    connection.inboundIdleMs = 10;
+  it('treats media recovery signaling as stale when recent inbound is missing', () => {
+    const { connection, coordinator } = buildCall();
+    connection.inboundIdleMs = 4_000;
     connection.confirmedOutboundIdleMs = 10_000;
 
     const isSignalingFresh = coordinator.deps.isSignalingFresh;
@@ -60,7 +60,7 @@ describe('Call signaling health checks (ICE restart recovery)', () => {
   });
 
   it('reports stale signaling when the socket is disconnected', () => {
-    const { call, connection, coordinator } = buildCall();
+    const { connection, coordinator } = buildCall();
     connection.inboundIdleMs = 1;
     connection.confirmedOutboundIdleMs = 1;
     connection.isConnected = false;
@@ -89,6 +89,34 @@ describe('Call signaling health checks (ICE restart recovery)', () => {
 
     call.checkSignalingHealthForRecovery();
 
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not probe a healthy quiet call until iOS parity staleness thresholds are reached', () => {
+    const { call, connection, coordinator } = buildCall();
+    const notify = jest.spyOn(coordinator, 'notifySignalingUnhealthy');
+    connection.inboundIdleMs = 19_999;
+    connection.confirmedOutboundIdleMs = 44_999;
+
+    call.checkSignalingHealthForRecovery();
+
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('probes when periodic inbound or confirmed outbound staleness thresholds are reached', () => {
+    const { call, connection, coordinator } = buildCall();
+    const notify = jest.spyOn(coordinator, 'notifySignalingUnhealthy');
+    connection.inboundIdleMs = 20_000;
+    connection.confirmedOutboundIdleMs = 44_999;
+
+    call.checkSignalingHealthForRecovery();
+    expect(notify).toHaveBeenCalledTimes(1);
+
+    notify.mockClear();
+    connection.inboundIdleMs = 19_999;
+    connection.confirmedOutboundIdleMs = 45_000;
+
+    call.checkSignalingHealthForRecovery();
     expect(notify).toHaveBeenCalledTimes(1);
   });
 

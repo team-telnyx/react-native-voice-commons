@@ -30,6 +30,7 @@ function createMockCall(callId: string, state: string = 'active') {
       this.state = 'dropped';
     }),
     disposePeer: jest.fn(),
+    cancelRecovery: jest.fn(),
     checkSignalingHealthForRecovery: jest.fn(),
   };
 }
@@ -161,5 +162,18 @@ describe('Recovery reattach fallback (VSDK-679 review fixes)', () => {
     jest.advanceTimersByTime((TelnyxRTC as any).ACTIVE_CALL_HEALTH_CHECK_MS * 3);
     expect(call.checkSignalingHealthForRecovery).toHaveBeenCalledTimes(1);
     expect((client as any).activeCallHealthCheckHandle).toBeNull();
+  });
+
+  it('explicit disconnect cancels active call recovery and blocks stale reattach fallback', async () => {
+    const call = createMockCall('call-a');
+    client.calls.set('call-a', call as any);
+    (client as any).connection = { close: jest.fn(), isConnected: true };
+
+    (TelnyxRTC.prototype as any).disconnect.call(client, false);
+
+    expect(call.cancelRecovery).toHaveBeenCalledWith('client-disconnect');
+    expect((client as any).activeCallHealthCheckHandle).toBeNull();
+    await expect((client as any).performReattachFallbackForRecovery('call-a')).resolves.toBe(false);
+    expect(connectSpy).not.toHaveBeenCalled();
   });
 });
