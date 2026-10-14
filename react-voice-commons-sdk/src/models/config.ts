@@ -1,6 +1,8 @@
 /**
  * Configuration for credential-based authentication
  */
+export type TelnyxEnvironment = 'production' | 'development';
+
 export interface CredentialConfig {
   type: 'credential';
   sipUser: string;
@@ -15,6 +17,8 @@ export interface CredentialConfig {
   incomingCallRingtone?: string;
   /** Enable Trickle ICE. Default: false */
   useTrickleIce?: boolean;
+  /** Signaling environment. Default: production */
+  environment?: TelnyxEnvironment;
   /** Enable automatic call quality reporting. Default: true */
   enableCallReports?: boolean;
   /** Stats collection interval in seconds. Default: 5 */
@@ -41,6 +45,8 @@ export interface TokenConfig {
   incomingCallRingtone?: string;
   /** Enable Trickle ICE. Default: false */
   useTrickleIce?: boolean;
+  /** Signaling environment. Default: production */
+  environment?: TelnyxEnvironment;
   /** Enable automatic call quality reporting. Default: true */
   enableCallReports?: boolean;
   /** Stats collection interval in seconds. Default: 5 */

@@ -61,6 +61,25 @@ describe('Connection freshness tracking (ICE restart recovery)', () => {
     expect(connection.idleMs).toBe(Infinity);
   });
 
+  it('uses the production signaling host by default', () => {
+    const socketFactory = require('react-native-websocket-self-signed') as {
+      getInstance: jest.Mock;
+    };
+
+    expect(connection.host).toBe('wss://rtc.telnyx.com');
+    expect(socketFactory.getInstance).toHaveBeenLastCalledWith('wss://rtc.telnyx.com/');
+  });
+
+  it('uses the development signaling host when requested', () => {
+    const socketFactory = require('react-native-websocket-self-signed') as {
+      getInstance: jest.Mock;
+    };
+    const developmentConnection = new Connection(undefined, 'development');
+
+    expect(developmentConnection.host).toBe('wss://rtcdev.telnyx.com');
+    expect(socketFactory.getInstance).toHaveBeenLastCalledWith('wss://rtcdev.telnyx.com/');
+  });
+
   it('treats a socket open as total activity but not confirmed traffic', () => {
     openSocket();
 

@@ -1,6 +1,7 @@
 export { Connection } from './connection';
 export { TelnyxRTC } from './client';
 export { Call, CallState } from './call';
+export type { TelnyxEnvironment } from './env';
 
 // Interfaces
 export * from './client-options';
