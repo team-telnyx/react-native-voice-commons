@@ -255,7 +255,7 @@ cmd_unreleased_notes() {
 }
 
 cmd_draft_prompt() {
-  local pkg=$1 version=$2 previous=$3 out=$4 dir commits raw prs unreleased
+  local pkg=$1 version=$2 previous=$3 out=$4 dir commits raw prs unreleased prompt_bytes
   require_package "$pkg"
   dir=$(package_dir "$pkg")
   commits=$(mktemp)
@@ -315,11 +315,12 @@ EOF
   } >"$out"
   rm -f "$commits" "$raw" "$prs"
 
-  if (($(wc -c <"$out") > MAX_PROMPT_BYTES)); then
-    head -c "$MAX_PROMPT_BYTES" "$out" >"$out.tmp" && mv "$out.tmp" "$out"
-    echo "::warning::CHANGELOG prompt for $pkg truncated to $MAX_PROMPT_BYTES bytes"
+  prompt_bytes=$(wc -c <"$out")
+  if ((prompt_bytes > MAX_PROMPT_BYTES)); then
+    rm -f "$out"
+    fail "CHANGELOG prompt for $pkg is $prompt_bytes bytes, exceeding the $MAX_PROMPT_BYTES-byte limit; reduce the merged PR input or raise the limit"
   fi
-  echo "$pkg prompt: $(wc -c <"$out") bytes, $(grep -c '^### PR #' "$out" || true) pull requests"
+  echo "$pkg prompt: $prompt_bytes bytes, $(grep -c '^### PR #' "$out" || true) pull requests"
 }
 
 cmd_insert_draft() {
@@ -329,10 +330,19 @@ cmd_insert_draft() {
   changelog="$dir/CHANGELOG.md"
   [[ -s "$draft_file" ]] || fail "The AI returned an empty draft for $pkg"
   # Start at the first expected section heading so conversational preambles cannot
-  # become release notes. Drop code fences and higher-level headings because this
-  # script writes the version heading itself.
+  # become release notes. A fence opened before that heading is treated as a wrapper
+  # around the whole response; fenced fragments that appear after the draft starts
+  # are discarded. Drop higher-level headings because this script writes the version
+  # heading itself.
   draft=$(awk '
-    /^```/ || /^#{1,2} / {next}
+    /^(```|~~~)/ {
+      if (wrapper_fence) {wrapper_fence=0; next}
+      if (!started) {wrapper_fence=1; next}
+      skip_fence = !skip_fence
+      next
+    }
+    skip_fence {next}
+    /^#{1,2} / {next}
     !started && /^### / {started=1}
     started {print}
   ' "$draft_file")

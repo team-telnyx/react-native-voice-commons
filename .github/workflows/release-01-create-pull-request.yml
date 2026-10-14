@@ -79,6 +79,7 @@ jobs:
 
       - name: Collect merged PRs for each package
         id: notes
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           VOICE_SDK_VERSION: ${{ steps.plan.outputs.voice_version }}
@@ -159,6 +160,7 @@ jobs:
           fi
 
       - name: Build CHANGELOG draft prompts
+        id: prompts
         if: steps.ai.outputs.enabled == 'true'
         continue-on-error: true
         env:
@@ -180,7 +182,7 @@ jobs:
       # here never blocks the release PR; the maintainer writes the section instead.
       - name: Draft voice-sdk CHANGELOG with Codex
         id: draft_voice
-        if: steps.ai.outputs.enabled == 'true' && steps.plan.outputs.voice_version != ''
+        if: steps.ai.outputs.enabled == 'true' && steps.prompts.outcome == 'success' && steps.plan.outputs.voice_version != ''
         continue-on-error: true
         timeout-minutes: 10
         uses: openai/codex-action@v1.4
@@ -194,7 +196,7 @@ jobs:
 
       - name: Draft commons-sdk CHANGELOG with Codex
         id: draft_commons
-        if: steps.ai.outputs.enabled == 'true' && steps.plan.outputs.commons_version != ''
+        if: steps.ai.outputs.enabled == 'true' && steps.prompts.outcome == 'success' && steps.plan.outputs.commons_version != ''
         continue-on-error: true
         timeout-minutes: 10
         uses: openai/codex-action@v1.4
