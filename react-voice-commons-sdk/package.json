@@ -71,9 +71,6 @@
     "react-native-webrtc": "^124.0.5"
   },
   "peerDependenciesMeta": {
-    "@telnyx/react-native-voice-sdk": {
-      "optional": false
-    },
     "@react-native-async-storage/async-storage": {
       "optional": false
     },

@@ -1,4 +1,5 @@
 import * as TelnyxSDK from '@telnyx/react-native-voice-sdk';
+import { REACT_NATIVE_COMMONS_SDK_IDENTITY } from '../../src/internal/sdk-identity';
 import { SessionManager } from '../../src/internal/session/session-manager';
 import { createCredentialConfig, createTokenConfig, isTokenConfig } from '../../src/models/config';
 
@@ -46,8 +47,8 @@ describe('SessionManager', () => {
     const TelnyxRTCMock = TelnyxSDK.TelnyxRTC as unknown as jest.Mock;
     expect(TelnyxRTCMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        sdkName: 'react_native_commons',
-        sdkVersion: '1.1.1',
+        sdkName: REACT_NATIVE_COMMONS_SDK_IDENTITY.name,
+        sdkVersion: REACT_NATIVE_COMMONS_SDK_IDENTITY.version,
       })
     );
   });
