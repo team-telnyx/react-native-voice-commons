@@ -782,6 +782,14 @@ import React
             return true
         }
 
+        fileprivate func ownsIncomingRegistration(_ callUUID: UUID, token: String) -> Bool {
+            guard let callData = activeCalls[callUUID] else {
+                return false
+            }
+
+            return callData["incomingRegistrationToken"] as? String == token
+        }
+
         private override init() {
             super.init()
             // Only setup if explicitly requested via setup() method
@@ -1738,6 +1746,7 @@ import React
 
             // Store call data manually and report to CallKit
             let isAppRunning = CallKitBridge.shared != nil
+            let registrationToken = UUID().uuidString
             callKitManager.activeCalls[callUUID] = [
                 "caller": callerName,
                 "handle": callerNumber,
@@ -1746,6 +1755,7 @@ import React
                 "direction": "incoming",
                 "source": isAppRunning ? "push_notification" : "terminated_app_push",
                 "isCallKitRegistered": false,
+                "incomingRegistrationToken": registrationToken,
             ]
 
             // Report to CallKit immediately
@@ -1757,6 +1767,17 @@ import React
             callUpdate.supportsHolding = true
 
             callKitProvider.reportNewIncomingCall(with: callUUID, update: callUpdate) { error in
+                defer { completion() }
+
+                guard callKitManager.ownsIncomingRegistration(
+                    callUUID, token: registrationToken
+                ) else {
+                    NSLog(
+                        "[TelnyxVoipPushHandler] Ignoring stale incoming registration completion for ended call: \(callUUID.uuidString)"
+                    )
+                    return
+                }
+
                 if let error = error {
                     let nsError = error as NSError
                     let reason =
@@ -1805,8 +1826,6 @@ import React
                         )
                     }
                 }
-
-                completion()
             }
         }
 

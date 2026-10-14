@@ -1,11 +1,6 @@
 import { BehaviorSubject, Observable } from 'rxjs';
 import { distinctUntilChanged, map } from 'rxjs/operators';
-import {
-  TelnyxRTC,
-  Call as TelnyxCall,
-  type CallOptions,
-  type CallTerminationReason,
-} from '@telnyx/react-native-voice-sdk';
+import { TelnyxRTC, Call as TelnyxCall, type CallOptions } from '@telnyx/react-native-voice-sdk';
 import { Call } from '../../models/call';
 import { TelnyxCallState } from '../../models/call-state';
 import { SessionManager } from '../session/session-manager';
@@ -13,6 +8,14 @@ import { callKitCoordinator } from '../../callkit/callkit-coordinator';
 
 export type CustomHeader = { name: string; value: string };
 export type CustomHeaders = Record<string, string> | CustomHeader[];
+
+type RemoteCallEndedReason = {
+  cause?: string;
+  causeCode?: number;
+  sipCode?: number;
+  sipReason?: string;
+  sipCallId?: string;
+};
 
 /**
  * Central state machine for call management.
@@ -408,7 +411,7 @@ export class CallStateController {
     this._handleIncomingCall(telnyxCall, msg, true);
   };
 
-  private _handleRemoteCallEnded = (callId: string, reason: CallTerminationReason): void => {
+  private _handleRemoteCallEnded = (callId: string, reason: RemoteCallEndedReason): void => {
     console.log('CallStateController: Pending push call ended remotely', {
       callId,
       reason,

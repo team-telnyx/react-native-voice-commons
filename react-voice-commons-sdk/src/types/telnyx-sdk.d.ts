@@ -45,14 +45,6 @@ declare module '@telnyx/react-native-voice-sdk' {
     sdkVersion?: string;
   }
 
-  export interface CallTerminationReason {
-    cause?: string;
-    causeCode?: number;
-    sipCode?: number;
-    sipReason?: string;
-    sipCallId?: string;
-  }
-
   export enum CallState {
     NEW = 'new',
     CONNECTING = 'connecting',

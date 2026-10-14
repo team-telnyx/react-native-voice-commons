@@ -69,6 +69,7 @@ const handleIncomingVoipPush = extractFunction('@objc public func handleVoipPush
 const setupCallKit = extractFunction('private func setupCallKit()');
 const reportCallConnected = extractFunction('@objc func reportCallConnected(');
 const activateWebRTCAudio = extractFunction('fileprivate func activateWebRTCAudio(');
+const ownsIncomingRegistration = extractFunction('fileprivate func ownsIncomingRegistration(');
 
 describe('iOS CallKitBridge audio lifecycle', () => {
   it('does not reset audio when CallKit is already installed', () => {
@@ -230,6 +231,39 @@ describe('iOS CallKitBridge call waiting contract', () => {
     expect(registrationIndex).toBeGreaterThan(successStart);
     expect(persistIndex).toBeGreaterThan(registrationIndex);
     expect(persistIndex).toBeGreaterThan(successStart);
+  });
+
+  it('does not revive an ended push when incoming registration completes late', () => {
+    const tokenCreationIndex = handleIncomingVoipPush.indexOf(
+      'let registrationToken = UUID().uuidString'
+    );
+    const tokenStorageIndex = handleIncomingVoipPush.indexOf(
+      '"incomingRegistrationToken": registrationToken'
+    );
+    const reportIndex = handleIncomingVoipPush.indexOf('reportNewIncomingCall');
+    const completionDeferIndex = handleIncomingVoipPush.indexOf('defer { completion() }');
+    const ownershipGuardIndex = handleIncomingVoipPush.indexOf(
+      'guard callKitManager.ownsIncomingRegistration('
+    );
+    const persistIndex = handleIncomingVoipPush.indexOf(
+      'self.storePendingVoipPush(payload.dictionaryPayload)'
+    );
+    const emitIndex = handleIncomingVoipPush.indexOf('callKitBridge.emitCallEvent(');
+
+    expect(ownsIncomingRegistration).toContain('activeCalls[callUUID]');
+    expect(ownsIncomingRegistration).toContain(
+      'callData["incomingRegistrationToken"] as? String == token'
+    );
+    expect(handleMissedCallPushIfNeeded).toContain(
+      'self.activeCalls.removeValue(forKey: callUUID)'
+    );
+    expect(tokenCreationIndex).toBeGreaterThanOrEqual(0);
+    expect(tokenStorageIndex).toBeGreaterThan(tokenCreationIndex);
+    expect(reportIndex).toBeGreaterThan(tokenStorageIndex);
+    expect(completionDeferIndex).toBeGreaterThan(reportIndex);
+    expect(ownershipGuardIndex).toBeGreaterThan(completionDeferIndex);
+    expect(persistIndex).toBeGreaterThan(ownershipGuardIndex);
+    expect(emitIndex).toBeGreaterThan(ownershipGuardIndex);
   });
 
   it('emits held actions and waits for explicit JavaScript completion', () => {

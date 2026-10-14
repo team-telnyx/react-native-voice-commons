@@ -1,8 +1,16 @@
 import { Platform, AppState } from 'react-native';
 import CallKit, { CallEndReason } from './callkit';
-import { Call, type CallTerminationReason } from '@telnyx/react-native-voice-sdk';
+import { Call } from '@telnyx/react-native-voice-sdk';
 import { VoicePnBridge } from '../internal/voice-pn-bridge';
 import type { TelnyxVoipClient } from '../telnyx-voip-client';
+
+type RemoteCallEndedReason = {
+  cause?: string;
+  causeCode?: number;
+  sipCode?: number;
+  sipReason?: string;
+  sipCallId?: string;
+};
 
 type PendingSwap = {
   mode: 'swap' | 'restoring' | 'rollback';
@@ -792,7 +800,7 @@ class CallKitCoordinator {
   /** End a still-pending PushKit CallKit call after a remote hangup. */
   async handlePendingPushCallRemoteEnded(
     callKitUUID: string,
-    reason?: CallTerminationReason
+    reason?: RemoteCallEndedReason
   ): Promise<boolean> {
     callKitUUID = this.normalizeUUID(callKitUUID);
 
