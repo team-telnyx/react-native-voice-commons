@@ -195,18 +195,18 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
     }
   };
 
-  const handleSimulateIceFailure = () => {
+  const handleForceIceRestart = () => {
     if (!activeCall || activeCallState !== TelnyxCallState.ACTIVE) {
-      Alert.alert('ICE recovery test', 'Start a call and wait until it is active first.');
+      Alert.alert('ICE restart test', 'Start a call and wait until it is active first.');
       return;
     }
 
     const started = activeCall.simulateIceFailureForTesting();
     Alert.alert(
-      'ICE recovery test',
+      'ICE restart test',
       started
-        ? 'ICE failure injected. The SDK recovery flow is now restarting ICE; watch the call and logs.'
-        : 'The recovery test could not start. Check that debug mode is enabled and no recovery is already running.'
+        ? 'ICE failure injected. The SDK is restarting ICE now; watch the call and logs.'
+        : 'ICE restart could not start. Check that debug mode is enabled and no recovery is already running.'
     );
   };
 
@@ -218,8 +218,8 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
         : 'The ICE recovery test becomes available when a call is active.',
       [
         {
-          text: 'Simulate ICE failure',
-          onPress: handleSimulateIceFailure,
+          text: 'Force ICE restart (test)',
+          onPress: handleForceIceRestart,
         },
         { text: 'Cancel', style: 'cancel' },
       ]
@@ -245,7 +245,8 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
 
         <TouchableOpacity
           onLongPress={handleDeveloperOptions}
-          delayLongPress={1200}
+          delayLongPress={500}
+          hitSlop={12}
           testID="developerOptionsButton"
           accessibilityRole="button"
           accessibilityLabel="Telnyx WebRTC"
