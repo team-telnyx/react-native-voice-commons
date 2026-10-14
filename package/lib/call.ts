@@ -32,7 +32,7 @@ import { CallReportCollector } from './call-report-collector';
 import type { CallReportConfig, CallReportSummary } from './call-report-models';
 import { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
 import { CALL_REPORT_ID, VOICE_SDK_ID } from './global';
-import { DEFAULT_SDK_IDENTITY, PROD_HOST, SDK_VERSION, type SDKIdentity } from './env';
+import { DEFAULT_SDK_IDENTITY, PROD_HOST, type SDKIdentity } from './env';
 
 type CallEvents = {
   'telnyx.call.state': (call: Call, state: CallState) => void;
@@ -1141,7 +1141,7 @@ export class Call extends EventEmitter<CallEvents> {
       telnyxSessionId: this.telnyxSessionId,
       telnyxLegId: this.telnyxLegId,
       voiceSdkSessionId: this.sessionId,
-      sdkVersion: SDK_VERSION,
+      sdkVersion: this.sdkIdentity.version,
       startTimestamp: this.callStartTimestamp,
       endTimestamp,
     };

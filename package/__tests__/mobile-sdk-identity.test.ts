@@ -1,4 +1,5 @@
 import { TelnyxRTC } from '../lib/client';
+import { Call } from '../lib/call';
 import { createAttachCallMessage, createAttachMessage } from '../lib/messages/attach';
 import { createAnswerMessage, createInviteMessage } from '../lib/messages/call';
 import { createPasswordLoginMessage, createTokenLoginMessage } from '../lib/messages/login';
@@ -66,6 +67,24 @@ describe('mobile SDK identity signaling', () => {
       version: '2.3.4',
     });
     expect((core as any).sdkIdentity).toEqual({ name: 'react_native', version: '1.1.0' });
+  });
+
+  it('uses the per-client SDK version in call reports', () => {
+    const call = new Call({
+      connection: {
+        addListener: jest.fn(),
+        removeListener: jest.fn(),
+      } as any,
+      options: { destinationNumber: '18005550100' },
+      sessionId: 'session',
+      direction: 'outbound',
+      callId: 'call',
+      telnyxLegId: null,
+      telnyxSessionId: null,
+      sdkIdentity: { name: 'react_native_commons', version: '2.3.4' },
+    });
+
+    expect((call as any).buildReportSummary('active').sdkVersion).toBe('2.3.4');
   });
 
   it('rejects partial identity overrides', () => {
