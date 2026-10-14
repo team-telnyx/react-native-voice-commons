@@ -807,7 +807,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         '[TelnyxRTC] RELEASE DEBUG - Creating connection with push notification voice_sdk_id:',
         pushVoiceSDKId
       );
-      this.connection = new Connection(pushVoiceSDKId);
+      this.connection = new Connection(pushVoiceSDKId, this.options.environment);
     } else {
       log.debug('[TelnyxRTC] Creating standard connection');
       console.log(
@@ -816,7 +816,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         'pushVoiceSDKId:',
         pushVoiceSDKId
       );
-      this.connection = new Connection();
+      this.connection = new Connection(undefined, this.options.environment);
     }
 
     // Store reference to this client in the connection for CallKit UUID access

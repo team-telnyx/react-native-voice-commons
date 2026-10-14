@@ -17,6 +17,7 @@ import {
   CredentialConfig,
   TelnyxConnectionState,
   TelnyxCallState,
+  TelnyxEnvironment,
   TokenConfig,
   createCredentialConfig,
   createTokenConfig,
@@ -24,6 +25,7 @@ import {
 } from '../react-voice-commons-sdk/src';
 import { demoColors, radii, sizes, spacing } from './demoTheme';
 import { InlineCallControls } from './InlineCallControls';
+import { DeveloperOptionsSheet } from './DeveloperOptionsSheet';
 import { VoipTokenFetcher } from './VoipTokenFetcher';
 import { CredentialProfileSheet } from './login/CredentialProfileSheet';
 import { InfoRow } from './login/InfoRow';
@@ -48,15 +50,19 @@ const PROFILE_LIST_STORAGE_KEY = '@telnyx_demo_profiles';
 const telnyxLogo = require('../assets/images/telnyx_logo.png');
 const appPackage = require('../package.json');
 const sdkPackage = require('../react-voice-commons-sdk/package.json');
-const versionLabel = `Production TelnyxSDK [v${sdkPackage.version}] - App [v${appPackage.version}]`;
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
+const SIGNALING_ENVIRONMENT_STORAGE_KEY = '@telnyx_signaling_environment';
 const DEMO_USE_TRICKLE_ICE = true;
 
 async function buildProfileConnectionConfig(
   nextProfile: SavedProfile,
-  pushToken: string | null
+  pushToken: string | null,
+  environment: TelnyxEnvironment
 ): Promise<CredentialConfig | TokenConfig> {
-  await AsyncStorage.setItem(USE_TRICKLE_ICE_STORAGE_KEY, String(DEMO_USE_TRICKLE_ICE));
+  await Promise.all([
+    AsyncStorage.setItem(USE_TRICKLE_ICE_STORAGE_KEY, String(DEMO_USE_TRICKLE_ICE)),
+    AsyncStorage.setItem(SIGNALING_ENVIRONMENT_STORAGE_KEY, environment),
+  ]);
 
   const options = {
     debug: true,
@@ -64,6 +70,7 @@ async function buildProfileConnectionConfig(
     pushWhenActive: true,
     enableMissedCallNotifications: true,
     useTrickleIce: DEMO_USE_TRICKLE_ICE,
+    environment,
     enableCallReports: true,
   };
 
@@ -123,6 +130,8 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   const [draftProfile, setDraftProfile] = useState<SavedProfile>(emptyProfile);
   const [editingProfileKey, setEditingProfileKey] = useState<string | null>(null);
   const [showProfileSheet, setShowProfileSheet] = useState(false);
+  const [showDeveloperOptions, setShowDeveloperOptions] = useState(false);
+  const [environment, setEnvironment] = useState<TelnyxEnvironment>('production');
   const [connectionState, setConnectionState] = useState(voipClient.currentConnectionState);
   const [calls, setCalls] = useState<Call[]>(voipClient.currentCalls);
   const [activeCall, setActiveCall] = useState<Call | null>(voipClient.currentActiveCall);
@@ -142,6 +151,7 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   const connectButtonLabel = isConnected ? 'Disconnect' : isConnecting ? 'Cancel' : 'Connect';
   const connectionLabel = isConnected ? 'Client-ready' : 'Disconnected';
   const sessionId = isConnected ? voipClient.sessionId || '-' : '-';
+  const versionLabel = `${environment === 'development' ? 'Development' : 'Production'} TelnyxSDK [v${sdkPackage.version}] - App [v${appPackage.version}]`;
 
   useEffect(() => {
     const subscription = voipClient.connectionState$.subscribe((state) => {
@@ -161,6 +171,21 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
     loadProfile();
     return () => subscription.unsubscribe();
   }, [voipClient, onLoginSuccess]);
+
+  useEffect(() => {
+    let mounted = true;
+    AsyncStorage.getItem(SIGNALING_ENVIRONMENT_STORAGE_KEY)
+      .then((storedEnvironment) => {
+        if (mounted && storedEnvironment === 'development') {
+          setEnvironment('development');
+        }
+      })
+      .catch((error) => log('TelnyxLoginForm: Error loading environment:', error));
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const subscription = voipClient.calls$.subscribe(setCalls);
@@ -411,7 +436,7 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
     setIsLoading(true);
 
     try {
-      const config = await buildProfileConnectionConfig(nextProfile, pushToken);
+      const config = await buildProfileConnectionConfig(nextProfile, pushToken, environment);
       if (config.type === 'token') {
         await voipClient.loginWithToken(config);
       } else {
@@ -508,6 +533,7 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   };
 
   const handleForceIceRestart = () => {
+    setShowDeveloperOptions(false);
     if (!activeCall || activeCallState !== TelnyxCallState.ACTIVE) {
       Alert.alert('ICE restart test', 'Start a call and wait until it is active first.');
       return;
@@ -523,19 +549,20 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   };
 
   const handleDeveloperOptions = () => {
-    Alert.alert(
-      'Developer options',
-      activeCallState === TelnyxCallState.ACTIVE
-        ? 'Choose a diagnostic action for the active call.'
-        : 'The ICE recovery test becomes available when a call is active.',
-      [
-        {
-          text: 'Force ICE restart (test)',
-          onPress: handleForceIceRestart,
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+    setShowDeveloperOptions(true);
+  };
+
+  const handleSelectEnvironment = async (nextEnvironment: TelnyxEnvironment) => {
+    if (isConnected || isConnecting) return;
+
+    setEnvironment(nextEnvironment);
+    setShowDeveloperOptions(false);
+    try {
+      await AsyncStorage.setItem(SIGNALING_ENVIRONMENT_STORAGE_KEY, nextEnvironment);
+    } catch (error) {
+      log('TelnyxLoginForm: Error saving environment:', error);
+      Alert.alert('Developer options', 'Could not save the signaling environment.');
+    }
   };
 
   return (
@@ -707,6 +734,18 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
           <Text style={styles.versionText}>{versionLabel}</Text>
         </View>
       </View>
+
+      <DeveloperOptionsSheet
+        visible={showDeveloperOptions}
+        environment={environment}
+        canChangeEnvironment={!isConnected && !isConnecting}
+        canForceIceRestart={activeCallState === TelnyxCallState.ACTIVE}
+        onClose={() => setShowDeveloperOptions(false)}
+        onSelectEnvironment={(nextEnvironment) => {
+          void handleSelectEnvironment(nextEnvironment);
+        }}
+        onForceIceRestart={handleForceIceRestart}
+      />
 
       <CredentialProfileSheet
         visible={showProfileSheet}

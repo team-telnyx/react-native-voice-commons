@@ -1,5 +1,5 @@
 import { EventEmitter } from 'eventemitter3';
-import { PROD_HOST } from './env';
+import { resolveSignalingHost, type TelnyxEnvironment } from './env';
 import { isMessage } from './message';
 import { createDeferredPromise } from './promise';
 import type { DeferredPromise } from './promise';
@@ -24,6 +24,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
   private reconnectTimer: any = null;
   private isClosed: boolean = false;
   private hasEmittedClose: boolean = false;
+  private readonly signalingHost: string;
 
   // Track last time we observed live traffic in either direction. Used by
   // callers to decide whether the socket is trustworthy after the app has
@@ -36,10 +37,10 @@ export class Connection extends EventEmitter<ConnectionEvents> {
   private transactions: Map<string, DeferredPromise<unknown>>;
   private messageQueue: unknown[];
 
-  constructor(voiceSDKId?: string) {
+  constructor(voiceSDKId?: string, environment: TelnyxEnvironment = 'production') {
     super();
     this.customVoiceSDKId = voiceSDKId;
-    // TODO: Toggle between PROD and DEV
+    this.signalingHost = resolveSignalingHost(environment);
     const wsUrl = this.buildWebsocketURL();
     log.debug('[Connection]: WebSocket URL:', wsUrl);
     log.debug('[Connection]: Attempting to connect to:', wsUrl);
@@ -207,6 +208,10 @@ export class Connection extends EventEmitter<ConnectionEvents> {
     return this.isSocketConnected;
   }
 
+  public get host(): string {
+    return this.signalingHost;
+  }
+
   /**
    * Milliseconds since the last observed traffic on the socket (open, send,
    * or receive). Returns `Infinity` if we've never seen traffic. Used to
@@ -240,7 +245,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
   }
 
   private buildWebsocketURL = () => {
-    const url = new URL(PROD_HOST);
+    const url = new URL(this.signalingHost);
 
     // Use custom voice_sdk_id from push notification if available, otherwise use global one
     const voiceSDKIdToUse = this.customVoiceSDKId || VOICE_SDK_ID;

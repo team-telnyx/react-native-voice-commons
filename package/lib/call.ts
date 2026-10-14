@@ -38,7 +38,7 @@ import { CallReportCollector } from './call-report-collector';
 import type { CallReportConfig, CallReportSummary } from './call-report-models';
 import { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
 import { CALL_REPORT_ID, VOICE_SDK_ID } from './global';
-import { DEFAULT_SDK_IDENTITY, PROD_HOST, type SDKIdentity } from './env';
+import { DEFAULT_SDK_IDENTITY, type SDKIdentity } from './env';
 
 type CallEvents = {
   'telnyx.call.state': (call: Call, state: CallState) => void;
@@ -1416,7 +1416,7 @@ export class Call extends EventEmitter<CallEvents> {
     const payload = this.callReportCollector.buildPayload(summary);
 
     this.callReportCollector
-      .sendPayload(payload, callReportId, PROD_HOST, VOICE_SDK_ID)
+      .sendPayload(payload, callReportId, this.connection.host, VOICE_SDK_ID)
       .then(() => {
         log.debug('[Call] Posted call report');
       })
@@ -1435,7 +1435,7 @@ export class Call extends EventEmitter<CallEvents> {
     const payload = this.callReportCollector.flush(summary);
 
     this.callReportCollector
-      .sendPayload(payload, callReportId, PROD_HOST, VOICE_SDK_ID)
+      .sendPayload(payload, callReportId, this.connection.host, VOICE_SDK_ID)
       .catch((err) => {
         log.error('[Call] Failed to send intermediate call report:', err);
       });

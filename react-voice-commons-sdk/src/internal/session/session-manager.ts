@@ -14,6 +14,7 @@ import {
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
 const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
 const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
+const SIGNALING_ENVIRONMENT_STORAGE_KEY = '@telnyx_signaling_environment';
 
 /**
  * Manages the connection lifecycle to the Telnyx platform.
@@ -243,9 +244,11 @@ export class SessionManager {
         const storedMissedCallNotifications = await AsyncStorage.getItem(
           MISSED_CALL_NOTIFICATIONS_STORAGE_KEY
         );
+        const storedEnvironment = await AsyncStorage.getItem(SIGNALING_ENVIRONMENT_STORAGE_KEY);
         const useTrickleIce = storedUseTrickleIce === 'true';
         const pushWhenActive = storedPushWhenActive === 'true';
         const enableMissedCallNotifications = storedMissedCallNotifications === 'true';
+        const environment = storedEnvironment === 'development' ? 'development' : 'production';
 
         if (this._isTeardownActive()) {
           return;
@@ -260,6 +263,7 @@ export class SessionManager {
             useTrickleIce,
             pushWhenActive,
             enableMissedCallNotifications,
+            environment,
           });
         }
         // Check if we have token-based authentication data
@@ -271,6 +275,7 @@ export class SessionManager {
             useTrickleIce,
             pushWhenActive,
             enableMissedCallNotifications,
+            environment,
           });
         }
 
@@ -485,6 +490,7 @@ export class SessionManager {
           pushWhenActive: config.pushWhenActive,
           enableMissedCallNotifications: config.enableMissedCallNotifications ?? false,
           useTrickleIce: config.useTrickleIce,
+          environment: config.environment ?? 'production',
           enableCallReports: config.enableCallReports,
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
@@ -507,6 +513,7 @@ export class SessionManager {
           pushWhenActive: config.pushWhenActive,
           enableMissedCallNotifications: config.enableMissedCallNotifications ?? false,
           useTrickleIce: config.useTrickleIce,
+          environment: config.environment ?? 'production',
           enableCallReports: config.enableCallReports,
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,

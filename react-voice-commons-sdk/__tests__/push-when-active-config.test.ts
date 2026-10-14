@@ -38,6 +38,41 @@ describe('push-when-active configuration persistence', () => {
     expect(AsyncStorage.setItem).toHaveBeenCalledWith('@push_when_active', 'true');
   });
 
+  it('stores and restores the signaling environment', async () => {
+    const client = new TelnyxVoipClient();
+    const connect = jest
+      .spyOn((client as any)._sessionManager, 'connectWithCredential')
+      .mockResolvedValue(undefined);
+
+    await client.login(
+      createCredentialConfig('sip-user', 'sip-password', {
+        environment: 'development',
+      })
+    );
+
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      '@telnyx_signaling_environment',
+      'development'
+    );
+
+    const storedValues: Record<string, string> = {
+      '@telnyx_username': 'sip-user',
+      '@telnyx_password': 'sip-password',
+      '@telnyx_signaling_environment': 'development',
+    };
+    (AsyncStorage.getItem as jest.Mock).mockImplementation(
+      async (key: string) => storedValues[key] ?? null
+    );
+    connect.mockClear();
+
+    await expect(client.loginFromStoredConfig()).resolves.toBe(true);
+    expect(connect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        environment: 'development',
+      })
+    );
+  });
+
   it('restores the opt-in when reconnecting from stored credentials', async () => {
     const storedValues: Record<string, string> = {
       '@telnyx_username': 'sip-user',
