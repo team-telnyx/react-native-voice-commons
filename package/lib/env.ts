@@ -1,6 +1,12 @@
 import * as pkg from '../package.json';
 export const DEV_HOST = 'wss://rtcdev.telnyx.com';
 export const PROD_HOST = 'wss://rtc.telnyx.com';
+
+export type TelnyxEnvironment = 'production' | 'development';
+
+export const resolveSignalingHost = (
+  environment: TelnyxEnvironment = 'production'
+): string => (environment === 'development' ? DEV_HOST : PROD_HOST);
 export const IS_DEV = process.env.NODE_ENV === 'development';
 export const DEFAULT_SDK_VERSION = pkg.version;
 export const SDK_VERSION = pkg.version;
