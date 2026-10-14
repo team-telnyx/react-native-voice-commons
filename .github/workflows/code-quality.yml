@@ -42,21 +42,29 @@ jobs:
           echo "Running MDX lint check on documentation markdown files..."
           cd docs-markdown && npm run lint
 
+      - name: Release script checks
+        run: |
+          shellcheck scripts/release/*.sh
+          scripts/release/test_release_package.sh
+
       - name: Code Quality Summary
         if: always()
         run: |
-          echo "## Code Quality Report" >> $GITHUB_STEP_SUMMARY
-          echo "This workflow checks code formatting and linting." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Coverage:" >> $GITHUB_STEP_SUMMARY
-          echo "- 🎨 **Prettier**: All files (*.js, *.jsx, *.ts, *.tsx, *.json, *.md)" >> $GITHUB_STEP_SUMMARY
-          echo "- 🔍 **ESLint**: react-voice-commons-sdk/ (non-blocking)" >> $GITHUB_STEP_SUMMARY
-          echo "- 📝 **MDX Lint**: docs-markdown/ (strict MDX validation)" >> $GITHUB_STEP_SUMMARY
-          echo "- 🏗️ **Build**: react-voice-commons-sdk compiles (same commands as release-01)" >> $GITHUB_STEP_SUMMARY
-          echo "- 🔒 **Security**: npm audit on all projects" >> $GITHUB_STEP_SUMMARY
-          echo "- 🛡️ **CodeQL**: All JavaScript/TypeScript files" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Workflow completed successfully" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Code Quality Report"
+            echo "This workflow checks code formatting and linting."
+            echo ""
+            echo "### Coverage:"
+            echo "- 🎨 **Prettier**: All files (*.js, *.jsx, *.ts, *.tsx, *.json, *.md)"
+            echo "- 🔍 **ESLint**: react-voice-commons-sdk/ (non-blocking)"
+            echo "- 📝 **MDX Lint**: docs-markdown/ (strict MDX validation)"
+            echo "- 🐚 **Release scripts**: ShellCheck and regression tests"
+            echo "- 🏗️ **Build**: react-voice-commons-sdk compiles (same commands as release-01)"
+            echo "- 🔒 **Security**: npm audit on all projects"
+            echo "- 🛡️ **CodeQL**: All JavaScript/TypeScript files"
+            echo ""
+            echo "- ✅ Workflow completed successfully"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   build-commons-sdk:
     name: Build React Voice Commons SDK
