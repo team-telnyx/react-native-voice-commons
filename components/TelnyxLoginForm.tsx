@@ -62,7 +62,7 @@ async function buildProfileConnectionConfig(
     debug: true,
     pushNotificationDeviceToken: pushToken || undefined,
     pushWhenActive: true,
-    enableMissedCallNotifications: false,
+    enableMissedCallNotifications: true,
     useTrickleIce: DEMO_USE_TRICKLE_ICE,
     enableCallReports: true,
   };

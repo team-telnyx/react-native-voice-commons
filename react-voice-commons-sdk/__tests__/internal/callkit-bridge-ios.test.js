@@ -150,7 +150,12 @@ describe('iOS CallKitBridge PushKit watchdog handling', () => {
     );
     const collisionBranch = sliceBetween(
       handleMissedCallPushIfNeeded,
-      'guard activeCall["source"] as? String == "missed_call_push" else {',
+      'guard activeSource == "missed_call_push" else {',
+      'return true'
+    );
+    const matchingIncomingPushBranch = sliceBetween(
+      handleMissedCallPushIfNeeded,
+      'if activeSource == "push_notification" || activeSource == "terminated_app_push"',
       'return true'
     );
     const activeBranch = sliceBetween(
@@ -167,6 +172,9 @@ describe('iOS CallKitBridge PushKit watchdog handling', () => {
     expect(collisionBranch).toContain('source: "missed_call_collision_watchdog"');
     expect(collisionBranch).toContain('reportAndEndWatchdogCall(');
     expect(collisionBranch).not.toContain('completion?()');
+
+    expect(matchingIncomingPushBranch).toContain('finishMissedCall()');
+    expect(matchingIncomingPushBranch).not.toContain('markMissedCallProcessed');
 
     expect(activeBranch).toContain('reportAndEndWatchdogCall(');
     expect(activeBranch).toContain('finishMissedCall()');

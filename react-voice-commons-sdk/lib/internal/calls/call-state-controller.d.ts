@@ -117,6 +117,7 @@ export declare class CallStateController {
     private _removeClientListeners;
     private _handleTelnyxIncomingCall;
     private _handleTelnyxReattachedCall;
+    private _handleRemoteCallEnded;
     private _handleTelnyxCallStateChanged;
     private _handleTelnyxCallRemoved;
     /**

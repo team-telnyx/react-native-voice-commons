@@ -1,6 +1,6 @@
 import { Platform, AppState } from 'react-native';
 import CallKit, { CallEndReason } from './callkit';
-import { Call } from '@telnyx/react-native-voice-sdk';
+import { Call, type CallTerminationReason } from '@telnyx/react-native-voice-sdk';
 import { VoicePnBridge } from '../internal/voice-pn-bridge';
 import type { TelnyxVoipClient } from '../telnyx-voip-client';
 
@@ -787,6 +787,39 @@ class CallKitCoordinator {
       console.error('CallKitCoordinator: Error processing push received event:', error);
       return false;
     }
+  }
+
+  /** End a still-pending PushKit CallKit call after a remote hangup. */
+  async handlePendingPushCallRemoteEnded(
+    callKitUUID: string,
+    reason?: CallTerminationReason
+  ): Promise<boolean> {
+    callKitUUID = this.normalizeUUID(callKitUUID);
+
+    // Do not let an unrelated/stale socket BYE terminate another CallKit call.
+    // The UUID is added here only after native CallKit registration succeeds.
+    if (!this.pendingPushCallUUIDs.has(callKitUUID)) {
+      console.warn('CallKitCoordinator: Ignoring remote-ended event for unknown push UUID', {
+        callKitUUID,
+        reason,
+      });
+      return false;
+    }
+
+    console.log('CallKitCoordinator: Ending pending push call after remote hangup', {
+      callKitUUID,
+      reason,
+    });
+
+    if (!this.endedCalls.has(callKitUUID)) {
+      await CallKit.reportCallEnded(callKitUUID, CallEndReason.RemoteEnded);
+      this.endedCalls.add(callKitUUID);
+    }
+
+    this.cleanupCall(callKitUUID);
+    await this.clearMatchingPendingVoipPush(callKitUUID);
+    await this.checkBackgroundDisconnection();
+    return true;
   }
 
   /**

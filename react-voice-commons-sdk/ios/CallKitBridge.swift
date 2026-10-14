@@ -1064,7 +1064,22 @@ import React
             }
 
             if let activeCall = activeCalls[callUUID] {
-                guard activeCall["source"] as? String == "missed_call_push" else {
+                let activeSource = activeCall["source"] as? String
+
+                // A missed-call push normally reuses the original incoming
+                // push's call_id. End that still-ringing CallKit call and show
+                // the notification instead of treating it as a UUID collision.
+                if activeSource == "push_notification" || activeSource == "terminated_app_push"
+                    || activeSource == "push"
+                {
+                    NSLog(
+                        "TelnyxVoice: Missed call matched active incoming push UUID: \(callUUID)"
+                    )
+                    finishMissedCall()
+                    return true
+                }
+
+                guard activeSource == "missed_call_push" else {
                     NSLog("TelnyxVoice: Suppressing missed call notification because UUID belongs to an active call: \(callUUID)")
                     markMissedCallProcessed(id: missedCallId)
                     reportAndEndWatchdogCall(

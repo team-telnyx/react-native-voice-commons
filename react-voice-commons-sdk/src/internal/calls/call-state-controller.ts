@@ -1,6 +1,11 @@
 import { BehaviorSubject, Observable } from 'rxjs';
 import { distinctUntilChanged, map } from 'rxjs/operators';
-import { TelnyxRTC, Call as TelnyxCall, type CallOptions } from '@telnyx/react-native-voice-sdk';
+import {
+  TelnyxRTC,
+  Call as TelnyxCall,
+  type CallOptions,
+  type CallTerminationReason,
+} from '@telnyx/react-native-voice-sdk';
 import { Call } from '../../models/call';
 import { TelnyxCallState } from '../../models/call-state';
 import { SessionManager } from '../session/session-manager';
@@ -372,6 +377,11 @@ export class CallStateController {
     // Listen for call removal events from TelnyxRTC (multi-call support)
     telnyxClient.on('telnyx.call.removed', this._handleTelnyxCallRemoved);
 
+    // A caller can hang up while PushKit is reconnecting the socket, before
+    // an INVITE creates a Call object. Forward that terminal event so the
+    // already-presented CallKit call is dismissed.
+    telnyxClient.on('telnyx.call.remoteEnded', this._handleRemoteCallEnded);
+
     console.log('CallStateController: Client listeners set up successfully');
   }
 
@@ -384,6 +394,7 @@ export class CallStateController {
     this._listenerClient.off('telnyx.call.reattached', this._handleTelnyxReattachedCall);
     this._listenerClient.off('telnyx.call.stateChanged', this._handleTelnyxCallStateChanged);
     this._listenerClient.off('telnyx.call.removed', this._handleTelnyxCallRemoved);
+    this._listenerClient.off('telnyx.call.remoteEnded', this._handleRemoteCallEnded);
     this._listenerClient = undefined;
   }
 
@@ -395,6 +406,17 @@ export class CallStateController {
   private _handleTelnyxReattachedCall = (telnyxCall: TelnyxCall, msg: any): void => {
     console.log('CallStateController: Reattached call received:', telnyxCall.callId);
     this._handleIncomingCall(telnyxCall, msg, true);
+  };
+
+  private _handleRemoteCallEnded = (callId: string, reason: CallTerminationReason): void => {
+    console.log('CallStateController: Pending push call ended remotely', {
+      callId,
+      reason,
+    });
+
+    void callKitCoordinator.handlePendingPushCallRemoteEnded(callId, reason).catch((error) => {
+      console.error('CallStateController: Failed to end pending push CallKit call:', error);
+    });
   };
 
   private _handleTelnyxCallStateChanged = (telnyxCall: TelnyxCall, state: string): void => {
