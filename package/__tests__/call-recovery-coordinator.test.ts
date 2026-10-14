@@ -104,6 +104,38 @@ describe('CallRecoveryCoordinator', () => {
     });
   });
 
+  describe('manual testing trigger', () => {
+    it('exercises ICE restart on a healthy connected call', async () => {
+      const { deps, mocks } = createDeps({
+        getPeerIceState: jest.fn().mockReturnValue('connected'),
+        isSignalingFresh: jest.fn().mockReturnValue(true),
+      });
+      const coordinator = new CallRecoveryCoordinator(deps);
+
+      const started = coordinator.simulateIceFailureForTesting();
+      await flush();
+
+      expect(started).toBe(true);
+      expect(mocks.sendSignalingProbe).not.toHaveBeenCalled();
+      expect(mocks.restartIce).toHaveBeenCalledTimes(1);
+      expect(mocks.sendUpdateMedia).toHaveBeenCalledWith('offer-sdp');
+      expect(mocks.applyRemoteAnswer).toHaveBeenCalledWith('answer-sdp');
+      expect(coordinator.state).toBe('verifyingMedia');
+    });
+
+    it('rejects the trigger when the call is not active', async () => {
+      const { deps, mocks } = createDeps({ callState: jest.fn().mockReturnValue('held') });
+      const coordinator = new CallRecoveryCoordinator(deps);
+
+      const started = coordinator.simulateIceFailureForTesting();
+      await flush();
+
+      expect(started).toBe(false);
+      expect(mocks.restartIce).not.toHaveBeenCalled();
+      expect(coordinator.isRecoveryActive).toBe(false);
+    });
+  });
+
   describe('duplicate suppression and debounce', () => {
     it('suppresses duplicate failure callbacks within one episode', async () => {
       const { deps, mocks } = createDeps();
