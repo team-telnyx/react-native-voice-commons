@@ -176,4 +176,47 @@ describe('Recovery reattach fallback (VSDK-679 review fixes)', () => {
     await expect((client as any).performReattachFallbackForRecovery('call-a')).resolves.toBe(false);
     expect(connectSpy).not.toHaveBeenCalled();
   });
+
+  it('explicit disconnect during reattach prevents late call attachment without recovery-failed error', async () => {
+    const call = createMockCall('call-a');
+    client.calls.set('call-a', call as any);
+    const failSpy = jest.spyOn(client as any, 'failRecoveryReattach');
+    let resolveConnect: () => void = () => {};
+    connectSpy.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveConnect = resolve;
+      })
+    );
+
+    const fallback = (client as any).performReattachFallbackForRecovery('call-a');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+
+    (client as any).connection = { close: jest.fn(), isConnected: true };
+    (TelnyxRTC.prototype as any).disconnect.call(client, false);
+    client.emit('telnyx.call.reattached', call as any, {} as any);
+    resolveConnect();
+
+    await expect(fallback).resolves.toBe(false);
+    expect(failSpy).not.toHaveBeenCalled();
+    expect(call.setDropped).not.toHaveBeenCalled();
+  });
+
+  it('internal recovery disconnect(true) still permits the intended reconnect', async () => {
+    const call = createMockCall('call-a');
+    client.calls.set('call-a', call as any);
+    (client as any).connection = { close: jest.fn(), isConnected: true };
+
+    (TelnyxRTC.prototype as any).disconnect.call(client, true);
+    expect((client as any).explicitDisconnectRequested).toBe(false);
+
+    const fallback = (client as any).performReattachFallbackForRecovery('call-a');
+    await Promise.resolve();
+    await Promise.resolve();
+    client.emit('telnyx.call.reattached', call as any, {} as any);
+
+    await expect(fallback).resolves.toBe(true);
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+  });
 });
