@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import uuid from 'uuid-random';
-import { SDK_NAME, SDK_VERSION } from '../env';
+import { DEFAULT_SDK_IDENTITY, SDK_VERSION, type SDKIdentity } from '../env';
 import { TelnyxRTCMethod } from './methods';
 
 // const attachMessage = {
@@ -64,7 +64,7 @@ export function createAttachMessage({
   callerIdNumber = '',
   clientState = '',
   userVariables = [],
-}: CreateAttachMessageParams) {
+}: CreateAttachMessageParams, sdkIdentity: SDKIdentity = DEFAULT_SDK_IDENTITY) {
   return {
     id: uuid(),
     jsonrpc: '2.0' as const,
@@ -87,9 +87,9 @@ export function createAttachMessage({
       },
       sdp,
       sessid: sessionId,
-      'User-Agent': `ReactNative-${SDK_VERSION}`,
-      mobile_sdk_name: SDK_NAME,
-      mobile_sdk_version: SDK_VERSION,
+      'User-Agent': `ReactNative-${sdkIdentity.version}`,
+      mobile_sdk_name: sdkIdentity.name,
+      mobile_sdk_version: sdkIdentity.version,
     },
   };
 }
@@ -123,14 +123,17 @@ export function isAttachEvent(msg: unknown): msg is AttachEvent {
   return tmp.method === TelnyxRTCMethod.ATTACH && !!tmp.params?.callID;
 }
 
-export function createAttachCallMessage(pushNotificationPayload?: any) {
+export function createAttachCallMessage(
+  pushNotificationPayload?: any,
+  sdkIdentity: SDKIdentity = DEFAULT_SDK_IDENTITY
+) {
   const message = {
     jsonrpc: '2.0' as const,
     id: Math.floor(Math.random() * 1000000),
     method: TelnyxRTCMethod.ATTACH_CALLS,
     params: {
-      mobile_sdk_name: SDK_NAME,
-      mobile_sdk_version: SDK_VERSION,
+      mobile_sdk_name: sdkIdentity.name,
+      mobile_sdk_version: sdkIdentity.version,
     } as Record<string, any>,
   };
 

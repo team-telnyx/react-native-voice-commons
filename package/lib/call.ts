@@ -32,7 +32,7 @@ import { CallReportCollector } from './call-report-collector';
 import type { CallReportConfig, CallReportSummary } from './call-report-models';
 import { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
 import { CALL_REPORT_ID, VOICE_SDK_ID } from './global';
-import { PROD_HOST, SDK_VERSION } from './env';
+import { DEFAULT_SDK_IDENTITY, PROD_HOST, SDK_VERSION, type SDKIdentity } from './env';
 
 type CallEvents = {
   'telnyx.call.state': (call: Call, state: CallState) => void;
@@ -66,6 +66,7 @@ type CallConstructorParams = {
   callReportConfig?: CallReportConfig;
   pushWhenActive?: boolean;
   pushDeviceToken?: string;
+  sdkIdentity?: SDKIdentity;
 };
 
 export type CallDirection = 'inbound' | 'outbound';
@@ -85,6 +86,7 @@ export type CreateInboundCall = {
   callReportConfig?: CallReportConfig;
   pushWhenActive?: boolean;
   pushDeviceToken?: string;
+  sdkIdentity?: SDKIdentity;
 };
 
 // TODO persist customHeaders and clientState
@@ -126,6 +128,7 @@ export class Call extends EventEmitter<CallEvents> {
     callReportConfig,
     pushWhenActive = false,
     pushDeviceToken,
+    sdkIdentity,
   }: CreateInboundCall) {
     const call = new Call({
       connection,
@@ -141,6 +144,7 @@ export class Call extends EventEmitter<CallEvents> {
       callReportConfig,
       pushWhenActive,
       pushDeviceToken,
+      sdkIdentity,
     });
 
     // Store the custom headers from the INVITE message
@@ -220,6 +224,7 @@ export class Call extends EventEmitter<CallEvents> {
   private callStartTimestamp: string;
   private readonly pushWhenActive: boolean;
   private readonly pushDeviceToken?: string;
+  private readonly sdkIdentity: SDKIdentity;
 
   constructor({
     connection,
@@ -235,6 +240,7 @@ export class Call extends EventEmitter<CallEvents> {
     callReportConfig,
     pushWhenActive = false,
     pushDeviceToken,
+    sdkIdentity = DEFAULT_SDK_IDENTITY,
   }: CallConstructorParams) {
     super();
 
@@ -252,6 +258,7 @@ export class Call extends EventEmitter<CallEvents> {
     this.callReportConfig = callReportConfig ?? DEFAULT_CALL_REPORT_CONFIG;
     this.pushWhenActive = pushWhenActive;
     this.pushDeviceToken = pushDeviceToken;
+    this.sdkIdentity = sdkIdentity;
     this.callStartTimestamp = new Date().toISOString();
 
     // Initialize call report collector if enabled
@@ -410,7 +417,7 @@ export class Call extends EventEmitter<CallEvents> {
         sessionId: this.sessionId,
         customHeaders,
         ...pushAnswerParams,
-      })
+      }, this.sdkIdentity)
     );
 
     if (this.isTrickleIceEnabled()) {
@@ -465,7 +472,7 @@ export class Call extends EventEmitter<CallEvents> {
         callerIdNumber: this.options.callerIdNumber || '',
         clientState: this.options.clientState || '',
         userVariables: [], // Not available in CallOptions, using empty array
-      });
+      }, this.sdkIdentity);
 
       log.debug('[Call] Sending attach message for reattachment:', {
         callId: this.callId,
@@ -821,7 +828,7 @@ export class Call extends EventEmitter<CallEvents> {
           sessionId: this.sessionId,
           callId: this.callId,
           sdp: this.getLocalSdpForSignaling(),
-        })
+        }, this.sdkIdentity)
       );
 
       if (!isInviteACKMessage(msg)) {

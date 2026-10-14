@@ -1,5 +1,4 @@
 import { TelnyxRTC } from '../lib/client';
-import { setSDKIdentity } from '../lib/env';
 import { createAttachCallMessage, createAttachMessage } from '../lib/messages/attach';
 import { createAnswerMessage, createInviteMessage } from '../lib/messages/call';
 import { createPasswordLoginMessage, createTokenLoginMessage } from '../lib/messages/login';
@@ -7,8 +6,6 @@ import { createPasswordLoginMessage, createTokenLoginMessage } from '../lib/mess
 const coreIdentity = { mobile_sdk_name: 'react_native', mobile_sdk_version: '1.1.0' };
 
 describe('mobile SDK identity signaling', () => {
-  beforeEach(() => setSDKIdentity('react_native', '1.1.0'));
-
   const expectCoreIdentity = (message: { params: Record<string, unknown> }) => {
     expect(message.params).toEqual(expect.objectContaining(coreIdentity));
   };
@@ -43,8 +40,10 @@ describe('mobile SDK identity signaling', () => {
   });
 
   it('applies wrapper identity atomically without changing User-Agent format', () => {
-    setSDKIdentity('react_native_commons', '2.3.4');
-    const message = createTokenLoginMessage({ login_token: 'token' });
+    const message = createTokenLoginMessage(
+      { login_token: 'token' },
+      { name: 'react_native_commons', version: '2.3.4' }
+    );
     expect(message.params).toEqual(
       expect.objectContaining({
         mobile_sdk_name: 'react_native_commons',
@@ -52,6 +51,21 @@ describe('mobile SDK identity signaling', () => {
         'User-Agent': 'ReactNative-2.3.4',
       })
     );
+  });
+
+  it('keeps identity isolated between client instances', () => {
+    const commons = new TelnyxRTC({
+      login_token: 'commons',
+      sdkName: 'react_native_commons',
+      sdkVersion: '2.3.4',
+    });
+    const core = new TelnyxRTC({ login_token: 'core' });
+
+    expect((commons as any).sdkIdentity).toEqual({
+      name: 'react_native_commons',
+      version: '2.3.4',
+    });
+    expect((core as any).sdkIdentity).toEqual({ name: 'react_native', version: '1.1.0' });
   });
 
   it('rejects partial identity overrides', () => {

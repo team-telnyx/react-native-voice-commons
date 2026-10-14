@@ -83,11 +83,10 @@ export interface ClientOptions {
    * @default 1000
    */
   callReportMaxLogEntries?: number;
-  /** @deprecated Use sdkName and sdkVersion together to override SDK identity. */
-  sdkVersion?: string;
   /**
-   * Override the public SDK identity atomically with sdkVersion.
-   * Wrapper SDKs must provide both values; partial overrides are rejected.
+   * Override the public SDK identity atomically. Wrapper SDKs must provide
+   * both sdkName and sdkVersion; partial overrides are rejected.
    */
   sdkName?: string;
+  sdkVersion?: string;
 }
