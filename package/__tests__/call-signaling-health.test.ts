@@ -1,7 +1,7 @@
 import { Call } from '../lib/call';
 import type { Connection } from '../lib/connection';
 
-function buildCall() {
+function buildCall(debug = false) {
   const connection: any = {
     addListener: jest.fn(),
     send: jest.fn(),
@@ -21,6 +21,7 @@ function buildCall() {
     telnyxLegId: 'telnyx-leg-id',
     callId: 'signaling-call-id',
     callState: 'active',
+    debug,
   });
 
   const coordinator = (call as any).recoveryCoordinator;
@@ -139,5 +140,21 @@ describe('Call signaling health checks (ICE restart recovery)', () => {
     call.checkSignalingHealthForRecovery();
 
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('forwards a manual ICE failure when debug mode is enabled', () => {
+    const { call, coordinator } = buildCall(true);
+    const simulate = jest.spyOn(coordinator, 'simulateIceFailureForTesting').mockReturnValue(true);
+
+    expect(call.simulateIceFailureForTesting()).toBe(true);
+    expect(simulate).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a manual ICE failure when debug mode is disabled', () => {
+    const { call, coordinator } = buildCall();
+    const simulate = jest.spyOn(coordinator, 'simulateIceFailureForTesting');
+
+    expect(call.simulateIceFailureForTesting()).toBe(false);
+    expect(simulate).not.toHaveBeenCalled();
   });
 });

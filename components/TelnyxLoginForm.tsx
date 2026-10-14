@@ -507,18 +507,53 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
     }
   };
 
+  const handleSimulateIceFailure = () => {
+    if (!activeCall || activeCallState !== TelnyxCallState.ACTIVE) {
+      Alert.alert('ICE recovery test', 'Start a call and wait until it is active first.');
+      return;
+    }
+
+    const started = activeCall.simulateIceFailureForTesting();
+    Alert.alert(
+      'ICE recovery test',
+      started
+        ? 'ICE failure injected. The SDK recovery flow is now restarting ICE; watch the call and logs.'
+        : 'The recovery test could not start. Check that debug mode is enabled and no recovery is already running.'
+    );
+  };
+
+  const handleDeveloperOptions = () => {
+    Alert.alert(
+      'Developer options',
+      activeCallState === TelnyxCallState.ACTIVE
+        ? 'Choose a diagnostic action for the active call.'
+        : 'The ICE recovery test becomes available when a call is active.',
+      [
+        {
+          text: 'Simulate ICE failure',
+          onPress: handleSimulateIceFailure,
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <VoipTokenFetcher onTokenReceived={handleTokenReceived} debug={debug} />
       <View style={styles.root} testID="homeScreenRoot">
         <View style={styles.topBar}>
           <View style={styles.topSpacer} />
-          <Image
-            source={telnyxLogo}
-            style={styles.logo}
-            resizeMode="contain"
+          <TouchableOpacity
+            onLongPress={handleDeveloperOptions}
+            delayLongPress={1200}
+            testID="developerOptionsButton"
+            accessibilityRole="button"
             accessibilityLabel="Telnyx WebRTC"
-          />
+            accessibilityHint="Long press to open developer options"
+          >
+            <Image source={telnyxLogo} style={styles.logo} resizeMode="contain" />
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.menuButton}
             onPress={() => Alert.alert('Menu', 'Websocket Messages')}

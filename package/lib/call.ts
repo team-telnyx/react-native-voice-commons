@@ -1286,6 +1286,22 @@ export class Call extends EventEmitter<CallEvents> {
     this.recoveryCoordinator?.cancel(reason);
   }
 
+  /**
+   * Inject an ICE failure into the active-call recovery flow for manual
+   * testing. This is available only when the SDK client was created with
+   * `debug: true` and does not alter production ICE event handling.
+   *
+   * @returns true when a recovery episode was started.
+   */
+  public simulateIceFailureForTesting = (): boolean => {
+    if (!this.debugEnabled) {
+      log.warn('[Call] Ignoring test ICE failure because debug mode is disabled');
+      return false;
+    }
+
+    return this.recoveryCoordinator?.simulateIceFailureForTesting() ?? false;
+  };
+
   public checkSignalingHealthForRecovery = (): void => {
     if (this.state !== 'active') {
       return;

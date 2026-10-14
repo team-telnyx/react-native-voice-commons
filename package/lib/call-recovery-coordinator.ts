@@ -165,6 +165,43 @@ export class CallRecoveryCoordinator {
   }
 
   /**
+   * Inject an ICE failure for demo-app/manual testing.
+   *
+   * Unlike a real ICE callback, this deliberately bypasses the
+   * already-connected guard so a healthy active call can exercise the same
+   * signaling probe, ICE restart, SDP exchange, and RTP verification path.
+   * Production recovery still enters through notifyIceFailure().
+   */
+  public simulateIceFailureForTesting(): boolean {
+    if (
+      this.deps.callState() !== 'active' ||
+      this.deps.isClientReconnecting() ||
+      this.currentState !== 'idle'
+    ) {
+      return false;
+    }
+
+    if (this.debounceHandle != null) {
+      this.cancelTimer(this.debounceHandle);
+      this.debounceHandle = null;
+    }
+
+    this.recoveryFailedLatch = false;
+    this.currentGeneration += 1;
+    this.currentState = 'probing';
+    this.logger.info('Test ICE failure injected', { generation: this.currentGeneration });
+
+    if (this.deps.isSignalingFresh()) {
+      this.logger.info('Signaling recently active, proceeding to test ICE restart');
+      void this.runRestart();
+    } else {
+      void this.runProbe('mediaRecovery');
+    }
+
+    return true;
+  }
+
+  /**
    * Observe an ICE failure on the monitored call.
    *
    * - 'failed' starts a recovery episode immediately (duplicate-suppressed).

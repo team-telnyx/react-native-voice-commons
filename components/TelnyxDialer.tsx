@@ -195,6 +195,37 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
     }
   };
 
+  const handleSimulateIceFailure = () => {
+    if (!activeCall || activeCallState !== TelnyxCallState.ACTIVE) {
+      Alert.alert('ICE recovery test', 'Start a call and wait until it is active first.');
+      return;
+    }
+
+    const started = activeCall.simulateIceFailureForTesting();
+    Alert.alert(
+      'ICE recovery test',
+      started
+        ? 'ICE failure injected. The SDK recovery flow is now restarting ICE; watch the call and logs.'
+        : 'The recovery test could not start. Check that debug mode is enabled and no recovery is already running.'
+    );
+  };
+
+  const handleDeveloperOptions = () => {
+    Alert.alert(
+      'Developer options',
+      activeCallState === TelnyxCallState.ACTIVE
+        ? 'Choose a diagnostic action for the active call.'
+        : 'The ICE recovery test becomes available when a call is active.',
+      [
+        {
+          text: 'Simulate ICE failure',
+          onPress: handleSimulateIceFailure,
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
@@ -212,12 +243,16 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
           </TouchableOpacity>
         </View>
 
-        <Image
-          source={telnyxLogo}
-          style={styles.logo}
-          resizeMode="contain"
+        <TouchableOpacity
+          onLongPress={handleDeveloperOptions}
+          delayLongPress={1200}
+          testID="developerOptionsButton"
+          accessibilityRole="button"
           accessibilityLabel="Telnyx WebRTC"
-        />
+          accessibilityHint="Long press to open developer options"
+        >
+          <Image source={telnyxLogo} style={styles.logo} resizeMode="contain" />
+        </TouchableOpacity>
 
         <Text style={styles.instructions}>
           Enter a destination (phone number or SIP user) to initiate your call.
