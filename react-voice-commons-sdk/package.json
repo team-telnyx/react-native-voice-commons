@@ -65,12 +65,16 @@
     "url": "https://github.com/team-telnyx/react-native-voice-commons/issues"
   },
   "peerDependencies": {
+    "@telnyx/react-native-voice-sdk": ">=1.1.1",
     "@react-native-async-storage/async-storage": "^2.1.0",
     "react": ">=19.0.0 <20.0.0",
     "react-native": ">=0.79.0 <1.0.0",
     "react-native-webrtc": "^124.0.5"
   },
   "peerDependenciesMeta": {
+    "@telnyx/react-native-voice-sdk": {
+      "optional": false
+    },
     "@react-native-async-storage/async-storage": {
       "optional": false
     },

@@ -1,7 +1,7 @@
 import { BehaviorSubject, Observable } from 'rxjs';
 import { distinctUntilChanged } from 'rxjs/operators';
 import * as TelnyxSDK from '@telnyx/react-native-voice-sdk';
-import * as pkg from '../../../package.json';
+import { REACT_NATIVE_COMMONS_SDK_IDENTITY } from '../sdk-identity';
 import { TelnyxConnectionState } from '../../models/connection-state';
 import {
   Config,
@@ -489,8 +489,8 @@ export class SessionManager {
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
           callReportMaxLogEntries: config.callReportMaxLogEntries,
-          sdkName: 'react_native_commons',
-          sdkVersion: pkg.version,
+          sdkName: REACT_NATIVE_COMMONS_SDK_IDENTITY.name,
+          sdkVersion: REACT_NATIVE_COMMONS_SDK_IDENTITY.version,
         };
         console.log(
           '🔧 SessionManager: Creating TelnyxRTC with credential config, logLevel:',
@@ -511,8 +511,8 @@ export class SessionManager {
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
           callReportMaxLogEntries: config.callReportMaxLogEntries,
-          sdkName: 'react_native_commons',
-          sdkVersion: pkg.version,
+          sdkName: REACT_NATIVE_COMMONS_SDK_IDENTITY.name,
+          sdkVersion: REACT_NATIVE_COMMONS_SDK_IDENTITY.version,
         };
         console.log(
           '🔧 SessionManager: Creating TelnyxRTC with token config, logLevel:',
