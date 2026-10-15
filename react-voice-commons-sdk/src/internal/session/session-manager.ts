@@ -489,6 +489,7 @@ export class SessionManager {
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
           callReportMaxLogEntries: config.callReportMaxLogEntries,
+          iceServers: config.iceServers,
           sdkName: REACT_NATIVE_COMMONS_SDK_IDENTITY.name,
           sdkVersion: REACT_NATIVE_COMMONS_SDK_IDENTITY.version,
         };
@@ -511,6 +512,7 @@ export class SessionManager {
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
           callReportMaxLogEntries: config.callReportMaxLogEntries,
+          iceServers: config.iceServers,
           sdkName: REACT_NATIVE_COMMONS_SDK_IDENTITY.name,
           sdkVersion: REACT_NATIVE_COMMONS_SDK_IDENTITY.version,
         };
