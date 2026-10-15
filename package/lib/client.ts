@@ -497,7 +497,17 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       telnyxSessionId: null,
       telnyxLegId: null,
       callId: null,
-      options,
+      options: {
+        ...options,
+        peerConnectionOptions: {
+          ...options.peerConnectionOptions,
+          // Client-level iceServers serves as the default; an explicit
+          // per-call override in peerConnectionOptions.iceServers wins.
+          iceServers:
+            options.peerConnectionOptions?.iceServers ??
+            this.options.iceServers,
+        },
+      },
       debug: this.options.debug,
       enableQualityMetrics: this.options.enableQualityMetrics,
       callReportConfig: this.getCallReportConfig(),
