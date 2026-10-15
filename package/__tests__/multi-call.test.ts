@@ -245,5 +245,92 @@ describe('TelnyxRTC Multi-Call Support', () => {
       expect(client.getCall('signal-a')).toBe(callA);
       expect(client.getPushNotificationCallKitUUID()).toBe('callkit-b');
     });
+
+    it('emits the CallKit UUID when a push call receives BYE before INVITE', () => {
+      client.processVoIPNotification({
+        metadata: { call_id: 'CALLKIT-B', voice_sdk_id: 'voice-sdk-b' },
+      });
+      (client as any).pendingInvite = {
+        params: { callID: 'signal-c' },
+      };
+      client.queueAnswerFromCallKit('CALLKIT-B');
+
+      const listener = jest.fn();
+      client.on('telnyx.call.remoteEnded', listener);
+      const bye = {
+        id: 1,
+        jsonrpc: '2.0',
+        method: 'telnyx_rtc.bye',
+        params: {
+          callID: 'signal-c',
+          cause: 'ORIGINATOR_CANCEL',
+          causeCode: 487,
+          dialogParams: { custom_headers: [] },
+          sipCode: 487,
+          sipReason: 'Request Terminated',
+          sip_call_id: 'sip-call-c',
+        },
+        voice_sdk_id: 'voice-sdk-b',
+      } as const;
+
+      (client as any).onSocketMessage(bye);
+
+      expect(listener).toHaveBeenCalledWith('callkit-b', {
+        cause: 'ORIGINATOR_CANCEL',
+        causeCode: 487,
+        sipCode: 487,
+        sipReason: 'Request Terminated',
+        sipCallId: 'sip-call-c',
+      });
+      expect((client as any).pendingInvite).toBeNull();
+      expect((client as any).pendingAnswerActions.size).toBe(0);
+      expect(client.getPushNotificationCallKitUUID()).toBeNull();
+      expect((client as any).isCallFromPush).toBe(false);
+    });
+
+    it('leaves BYE handling to the existing Call object once INVITE was processed', () => {
+      const existingCall = createMockCall('signal-c', 'ringing');
+      (existingCall as any)._callKitUUID = 'callkit-b';
+      client.calls.set('signal-c', existingCall as any);
+      client.processVoIPNotification({
+        metadata: { call_id: 'CALLKIT-B', voice_sdk_id: 'voice-sdk-b' },
+      });
+
+      const listener = jest.fn();
+      client.on('telnyx.call.remoteEnded', listener);
+
+      const bye = {
+        method: 'telnyx_rtc.bye',
+        params: { callID: 'signal-c', cause: 'ORIGINATOR_CANCEL' },
+      };
+      (client as any).onSocketMessage(bye);
+
+      expect(listener).toHaveBeenCalledWith('callkit-b', {
+        cause: 'ORIGINATOR_CANCEL',
+        causeCode: undefined,
+        sipCode: undefined,
+        sipReason: undefined,
+        sipCallId: undefined,
+      });
+      expect(client.getPushNotificationCallKitUUID()).toBe('callkit-b');
+    });
+
+    it('ignores an untracked BYE from a different push session', () => {
+      client.processVoIPNotification({
+        metadata: { call_id: 'CALLKIT-B', voice_sdk_id: 'voice-sdk-b' },
+      });
+
+      const listener = jest.fn();
+      client.on('telnyx.call.remoteEnded', listener);
+
+      (client as any).onSocketMessage({
+        method: 'telnyx_rtc.bye',
+        params: { callID: 'stale-signal', cause: 'ORIGINATOR_CANCEL' },
+        voice_sdk_id: 'voice-sdk-a',
+      });
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(client.getPushNotificationCallKitUUID()).toBe('callkit-b');
+    });
   });
 });

@@ -314,6 +314,18 @@ export type ByeEvent = {
   voice_sdk_id: string;
 };
 
+/**
+ * Details supplied by the signaling server when the remote party ends a call.
+ * Mirrors the termination reason exposed by the native iOS SDK.
+ */
+export type CallTerminationReason = {
+  cause?: string;
+  causeCode?: number;
+  sipCode?: number;
+  sipReason?: string;
+  sipCallId?: string;
+};
+
 type HangupRequest = {
   jsonrpc: '2.0';
   id: string;

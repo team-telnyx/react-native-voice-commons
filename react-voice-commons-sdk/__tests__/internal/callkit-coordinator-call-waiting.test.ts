@@ -1,4 +1,4 @@
-import CallKit from '../../src/callkit/callkit';
+import CallKit, { CallEndReason } from '../../src/callkit/callkit';
 import { callKitCoordinator } from '../../src/callkit/callkit-coordinator';
 import { VoicePnBridge } from '../../src/internal/voice-pn-bridge';
 
@@ -145,6 +145,46 @@ describe('CallKitCoordinator UUID-targeted call waiting', () => {
     expect(call.answer).toHaveBeenCalledTimes(1);
     expect(VoicePnBridge.clearPendingVoipPush).toHaveBeenCalledTimes(1);
     expect(coordinator.pendingPushCallUUIDs.has('callkit-b')).toBe(false);
+  });
+
+  it('ends a pending CallKit call when BYE arrives before INVITE', async () => {
+    coordinator.pendingPushCallUUIDs.add('callkit-b');
+    coordinator.isCallFromPush = true;
+    (VoicePnBridge.getPendingVoipPush as jest.Mock).mockResolvedValue(
+      JSON.stringify({
+        payload: { metadata: { call_id: 'CALLKIT-B', voice_sdk_id: 'voice-sdk-b' } },
+      })
+    );
+
+    const reason = {
+      cause: 'ORIGINATOR_CANCEL',
+      causeCode: 487,
+      sipCode: 487,
+      sipReason: 'Request Terminated',
+      sipCallId: 'sip-call-c',
+    };
+
+    await expect(
+      callKitCoordinator.handlePendingPushCallRemoteEnded('CALLKIT-B', reason)
+    ).resolves.toBe(true);
+
+    expect(CallKit.reportCallEnded).toHaveBeenCalledWith('callkit-b', CallEndReason.RemoteEnded);
+    expect(VoicePnBridge.clearPendingVoipPush).toHaveBeenCalledTimes(1);
+    expect(coordinator.pendingPushCallUUIDs.has('callkit-b')).toBe(false);
+    expect(coordinator.isCallFromPush).toBe(false);
+  });
+
+  it('does not let an unrelated pre-INVITE BYE end another pending call', async () => {
+    coordinator.pendingPushCallUUIDs.add('callkit-b');
+
+    await expect(
+      callKitCoordinator.handlePendingPushCallRemoteEnded('unknown-call', {
+        cause: 'ORIGINATOR_CANCEL',
+      })
+    ).resolves.toBe(false);
+
+    expect(CallKit.reportCallEnded).not.toHaveBeenCalled();
+    expect(coordinator.pendingPushCallUUIDs.has('callkit-b')).toBe(true);
   });
 
   it('selects the exact call after a successful resume', async () => {

@@ -689,6 +689,31 @@ class CallKitCoordinator {
             return false;
         }
     }
+    /** End a still-pending PushKit CallKit call after a remote hangup. */
+    async handlePendingPushCallRemoteEnded(callKitUUID, reason) {
+        callKitUUID = this.normalizeUUID(callKitUUID);
+        // Do not let an unrelated/stale socket BYE terminate another CallKit call.
+        // The UUID is added here only after native CallKit registration succeeds.
+        if (!this.pendingPushCallUUIDs.has(callKitUUID)) {
+            console.log('CallKitCoordinator: Ignoring remote-ended event for unknown push UUID', {
+                callKitUUID,
+                reason,
+            });
+            return false;
+        }
+        console.log('CallKitCoordinator: Ending pending push call after remote hangup', {
+            callKitUUID,
+            reason,
+        });
+        if (!this.endedCalls.has(callKitUUID)) {
+            await callkit_1.default.reportCallEnded(callKitUUID, callkit_1.CallEndReason.RemoteEnded);
+            this.endedCalls.add(callKitUUID);
+        }
+        this.cleanupCall(callKitUUID);
+        await this.clearMatchingPendingVoipPush(callKitUUID);
+        await this.checkBackgroundDisconnection();
+        return true;
+    }
     /**
      * Handle push notification answer - when user answers from CallKit but we don't have a WebRTC call yet
      * This is the iOS equivalent of the Android FCM handler
