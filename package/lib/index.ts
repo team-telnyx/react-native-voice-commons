@@ -5,6 +5,7 @@ export { Call, CallState } from './call';
 // Interfaces
 export * from './client-options';
 export * from './call-options';
+export * from './ice-servers';
 
 // Messages
 export * from './messages/media';
