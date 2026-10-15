@@ -11,6 +11,7 @@ import { VoicePnBridge } from './internal/voice-pn-bridge';
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
 const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
 const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
+const ICE_SERVERS_STORAGE_KEY = '@ice_servers';
 const LEGACY_CALLKIT_ANSWER_KEY = '__legacy_callkit_answer__';
 
 interface PendingCallKitAnswer {
@@ -751,6 +752,12 @@ export class TelnyxVoipClient {
         String(config.enableMissedCallNotifications ?? false)
       );
 
+      if (config.iceServers) {
+        await AsyncStorage.setItem(ICE_SERVERS_STORAGE_KEY, JSON.stringify(config.iceServers));
+      } else {
+        await AsyncStorage.removeItem(ICE_SERVERS_STORAGE_KEY);
+      }
+
       if (config.pushNotificationDeviceToken) {
         await AsyncStorage.setItem('@push_token', config.pushNotificationDeviceToken);
       }
@@ -789,6 +796,12 @@ export class TelnyxVoipClient {
         MISSED_CALL_NOTIFICATIONS_STORAGE_KEY,
         String(config.enableMissedCallNotifications ?? false)
       );
+
+      if (config.iceServers) {
+        await AsyncStorage.setItem(ICE_SERVERS_STORAGE_KEY, JSON.stringify(config.iceServers));
+      } else {
+        await AsyncStorage.removeItem(ICE_SERVERS_STORAGE_KEY);
+      }
 
       if (config.pushNotificationDeviceToken) {
         await AsyncStorage.setItem('@push_token', config.pushNotificationDeviceToken);
