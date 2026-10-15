@@ -20,6 +20,7 @@ const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
 const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
 const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
 const QUALITY_METRICS_STORAGE_KEY = '@enable_quality_metrics';
+const ICE_SERVERS_STORAGE_KEY = '@ice_servers';
 
 export interface SessionManagerOptions {
   /** Environment used when a config or stored restore does not specify one */
@@ -258,6 +259,8 @@ export class SessionManager {
         );
         const storedEnvironment = await AsyncStorage.getItem(SIGNALING_ENVIRONMENT_STORAGE_KEY);
         const storedQualityMetrics = await AsyncStorage.getItem(QUALITY_METRICS_STORAGE_KEY);
+        const storedIceServers = await AsyncStorage.getItem(ICE_SERVERS_STORAGE_KEY);
+        const iceServers = storedIceServers ? JSON.parse(storedIceServers) : undefined;
         const useTrickleIce = storedUseTrickleIce === 'true';
         const pushWhenActive = storedPushWhenActive === 'true';
         const enableMissedCallNotifications = storedMissedCallNotifications === 'true';
@@ -279,6 +282,7 @@ export class SessionManager {
             enableMissedCallNotifications,
             enableQualityMetrics,
             environment,
+            iceServers,
           });
         }
         // Check if we have token-based authentication data
@@ -292,6 +296,7 @@ export class SessionManager {
             enableMissedCallNotifications,
             enableQualityMetrics,
             environment,
+            iceServers,
           });
         }
 
