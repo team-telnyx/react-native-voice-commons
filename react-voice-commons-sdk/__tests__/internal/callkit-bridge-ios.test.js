@@ -70,6 +70,9 @@ const setupCallKit = extractFunction('private func setupCallKit()');
 const reportCallConnected = extractFunction('@objc func reportCallConnected(');
 const activateWebRTCAudio = extractFunction('fileprivate func activateWebRTCAudio(');
 const ownsIncomingRegistration = extractFunction('fileprivate func ownsIncomingRegistration(');
+const invalidateIncomingRegistration = extractFunction(
+  'fileprivate func invalidateIncomingRegistration('
+);
 
 describe('iOS CallKitBridge audio lifecycle', () => {
   it('does not reset audio when CallKit is already installed', () => {
@@ -185,9 +188,14 @@ describe('iOS CallKitBridge PushKit watchdog handling', () => {
       'if let activeCall = activeCalls[callUUID] {'
     );
     const watchdogReportIndex = matchingIncomingPushBranch.indexOf('reportAndEndWatchdogCall(');
+    const registrationInvalidationIndex = matchingIncomingPushBranch.indexOf(
+      'invalidateIncomingRegistration(callUUID)'
+    );
     const originalFinishIndex = matchingIncomingPushBranch.indexOf('finishMissedCall()');
 
+    expect(registrationInvalidationIndex).toBeGreaterThanOrEqual(0);
     expect(watchdogReportIndex).toBeGreaterThanOrEqual(0);
+    expect(registrationInvalidationIndex).toBeLessThan(watchdogReportIndex);
     expect(matchingIncomingPushBranch).toContain('callUUID: UUID()');
     expect(matchingIncomingPushBranch).toContain('source: "missed_call_matched_watchdog"');
     expect(matchingIncomingPushBranch).toContain('endedReason: .remoteEnded');
@@ -276,6 +284,12 @@ describe('iOS CallKitBridge call waiting contract', () => {
     expect(ownsIncomingRegistration).toContain(
       'callData["incomingRegistrationToken"] as? String == token'
     );
+    expect(invalidateIncomingRegistration).toContain('stateLock.lock()');
+    expect(invalidateIncomingRegistration).toContain(
+      'callData.removeValue(forKey: "incomingRegistrationToken")'
+    );
+    expect(invalidateIncomingRegistration).toContain('activeCalls[callUUID] = callData');
+    expect(invalidateIncomingRegistration).not.toContain('activeCalls.removeValue');
     expect(handleMissedCallPushIfNeeded).toContain(
       'self.activeCalls.removeValue(forKey: callUUID)'
     );

@@ -790,6 +790,18 @@ import React
             return callData["incomingRegistrationToken"] as? String == token
         }
 
+        fileprivate func invalidateIncomingRegistration(_ callUUID: UUID) {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+
+            guard var callData = activeCalls[callUUID] else {
+                return
+            }
+
+            callData.removeValue(forKey: "incomingRegistrationToken")
+            activeCalls[callUUID] = callData
+        }
+
         private override init() {
             super.init()
             // Only setup if explicitly requested via setup() method
@@ -1083,6 +1095,9 @@ import React
                     NSLog(
                         "TelnyxVoice: Missed call matched active incoming push UUID: \(callUUID)"
                     )
+                    // Stop the original report callback from persisting or emitting
+                    // this call while the missed-call watchdog report is pending.
+                    invalidateIncomingRegistration(callUUID)
                     // This is a second PushKit delivery, so report it to CallKit
                     // with a fresh UUID before ending the original ringing call.
                     reportAndEndWatchdogCall(
