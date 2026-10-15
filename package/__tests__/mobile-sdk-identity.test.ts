@@ -88,9 +88,9 @@ describe('mobile SDK identity signaling', () => {
   });
 
   it('rejects partial identity overrides', () => {
-    expect(() => new TelnyxRTC({ login_token: 'token', sdkName: 'webrtc-react-native-commons' })).toThrow(
-      'sdkName and sdkVersion must be provided together'
-    );
+    expect(
+      () => new TelnyxRTC({ login_token: 'token', sdkName: 'webrtc-react-native-commons' })
+    ).toThrow('sdkName and sdkVersion must be provided together');
     expect(() => new TelnyxRTC({ login_token: 'token', sdkVersion: '2.3.4' })).toThrow(
       'sdkName and sdkVersion must be provided together'
     );
