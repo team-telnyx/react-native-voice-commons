@@ -7,6 +7,7 @@ export type { TelnyxEnvironment } from './env';
 // Interfaces
 export * from './client-options';
 export * from './call-options';
+export * from './ice-servers';
 
 // Messages
 export * from './messages/media';

@@ -1290,6 +1290,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
           destinationNumber: msg.params.caller_id_number,
           peerConnectionOptions: {
             useTrickleIce: this.options.useTrickleIce,
+            iceServers: this.options.iceServers,
           },
         },
         inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
@@ -1444,6 +1445,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         destinationNumber: msg.params.caller_id_number,
         peerConnectionOptions: {
           useTrickleIce: this.options.useTrickleIce,
+          iceServers: this.options.iceServers,
           // One-shot relay-only override (VSDK-679): when the pre-failure
           // candidate evidence explicitly reports a VPN, force the replacement
           // call's media through a TURN relay once, then clear the evidence so
