@@ -1132,6 +1132,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
           destinationNumber: msg.params.caller_id_number,
           peerConnectionOptions: {
             useTrickleIce: this.options.useTrickleIce,
+            iceServers: this.options.iceServers,
           },
         },
         inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
@@ -1284,6 +1285,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         destinationNumber: msg.params.caller_id_number,
         peerConnectionOptions: {
           useTrickleIce: this.options.useTrickleIce,
+          iceServers: this.options.iceServers,
         },
       },
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
