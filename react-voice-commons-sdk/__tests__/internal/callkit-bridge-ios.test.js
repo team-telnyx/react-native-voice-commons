@@ -154,11 +154,6 @@ describe('iOS CallKitBridge PushKit watchdog handling', () => {
       'guard activeSource == "missed_call_push" else {',
       'return true'
     );
-    const matchingIncomingPushBranch = sliceBetween(
-      handleMissedCallPushIfNeeded,
-      'if activeSource == "push_notification" || activeSource == "terminated_app_push"',
-      'return true'
-    );
     const activeBranch = sliceBetween(
       handleMissedCallPushIfNeeded,
       'reportAndEndWatchdogCall(\n                    callUUID: UUID(),\n                    callerName: callerName,\n                    callerNumber: callerNumber,\n                    payload: payload,\n                    source: "missed_call_active_watchdog"',
@@ -174,11 +169,38 @@ describe('iOS CallKitBridge PushKit watchdog handling', () => {
     expect(collisionBranch).toContain('reportAndEndWatchdogCall(');
     expect(collisionBranch).not.toContain('completion?()');
 
-    expect(matchingIncomingPushBranch).toContain('finishMissedCall()');
-    expect(matchingIncomingPushBranch).not.toContain('markMissedCallProcessed');
-
     expect(activeBranch).toContain('reportAndEndWatchdogCall(');
     expect(activeBranch).toContain('finishMissedCall()');
+  });
+
+  it('reports a matched missed-call push before ending and clearing the original call', () => {
+    const matchingIncomingPushBranch = sliceBetween(
+      handleMissedCallPushIfNeeded,
+      'if activeSource == "push_notification" || activeSource == "terminated_app_push"',
+      'return true'
+    );
+    const finishMissedCall = sliceBetween(
+      handleMissedCallPushIfNeeded,
+      'let finishMissedCall = {',
+      'if let activeCall = activeCalls[callUUID] {'
+    );
+    const watchdogReportIndex = matchingIncomingPushBranch.indexOf('reportAndEndWatchdogCall(');
+    const originalFinishIndex = matchingIncomingPushBranch.indexOf('finishMissedCall()');
+
+    expect(watchdogReportIndex).toBeGreaterThanOrEqual(0);
+    expect(matchingIncomingPushBranch).toContain('callUUID: UUID()');
+    expect(matchingIncomingPushBranch).toContain('source: "missed_call_matched_watchdog"');
+    expect(matchingIncomingPushBranch).toContain('endedReason: .remoteEnded');
+    expect(originalFinishIndex).toBeGreaterThan(watchdogReportIndex);
+    expect(matchingIncomingPushBranch).not.toContain('completion: completion');
+    expect(matchingIncomingPushBranch).not.toContain('markMissedCallProcessed');
+
+    expect(finishMissedCall).toContain(
+      'callKitProvider.reportCall(with: callUUID, endedAt: Date(), reason: .remoteEnded)'
+    );
+    expect(finishMissedCall).toContain('self.activeCalls.removeValue(forKey: callUUID)');
+    expect(finishMissedCall).toContain('self.clearPendingPushData(for: callId)');
+    expect(countOccurrences(finishMissedCall, 'completion\\?\\(\\)')).toBe(1);
   });
 
   it('fails placeholder answer actions instead of emitting normal RN answer events', () => {

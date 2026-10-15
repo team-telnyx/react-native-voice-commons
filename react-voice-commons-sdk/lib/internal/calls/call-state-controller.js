@@ -36,6 +36,8 @@ class CallStateController {
                 callId,
                 reason,
             });
+            // A tracked call can also reach the existing state-listener teardown path.
+            // Both paths are intentionally idempotent so pre-INVITE calls are covered too.
             void callkit_coordinator_1.callKitCoordinator.handlePendingPushCallRemoteEnded(callId, reason).catch((error) => {
                 console.error('CallStateController: Failed to end pending push CallKit call:', error);
             });

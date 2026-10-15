@@ -4,7 +4,7 @@ import { Call } from '@telnyx/react-native-voice-sdk';
 import { VoicePnBridge } from '../internal/voice-pn-bridge';
 import type { TelnyxVoipClient } from '../telnyx-voip-client';
 
-type RemoteCallEndedReason = {
+export type RemoteCallEndedReason = {
   cause?: string;
   causeCode?: number;
   sipCode?: number;
@@ -807,7 +807,7 @@ class CallKitCoordinator {
     // Do not let an unrelated/stale socket BYE terminate another CallKit call.
     // The UUID is added here only after native CallKit registration succeeds.
     if (!this.pendingPushCallUUIDs.has(callKitUUID)) {
-      console.warn('CallKitCoordinator: Ignoring remote-ended event for unknown push UUID', {
+      console.log('CallKitCoordinator: Ignoring remote-ended event for unknown push UUID', {
         callKitUUID,
         reason,
       });

@@ -4,18 +4,10 @@ import { TelnyxRTC, Call as TelnyxCall, type CallOptions } from '@telnyx/react-n
 import { Call } from '../../models/call';
 import { TelnyxCallState } from '../../models/call-state';
 import { SessionManager } from '../session/session-manager';
-import { callKitCoordinator } from '../../callkit/callkit-coordinator';
+import { callKitCoordinator, type RemoteCallEndedReason } from '../../callkit/callkit-coordinator';
 
 export type CustomHeader = { name: string; value: string };
 export type CustomHeaders = Record<string, string> | CustomHeader[];
-
-type RemoteCallEndedReason = {
-  cause?: string;
-  causeCode?: number;
-  sipCode?: number;
-  sipReason?: string;
-  sipCallId?: string;
-};
 
 /**
  * Central state machine for call management.
@@ -417,6 +409,8 @@ export class CallStateController {
       reason,
     });
 
+    // A tracked call can also reach the existing state-listener teardown path.
+    // Both paths are intentionally idempotent so pre-INVITE calls are covered too.
     void callKitCoordinator.handlePendingPushCallRemoteEnded(callId, reason).catch((error) => {
       console.error('CallStateController: Failed to end pending push CallKit call:', error);
     });

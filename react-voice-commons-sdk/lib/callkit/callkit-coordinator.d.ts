@@ -1,6 +1,6 @@
 import { Call } from '@telnyx/react-native-voice-sdk';
 import type { TelnyxVoipClient } from '../telnyx-voip-client';
-type RemoteCallEndedReason = {
+export type RemoteCallEndedReason = {
     cause?: string;
     causeCode?: number;
     sipCode?: number;

@@ -1142,7 +1142,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     // Native iOS exposes this as onRemoteCallEnded and Android emits a normal
     // BYE terminal event. Preserve that general contract even though this
-    // particular path has no Call object yet.
+    // particular path has no Call object yet. Once an INVITE has created a
+    // Call, commons can also run its existing state-listener teardown; both
+    // consumers deliberately keep their cleanup idempotent.
     this.emit('telnyx.call.remoteEnded', callKitUUID, reason);
 
     this.isCallFromPush = false;

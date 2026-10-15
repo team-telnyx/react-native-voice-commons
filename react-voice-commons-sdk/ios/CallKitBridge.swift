@@ -1083,7 +1083,18 @@ import React
                     NSLog(
                         "TelnyxVoice: Missed call matched active incoming push UUID: \(callUUID)"
                     )
-                    finishMissedCall()
+                    // This is a second PushKit delivery, so report it to CallKit
+                    // with a fresh UUID before ending the original ringing call.
+                    reportAndEndWatchdogCall(
+                        callUUID: UUID(),
+                        callerName: callerName,
+                        callerNumber: callerNumber,
+                        payload: payload,
+                        source: "missed_call_matched_watchdog",
+                        endedReason: .remoteEnded
+                    ) {
+                        finishMissedCall()
+                    }
                     return true
                 }
 
