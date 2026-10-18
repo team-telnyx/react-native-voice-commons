@@ -1,7 +1,7 @@
 import { BehaviorSubject, Observable } from 'rxjs';
 import { distinctUntilChanged } from 'rxjs/operators';
 import * as TelnyxSDK from '@telnyx/react-native-voice-sdk';
-import * as pkg from '../../../package.json';
+import { REACT_NATIVE_COMMONS_SDK_IDENTITY } from '../sdk-identity';
 import { TelnyxConnectionState } from '../../models/connection-state';
 import {
   Config,
@@ -14,7 +14,6 @@ import {
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
 const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
 const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
-const COMMONS_SDK_NAME = 'react_native_commons';
 const SIGNALING_ENVIRONMENT_STORAGE_KEY = '@telnyx_signaling_environment';
 
 /**
@@ -496,8 +495,8 @@ export class SessionManager {
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
           callReportMaxLogEntries: config.callReportMaxLogEntries,
-          sdkName: COMMONS_SDK_NAME,
-          sdkVersion: pkg.version,
+          sdkName: REACT_NATIVE_COMMONS_SDK_IDENTITY.name,
+          sdkVersion: REACT_NATIVE_COMMONS_SDK_IDENTITY.version,
         };
         console.log(
           '🔧 SessionManager: Creating TelnyxRTC with credential config, logLevel:',
@@ -519,8 +518,8 @@ export class SessionManager {
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
           callReportMaxLogEntries: config.callReportMaxLogEntries,
-          sdkName: COMMONS_SDK_NAME,
-          sdkVersion: pkg.version,
+          sdkName: REACT_NATIVE_COMMONS_SDK_IDENTITY.name,
+          sdkVersion: REACT_NATIVE_COMMONS_SDK_IDENTITY.version,
         };
         console.log(
           '🔧 SessionManager: Creating TelnyxRTC with token config, logLevel:',
