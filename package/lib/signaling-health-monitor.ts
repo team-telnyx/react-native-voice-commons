@@ -24,7 +24,11 @@ import log from 'loglevel';
  */
 
 export type SignalingHealthMonitorState =
-  'idle' | 'probing' | 'iceRestarting' | 'verifyingMedia' | 'reattaching';
+  | 'idle'
+  | 'probing'
+  | 'iceRestarting'
+  | 'verifyingMedia'
+  | 'reattaching';
 
 export type RecoveryFailureKind = 'failed' | 'disconnected';
 type SignalingProbePurpose = 'mediaRecovery' | 'healthCheck';

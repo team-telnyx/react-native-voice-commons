@@ -502,19 +502,16 @@ export class Call extends EventEmitter<CallEvents> {
       : {};
 
     await this.connection.sendAndWait(
-      createAnswerMessage(
-        {
-          callId: this.callId,
-          dialogParams: {},
-          sdp: this.getLocalSdpForSignaling(),
-          telnyxLegId: this.telnyxLegId!,
-          telnyxSessionId: this.telnyxSessionId!,
-          sessionId: this.sessionId,
-          customHeaders,
-          ...pushAnswerParams,
-        },
-        this.sdkIdentity
-      )
+      createAnswerMessage({
+        callId: this.callId,
+        dialogParams: {},
+        sdp: this.getLocalSdpForSignaling(),
+        telnyxLegId: this.telnyxLegId!,
+        telnyxSessionId: this.telnyxSessionId!,
+        sessionId: this.sessionId,
+        customHeaders,
+        ...pushAnswerParams,
+      }, this.sdkIdentity)
     );
 
     if (this.isTrickleIceEnabled()) {
@@ -559,20 +556,17 @@ export class Call extends EventEmitter<CallEvents> {
         throw new Error('[Call] Local SDP not available');
       }
 
-      const attachMessage = createAttachMessage(
-        {
-          callId: this.callId,
-          sessionId: this.sessionId,
-          sdp: this.getLocalSdpForSignaling(),
-          customHeaders: this.inviteCustomHeaders || [],
-          destinationNumber: this.options.destinationNumber || '',
-          callerIdName: this.options.callerIdName || '',
-          callerIdNumber: this.options.callerIdNumber || '',
-          clientState: this.options.clientState || '',
-          userVariables: [], // Not available in CallOptions, using empty array
-        },
-        this.sdkIdentity
-      );
+      const attachMessage = createAttachMessage({
+        callId: this.callId,
+        sessionId: this.sessionId,
+        sdp: this.getLocalSdpForSignaling(),
+        customHeaders: this.inviteCustomHeaders || [],
+        destinationNumber: this.options.destinationNumber || '',
+        callerIdName: this.options.callerIdName || '',
+        callerIdNumber: this.options.callerIdNumber || '',
+        clientState: this.options.clientState || '',
+        userVariables: [], // Not available in CallOptions, using empty array
+      }, this.sdkIdentity);
 
       log.debug('[Call] Sending attach message for reattachment:', {
         callId: this.callId,
@@ -923,16 +917,13 @@ export class Call extends EventEmitter<CallEvents> {
 
     try {
       const msg = await this.connection.sendAndWait(
-        createInviteMessage(
-          {
-            attach: false,
-            callOptions: this.options,
-            sessionId: this.sessionId,
-            callId: this.callId,
-            sdp: this.getLocalSdpForSignaling(),
-          },
-          this.sdkIdentity
-        )
+        createInviteMessage({
+          attach: false,
+          callOptions: this.options,
+          sessionId: this.sessionId,
+          callId: this.callId,
+          sdp: this.getLocalSdpForSignaling(),
+        }, this.sdkIdentity)
       );
 
       if (!isInviteACKMessage(msg)) {
