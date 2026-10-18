@@ -555,10 +555,12 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
   const handleSelectEnvironment = async (nextEnvironment: TelnyxEnvironment) => {
     if (isConnected || isConnecting) return;
 
-    setEnvironment(nextEnvironment);
     setShowDeveloperOptions(false);
     try {
       await AsyncStorage.setItem(SIGNALING_ENVIRONMENT_STORAGE_KEY, nextEnvironment);
+      // Only reflect the selection once it is persisted, so the label never
+      // disagrees with what the next cold start will restore.
+      setEnvironment(nextEnvironment);
     } catch (error) {
       log('TelnyxLoginForm: Error saving environment:', error);
       Alert.alert('Developer options', 'Could not save the signaling environment.');
