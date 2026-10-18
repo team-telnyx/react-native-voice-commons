@@ -441,7 +441,17 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       telnyxSessionId: null,
       telnyxLegId: null,
       callId: null,
-      options,
+      options: {
+        ...options,
+        peerConnectionOptions: {
+          ...options.peerConnectionOptions,
+          // Client-level iceServers serves as the default; an explicit
+          // per-call override in peerConnectionOptions.iceServers wins.
+          iceServers:
+            options.peerConnectionOptions?.iceServers ??
+            this.options.iceServers,
+        },
+      },
       debug: this.options.debug,
       callReportConfig: this.getCallReportConfig(),
       pushWhenActive: this.options.pushWhenActive,
@@ -1220,6 +1230,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
           destinationNumber: msg.params.caller_id_number,
           peerConnectionOptions: {
             useTrickleIce: this.options.useTrickleIce,
+            iceServers: this.options.iceServers,
           },
         },
         inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
@@ -1372,6 +1383,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         destinationNumber: msg.params.caller_id_number,
         peerConnectionOptions: {
           useTrickleIce: this.options.useTrickleIce,
+          iceServers: this.options.iceServers,
         },
       },
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,

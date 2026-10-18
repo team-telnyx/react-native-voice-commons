@@ -1,5 +1,17 @@
 import type { LogLevelNames } from 'loglevel';
+import type { TelnyxIceServer } from './ice-servers';
+
 export interface ClientOptions {
+  /**
+   * Custom ICE servers (STUN/TURN) for WebRTC peer connections.
+   *
+   * When provided, these servers override the Telnyx production defaults.
+   * When omitted, the SDK uses the Telnyx default ICE server set
+   * (STUN → TURN UDP → TURN TCP → TURNS 443).
+   *
+   * @see {@link getDefaultIceServers} for the default server list.
+   */
+  iceServers?: TelnyxIceServer[];
   /**
    * The `username` to authenticate with your SIP Connection.
    * `login` and `password` will take precedence over
