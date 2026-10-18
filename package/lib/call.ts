@@ -342,6 +342,7 @@ export class Call extends EventEmitter<CallEvents> {
       },
       getInboundAudioPackets: () => this.getRecoveryInboundAudioPackets(),
       getPeerIceState: () => this.peer?.getIceConnectionState() ?? null,
+      getPeerConnectionState: () => this.peer?.getConnectionState() ?? null,
       getSelectedCandidateEvidence: () => this.getRecoverySelectedCandidateEvidence(),
       performReattachFallback: () =>
         this.recoveryHooks?.performReattachFallback(this.callId) ?? Promise.resolve(false),
@@ -1105,10 +1106,10 @@ export class Call extends EventEmitter<CallEvents> {
   // --- Active-call ICE restart recovery (VSDK-679) ---
 
   /**
-   * Feed peer ICE/connection state changes into the signaling health monitor.
-   * The Peer surfaces both `iceConnectionState` and `connectionState` through
-   * a single callback, so a peer-level failure still triggers recovery even
-   * when the ICE callback does not fire.
+   * Feed peer ICE and peer-connection state changes into the signaling health
+   * monitor. They arrive through separate callbacks (iOS
+   * `iceConnectionStateDidChange` / `peerConnectionStateDidChange`) so a
+   * peer-connection failure still triggers recovery while ICE is connected.
    */
   private wireIceRecovery = (): void => {
     if (!this.peer) {
@@ -1124,6 +1125,9 @@ export class Call extends EventEmitter<CallEvents> {
       }
       // 'closed' is terminal: recovery is cancelled via call-state and
       // disposePeer paths, so it is not re-triggered here.
+    };
+    this.peer.onPeerConnectionStateChange = (state: string) => {
+      this.signalingHealthMonitor?.notifyPeerConnectionStateChange(state);
     };
   };
 

@@ -31,6 +31,8 @@ export type SignalingHealthMonitorState =
   | 'reattaching';
 
 export type RecoveryFailureKind = 'failed' | 'disconnected';
+/** Which peer callback reported the failure that started an episode. */
+type RecoveryFailureSource = 'ice' | 'peerConnection';
 type SignalingProbePurpose = 'mediaRecovery' | 'healthCheck';
 
 /**
@@ -130,6 +132,9 @@ export type SignalingHealthMonitorDeps = {
   /** Current ICE connection state of the live peer, or null when disposed. */
   getPeerIceState(): string | null;
 
+  /** Current peer connection state of the live peer, or null when disposed. */
+  getPeerConnectionState(): string | null;
+
   /** Selected candidate pair evidence captured from stats, if available. */
   getSelectedCandidateEvidence(): CandidateEvidence | null | Promise<CandidateEvidence | null>;
 
@@ -179,6 +184,8 @@ export class SignalingHealthMonitor {
   private currentState: SignalingHealthMonitorState = 'idle';
   private currentGeneration = 0;
   private debounceHandle: unknown = null;
+  private peerDisconnectedHandle: unknown = null;
+  private episodeSource: RecoveryFailureSource | null = null;
   private restartTimeoutHandle: unknown = null;
   private verifyPollHandle: unknown = null;
   private verifyDeadlineHandle: unknown = null;
@@ -231,10 +238,12 @@ export class SignalingHealthMonitor {
       this.cancelTimer(this.debounceHandle);
       this.debounceHandle = null;
     }
+    this.cancelPeerDisconnectedRecovery();
 
     this.recoveryFailedLatch = false;
     this.currentGeneration += 1;
     this.currentState = 'probing';
+    this.episodeSource = 'ice';
     this.shouldEvaluateRelayFallback = true;
     this.logger.info('Test ICE failure injected', { generation: this.currentGeneration });
     this.beginMediaRecovery('test ICE failure');
@@ -258,23 +267,7 @@ export class SignalingHealthMonitor {
    * recovery are ignored.
    */
   public notifyIceFailure(kind: RecoveryFailureKind): void {
-    if (this.deps.callState() !== 'active') {
-      return;
-    }
-    if (this.deps.isClientReconnecting()) {
-      return;
-    }
-
-    if (this.currentState === 'verifyingMedia') {
-      // A fresh failure while verifying means the restart did not recover
-      // media; fall back immediately instead of waiting out the window.
-      this.logger.warn('ICE failed again during verification, falling back');
-      void this.performFallback('ice-failed-during-verification');
-      return;
-    }
-
-    if (this.currentState !== 'idle') {
-      // Duplicate suppression: one episode at a time per call.
+    if (!this.canStartFailureEpisode('ice')) {
       return;
     }
 
@@ -294,12 +287,43 @@ export class SignalingHealthMonitor {
           this.logger.info('Transient ICE disconnect recovered before debounce fired');
           return;
         }
-        this.startEpisode('disconnected');
+        this.startEpisode('disconnected', 'ice');
       }, this.config.peerDisconnectedRecoveryDelayMs);
       return;
     }
 
-    this.startEpisode('failed');
+    this.startEpisode('failed', 'ice');
+  }
+
+  /**
+   * Observe an `RTCPeerConnection.connectionState` change (iOS
+   * `peerConnectionStateDidChange`). A peer-connection failure is definitive
+   * even while ICE still reports connected (for example a DTLS failure), so
+   * these episodes bypass the ICE already-connected guard.
+   *
+   * - 'failed' starts recovery immediately
+   * - 'disconnected' starts recovery once the peer connection has stayed
+   *   disconnected for `peerDisconnectedRecoveryDelayMs`
+   * - 'connected' cancels a pending disconnected delay
+   */
+  public notifyPeerConnectionStateChange(state: string): void {
+    switch (state) {
+      case 'failed':
+        this.cancelPeerDisconnectedRecovery();
+        if (this.canStartFailureEpisode('peerConnection')) {
+          this.startEpisode('failed', 'peerConnection');
+        }
+        return;
+      case 'disconnected':
+        this.startPeerDisconnectedRecoveryDelay();
+        return;
+      case 'connected':
+        this.recoveryFailedLatch = false;
+        this.cancelPeerDisconnectedRecovery();
+        return;
+      default:
+        return;
+    }
   }
 
   /**
@@ -314,7 +338,9 @@ export class SignalingHealthMonitor {
       this.debounceHandle = null;
       this.logger.info('Transient ICE disconnect cleared, debounce cancelled');
     }
-    if (this.currentState === 'probing') {
+    if (this.currentState === 'probing' && this.episodeSource === 'ice') {
+      // A peer-connection episode is not cleared by ICE: ICE can report
+      // connected while the peer connection itself has failed.
       this.cancel('ice-recovered-before-restart');
     }
   }
@@ -372,6 +398,7 @@ export class SignalingHealthMonitor {
       this.cancelTimer(this.debounceHandle);
       this.debounceHandle = null;
     }
+    this.cancelPeerDisconnectedRecovery();
     this.clearRestartTimeout();
     this.clearVerifyTimers();
 
@@ -380,13 +407,86 @@ export class SignalingHealthMonitor {
     }
     this.recoveryFailedLatch = false;
     this.shouldEvaluateRelayFallback = false;
+    this.episodeSource = null;
     this.currentGeneration += 1;
     this.currentState = 'idle';
   }
 
   // --- Episode machinery ---
 
-  private startEpisode(kind: RecoveryFailureKind): void {
+  /**
+   * Shared guard for ICE and peer-connection failure callbacks. A failure
+   * during media verification falls back immediately; any other in-flight
+   * episode suppresses the duplicate.
+   */
+  private canStartFailureEpisode(source: RecoveryFailureSource): boolean {
+    if (this.deps.callState() !== 'active' || this.deps.isClientReconnecting()) {
+      return false;
+    }
+
+    if (this.currentState === 'verifyingMedia') {
+      // A fresh failure while verifying means the restart did not recover
+      // media; fall back immediately instead of waiting out the window.
+      this.logger.warn(
+        `${this.describeSource(source)} failed again during verification, falling back`
+      );
+      void this.performFallback(
+        source === 'ice'
+          ? 'ice-failed-during-verification'
+          : 'peer-connection-failed-during-verification'
+      );
+      return false;
+    }
+
+    // Duplicate suppression: one episode at a time per call.
+    return this.currentState === 'idle';
+  }
+
+  /**
+   * iOS `startPeerDisconnectedRecoveryDelay`: a peer connection that stays
+   * disconnected for the delay starts recovery. Only a peer-connection
+   * 'connected' (or failure/cancel) clears it; ICE state does not.
+   */
+  private startPeerDisconnectedRecoveryDelay(): void {
+    if (
+      this.deps.callState() !== 'active' ||
+      this.deps.isClientReconnecting() ||
+      this.currentState !== 'idle'
+    ) {
+      return;
+    }
+    this.cancelPeerDisconnectedRecovery();
+    const generation = this.currentGeneration;
+    const delayMs = this.config.peerDisconnectedRecoveryDelayMs;
+    this.logger.info('Peer connection disconnected, scheduling recovery delay');
+    this.peerDisconnectedHandle = this.schedule(() => {
+      this.peerDisconnectedHandle = null;
+      if (generation !== this.currentGeneration) {
+        return;
+      }
+      if (this.deps.getPeerConnectionState() === 'connected') {
+        this.logger.info('Peer connection recovered before the disconnected delay elapsed');
+        return;
+      }
+      this.logger.warn(
+        `Peer connection remained disconnected for ${delayMs}ms; starting recovery`
+      );
+      this.startEpisode('disconnected', 'peerConnection');
+    }, delayMs);
+  }
+
+  private cancelPeerDisconnectedRecovery(): void {
+    if (this.peerDisconnectedHandle != null) {
+      this.cancelTimer(this.peerDisconnectedHandle);
+      this.peerDisconnectedHandle = null;
+    }
+  }
+
+  private describeSource(source: RecoveryFailureSource): string {
+    return source === 'ice' ? 'ICE' : 'Peer connection';
+  }
+
+  private startEpisode(kind: RecoveryFailureKind, source: RecoveryFailureSource): void {
     if (this.currentState !== 'idle') {
       return;
     }
@@ -394,26 +494,33 @@ export class SignalingHealthMonitor {
       return;
     }
 
-    const iceState = this.deps.getPeerIceState();
-    if (iceState && CONNECTED_ICE_STATES.has(iceState)) {
-      // Already-connected guard: media re-established on its own.
-      this.logger.info('ICE already connected, skipping recovery episode');
-      this.recoveryFailedLatch = false;
-      return;
+    if (source === 'ice') {
+      const iceState = this.deps.getPeerIceState();
+      if (iceState && CONNECTED_ICE_STATES.has(iceState)) {
+        // Already-connected guard: media re-established on its own.
+        this.logger.info('ICE already connected, skipping recovery episode');
+        this.recoveryFailedLatch = false;
+        return;
+      }
     }
     if (this.recoveryFailedLatch) {
       // One recovery attempt per failure period: after the single reattach
-      // fallback failed, wait for media to demonstrably recover (ICE seen
-      // connected again) before spending another episode.
-      this.logger.info('Recovery already exhausted, waiting for ICE to reconnect');
+      // fallback failed, wait for media to demonstrably recover (ICE or the
+      // peer connection seen connected again) before spending another episode.
+      this.logger.info('Recovery already exhausted, waiting for media to reconnect');
       return;
     }
 
     this.currentGeneration += 1;
     this.currentState = 'probing';
+    this.episodeSource = source;
     this.shouldEvaluateRelayFallback = true;
-    this.logger.info('Recovery episode started', { generation: this.currentGeneration, kind });
-    this.beginMediaRecovery(`ICE ${kind}`);
+    this.logger.info('Recovery episode started', {
+      generation: this.currentGeneration,
+      kind,
+      source,
+    });
+    this.beginMediaRecovery(`${this.describeSource(source)} ${kind}`);
   }
 
   /**
@@ -664,6 +771,9 @@ export class SignalingHealthMonitor {
         to: state,
         generation: this.currentGeneration,
       });
+    }
+    if (state === 'idle') {
+      this.episodeSource = null;
     }
     this.currentState = state;
   }

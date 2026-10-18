@@ -151,6 +151,29 @@ describe('Call signaling health checks (SignalingHealthMonitor wiring)', () => {
     expect(recoveryHooks.performReattachFallback).toHaveBeenCalledTimes(1);
   });
 
+  it('routes peer-connection and ICE state changes to separate monitor entry points', () => {
+    const { call, monitor } = buildCall();
+    const peer: any = {
+      getIceConnectionState: jest.fn().mockReturnValue('connected'),
+      getConnectionState: jest.fn().mockReturnValue('failed'),
+    };
+    (call as any).peer = peer;
+    (call as any).wireIceRecovery();
+    const notifyPeer = jest
+      .spyOn(monitor, 'notifyPeerConnectionStateChange')
+      .mockImplementation(() => {});
+    const notifyIce = jest.spyOn(monitor, 'notifyIceFailure').mockImplementation(() => {});
+
+    peer.onPeerConnectionStateChange('failed');
+    expect(notifyPeer).toHaveBeenCalledWith('failed');
+    expect(notifyIce).not.toHaveBeenCalled();
+
+    peer.onIceStateChange('failed');
+    expect(notifyIce).toHaveBeenCalledWith('failed');
+    expect(monitor.deps.getPeerConnectionState()).toBe('failed');
+    expect(monitor.deps.getPeerIceState()).toBe('connected');
+  });
+
   it('forwards a manual ICE failure when debug mode is enabled', () => {
     const { call, monitor } = buildCall(true);
     const simulate = jest.spyOn(monitor, 'simulateIceFailureForTesting').mockReturnValue(true);

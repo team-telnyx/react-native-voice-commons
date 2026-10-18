@@ -59,10 +59,17 @@ export class Peer {
   public onPeerEventLog: ((event: string, context: Record<string, unknown>) => void) | null = null;
 
   /**
-   * Callback for ICE and peer-connection state changes. Call feeds the
-   * recovery coordinator (VSDK-679) with these events.
+   * Callback for ICE connection state changes. Call feeds the signaling
+   * health monitor (VSDK-679) with these events.
    */
   public onIceStateChange: ((state: string) => void) | null = null;
+
+  /**
+   * Callback for peer connection state changes, kept separate from ICE so
+   * the signaling health monitor can tell a peer-connection failure (which
+   * can coexist with connected ICE) from an ICE failure.
+   */
+  public onPeerConnectionStateChange: ((state: string) => void) | null = null;
 
   /** True while an ICE restart exchange is in progress on this peer. */
   public isIceRestarting = false;
@@ -544,7 +551,7 @@ export class Peer {
       this.onPeerEventLog?.('ICE connection state changed', { state: iceConnectionState });
     }
 
-    // Feed the recovery coordinator (VSDK-679)
+    // Feed the signaling health monitor (VSDK-679)
     if (iceConnectionState) {
       this.onIceStateChange?.(iceConnectionState);
     }
@@ -554,10 +561,10 @@ export class Peer {
     const connectionState = this.instance?.connectionState;
     log.debug('[Peer] Connection state change', connectionState);
 
-    // Feed the recovery coordinator (VSDK-679): peer connection failures
-    // must trigger recovery even when the ICE callback does not fire.
+    // Feed the signaling health monitor (VSDK-679): peer connection
+    // failures must trigger recovery even when ICE still reports connected.
     if (connectionState) {
-      this.onIceStateChange?.(connectionState);
+      this.onPeerConnectionStateChange?.(connectionState);
     }
   };
 }
