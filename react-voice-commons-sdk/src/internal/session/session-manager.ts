@@ -2,10 +2,15 @@ import { BehaviorSubject, Observable } from 'rxjs';
 import { distinctUntilChanged } from 'rxjs/operators';
 import * as TelnyxSDK from '@telnyx/react-native-voice-sdk';
 import { REACT_NATIVE_COMMONS_SDK_IDENTITY } from '../sdk-identity';
+import {
+  SIGNALING_ENVIRONMENT_STORAGE_KEY,
+  resolveStoredEnvironment,
+} from '../signaling-environment';
 import { TelnyxConnectionState } from '../../models/connection-state';
 import {
   Config,
   CredentialConfig,
+  TelnyxEnvironment,
   TokenConfig,
   isCredentialConfig,
   isTokenConfig,
@@ -14,7 +19,11 @@ import {
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
 const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
 const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
-const SIGNALING_ENVIRONMENT_STORAGE_KEY = '@telnyx_signaling_environment';
+
+export interface SessionManagerOptions {
+  /** Environment used when a config or stored restore does not specify one */
+  defaultEnvironment?: TelnyxEnvironment;
+}
 
 /**
  * Manages the connection lifecycle to the Telnyx platform.
@@ -36,9 +45,11 @@ export class SessionManager {
   private _connectPromise?: Promise<void>;
   private _onClientReady?: () => void;
   private _onDisconnect?: () => void;
+  private readonly _defaultEnvironment: TelnyxEnvironment;
 
-  constructor() {
+  constructor(options: SessionManagerOptions = {}) {
     this._sessionId = this._generateSessionId();
+    this._defaultEnvironment = options.defaultEnvironment ?? 'production';
   }
 
   /**
@@ -248,7 +259,7 @@ export class SessionManager {
         const useTrickleIce = storedUseTrickleIce === 'true';
         const pushWhenActive = storedPushWhenActive === 'true';
         const enableMissedCallNotifications = storedMissedCallNotifications === 'true';
-        const environment = storedEnvironment === 'development' ? 'development' : 'production';
+        const environment = resolveStoredEnvironment(storedEnvironment, this._defaultEnvironment);
 
         if (this._isTeardownActive()) {
           return;
@@ -490,7 +501,7 @@ export class SessionManager {
           pushWhenActive: config.pushWhenActive,
           enableMissedCallNotifications: config.enableMissedCallNotifications ?? false,
           useTrickleIce: config.useTrickleIce,
-          environment: config.environment ?? 'production',
+          environment: config.environment ?? this._defaultEnvironment,
           enableCallReports: config.enableCallReports,
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
@@ -513,7 +524,7 @@ export class SessionManager {
           pushWhenActive: config.pushWhenActive,
           enableMissedCallNotifications: config.enableMissedCallNotifications ?? false,
           useTrickleIce: config.useTrickleIce,
-          environment: config.environment ?? 'production',
+          environment: config.environment ?? this._defaultEnvironment,
           enableCallReports: config.enableCallReports,
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,

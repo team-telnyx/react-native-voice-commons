@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as TelnyxSDK from '@telnyx/react-native-voice-sdk';
 import { TelnyxVoipClient } from '../src/telnyx-voip-client';
 import { createCredentialConfig, createTokenConfig } from '../src/models/config';
 import { VoicePnBridge } from '../src/internal/voice-pn-bridge';
@@ -71,6 +72,82 @@ describe('push-when-active configuration persistence', () => {
         environment: 'development',
       })
     );
+  });
+
+  describe.each([
+    [
+      'credential',
+      { '@telnyx_username': 'sip-user', '@telnyx_password': 'sip-password' },
+      'connectWithCredential',
+    ],
+    ['token', { '@credential_token': 'stored-token' }, 'connectWithToken'],
+  ])('signaling environment restore for %s auth', (_kind, storedAuth, connectMethod) => {
+    const mockStorage = (storedEnvironment: string | null) => {
+      const storedValues: Record<string, string> = { ...storedAuth };
+      if (storedEnvironment !== null) {
+        storedValues['@telnyx_signaling_environment'] = storedEnvironment;
+      }
+      (AsyncStorage.getItem as jest.Mock).mockImplementation(
+        async (key: string) => storedValues[key] ?? null
+      );
+    };
+
+    const foregroundRestoreEnvironment = async (client: TelnyxVoipClient) => {
+      const connect = jest
+        .spyOn((client as any)._sessionManager, connectMethod)
+        .mockResolvedValue(undefined);
+      await expect(client.loginFromStoredConfig()).resolves.toBe(true);
+      return (connect.mock.calls[0][0] as { environment?: string }).environment;
+    };
+
+    const coldPushRestoreEnvironment = async (client: TelnyxVoipClient) => {
+      await (client as any)._sessionManager.handlePushNotification({
+        metadata: { call_id: 'call-id' },
+      });
+      const TelnyxRTCMock = TelnyxSDK.TelnyxRTC as unknown as jest.Mock;
+      return TelnyxRTCMock.mock.calls[TelnyxRTCMock.mock.calls.length - 1][0].environment;
+    };
+
+    it.each([
+      ['missing', null],
+      ['invalid', 'staging'],
+    ])(
+      'honors the client default when the stored value is %s',
+      async (_case, storedEnvironment) => {
+        mockStorage(storedEnvironment);
+
+        expect(
+          await foregroundRestoreEnvironment(new TelnyxVoipClient({ environment: 'development' }))
+        ).toBe('development');
+        expect(
+          await coldPushRestoreEnvironment(new TelnyxVoipClient({ environment: 'development' }))
+        ).toBe('development');
+      }
+    );
+
+    it.each([
+      ['production', 'development'],
+      ['development', 'production'],
+    ] as const)(
+      'prefers an explicit stored %s selection over the client default',
+      async (storedEnvironment, clientDefault) => {
+        mockStorage(storedEnvironment);
+
+        expect(
+          await foregroundRestoreEnvironment(new TelnyxVoipClient({ environment: clientDefault }))
+        ).toBe(storedEnvironment);
+        expect(
+          await coldPushRestoreEnvironment(new TelnyxVoipClient({ environment: clientDefault }))
+        ).toBe(storedEnvironment);
+      }
+    );
+
+    it('defaults to production when neither storage nor the client specifies one', async () => {
+      mockStorage(null);
+
+      expect(await foregroundRestoreEnvironment(new TelnyxVoipClient())).toBe('production');
+      expect(await coldPushRestoreEnvironment(new TelnyxVoipClient())).toBe('production');
+    });
   });
 
   it('restores the opt-in when reconnecting from stored credentials', async () => {

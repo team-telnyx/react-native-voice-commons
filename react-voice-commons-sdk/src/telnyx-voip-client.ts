@@ -11,13 +11,16 @@ import {
   validateConfig,
 } from './models/config';
 import { SessionManager } from './internal/session/session-manager';
+import {
+  SIGNALING_ENVIRONMENT_STORAGE_KEY,
+  resolveStoredEnvironment,
+} from './internal/signaling-environment';
 import { CallStateController, type CustomHeaders } from './internal/calls/call-state-controller';
 import { VoicePnBridge } from './internal/voice-pn-bridge';
 
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
 const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
 const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
-const SIGNALING_ENVIRONMENT_STORAGE_KEY = '@telnyx_signaling_environment';
 const LEGACY_CALLKIT_ANSWER_KEY = '__legacy_callkit_answer__';
 
 interface PendingCallKitAnswer {
@@ -99,7 +102,7 @@ export class TelnyxVoipClient {
     };
 
     // Initialize core components
-    this._sessionManager = new SessionManager();
+    this._sessionManager = new SessionManager({ defaultEnvironment: this._options.environment });
     this._callStateController = new CallStateController(this._sessionManager);
 
     // Set up callback to initialize call state controller listeners when client is ready
@@ -412,10 +415,7 @@ export class TelnyxVoipClient {
         storedUseTrickleIce === null ? this._options.useTrickleIce : storedUseTrickleIce === 'true';
       const pushWhenActive = storedPushWhenActive === 'true';
       const enableMissedCallNotifications = storedMissedCallNotifications === 'true';
-      const environment =
-        storedEnvironment === 'development' || storedEnvironment === 'production'
-          ? storedEnvironment
-          : this._options.environment;
+      const environment = resolveStoredEnvironment(storedEnvironment, this._options.environment);
       const nativePushToken =
         Platform.OS === 'ios' ? (await VoicePnBridge.getVoipToken())?.trim() : null;
       const pushNotificationDeviceToken = nativePushToken || storedPushToken;
@@ -772,7 +772,7 @@ export class TelnyxVoipClient {
       );
       await AsyncStorage.setItem(
         SIGNALING_ENVIRONMENT_STORAGE_KEY,
-        config.environment ?? 'production'
+        config.environment ?? this._options.environment ?? 'production'
       );
 
       if (config.pushNotificationDeviceToken) {
@@ -815,7 +815,7 @@ export class TelnyxVoipClient {
       );
       await AsyncStorage.setItem(
         SIGNALING_ENVIRONMENT_STORAGE_KEY,
-        config.environment ?? 'production'
+        config.environment ?? this._options.environment ?? 'production'
       );
 
       if (config.pushNotificationDeviceToken) {
