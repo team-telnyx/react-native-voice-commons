@@ -17,7 +17,7 @@ import type {
   TransportStats,
   CallReportFlushReason,
 } from './call-report-models';
-import type { CandidateEvidence } from './call-recovery-coordinator';
+import type { CandidateEvidence } from './signaling-health-monitor';
 
 const MAX_STATS_BUFFER = 360; // ~30 min at 5s intervals
 const STATS_FLUSH_THRESHOLD = 300; // ~25 min

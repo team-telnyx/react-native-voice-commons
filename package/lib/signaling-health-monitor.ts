@@ -1,10 +1,13 @@
 import log from 'loglevel';
 
 /**
- * Serialized recovery coordinator for active-call ICE restart recovery.
+ * Per-call signaling-health and ICE-recovery monitor.
  *
- * Maps the proven iOS/JS SDK state machine onto the existing React Native
- * call/peer/socket abstractions (VSDK-679):
+ * Mirrors the iOS `SignalingHealthMonitor` ownership model (VSDK-679): this
+ * class owns signaling freshness thresholds, the periodic signaling health
+ * decision, probe handling, recovery state, and deadlines; `Call`/`Peer` own
+ * WebRTC renegotiation; and `TelnyxRTC` owns reconnect/reattach and drives
+ * the periodic `checkSignalingHealth()` tick.
  *
  *   idle ──(ICE failed / disconnected>3s)──▶ probing ──▶ iceRestarting
  *                                                        │
@@ -20,12 +23,8 @@ import log from 'loglevel';
  * peer. Duplicate failure events are suppressed while an episode runs.
  */
 
-export type CallRecoveryState =
-  | 'idle'
-  | 'probing'
-  | 'iceRestarting'
-  | 'verifyingMedia'
-  | 'reattaching';
+export type SignalingHealthMonitorState =
+  'idle' | 'probing' | 'iceRestarting' | 'verifyingMedia' | 'reattaching';
 
 export type RecoveryFailureKind = 'failed' | 'disconnected';
 type SignalingProbePurpose = 'mediaRecovery' | 'healthCheck';
@@ -53,17 +52,52 @@ export type RecoveryLogger = {
   error(message: string, context?: Record<string, unknown>): void;
 };
 
-export type CallRecoveryDeps = {
+/**
+ * Timing configuration. Defaults match the iOS `SignalingHealthMonitor`
+ * initializer (converted to milliseconds).
+ */
+export type SignalingHealthMonitorConfig = {
+  iceRestartTimeoutMs: number;
+  signalingProbeTimeoutMs: number;
+  /** Inbound signaling at most this old permits an immediate ICE restart. */
+  recentInboundActivityThresholdMs: number;
+  /** Confirmed request/response at most this old counts as recent / not stale. */
+  confirmedOutboundActivityThresholdMs: number;
+  /** Inbound signaling at least this old is stale for the periodic health check. */
+  staleInboundActivityThresholdMs: number;
+  signalingHealthCheckIntervalMs: number;
+  postIceRestartMediaTimeoutMs: number;
+  postIceRestartMediaPollMs: number;
+  peerDisconnectedRecoveryDelayMs: number;
+};
+
+export const DEFAULT_SIGNALING_HEALTH_MONITOR_CONFIG: Readonly<SignalingHealthMonitorConfig> =
+  Object.freeze({
+    iceRestartTimeoutMs: 15_000,
+    signalingProbeTimeoutMs: 5_000,
+    recentInboundActivityThresholdMs: 3_000,
+    confirmedOutboundActivityThresholdMs: 45_000,
+    staleInboundActivityThresholdMs: 20_000,
+    signalingHealthCheckIntervalMs: 3_000,
+    postIceRestartMediaTimeoutMs: 5_000,
+    postIceRestartMediaPollMs: 1_000,
+    peerDisconnectedRecoveryDelayMs: 3_000,
+  });
+
+export type SignalingHealthMonitorDeps = {
   callId: string;
 
   /** Current call state; recovery only monitors calls in 'active'. */
   callState(): string;
 
-  /**
-   * True when inbound socket traffic was observed recently and the socket
-   * claims to be connected. Fresh signaling permits an immediate restart.
-   */
-  isSignalingFresh(): boolean;
+  /** True when the signaling socket is currently connected. */
+  isSignalingAvailable(): boolean;
+
+  /** Milliseconds since the last inbound signaling frame (Infinity if none). */
+  inboundSignalingIdleMs(): number;
+
+  /** Milliseconds since an inbound frame last answered a request (Infinity if none). */
+  confirmedOutboundIdleMs(): number;
 
   /** True while the client-level reconnect flow is running. */
   isClientReconnecting(): boolean;
@@ -71,7 +105,9 @@ export type CallRecoveryDeps = {
   /**
    * Send one uniquely correlated signaling probe (telnyx_rtc.ping).
    * Resolution is correlated by request id; unrelated socket traffic must
-   * not satisfy it. Returns 'ok' when the gateway answered this request.
+   * not satisfy it. Returns 'ok' when the gateway answered this request with
+   * either a result or an error: like iOS, any correlated response proves
+   * the signaling path is alive.
    */
   sendSignalingProbe(): Promise<'ok' | 'timeout' | 'error'>;
 
@@ -109,35 +145,34 @@ export type CallRecoveryDeps = {
   /** Invoked when recovery completed successfully. */
   onRecovered?(): void;
 
+  config?: Partial<SignalingHealthMonitorConfig>;
   logger?: RecoveryLogger;
   now?(): number;
   scheduleTimer?(callback: () => void, ms: number): unknown;
   cancelTimer?(handle: unknown): void;
 };
 
-export const RECOVERY_DISCONNECT_DEBOUNCE_MS = 3000;
-export const RECOVERY_PROBE_TIMEOUT_MS = 5000;
-export const RECOVERY_RESTART_TIMEOUT_MS = 15000;
-export const RECOVERY_RTP_VERIFY_WINDOW_MS = 5000;
-export const RECOVERY_RTP_VERIFY_POLL_MS = 1000;
-
 const CONNECTED_ICE_STATES = new Set(['connected', 'completed']);
 
 function defaultLogger(callId: string): RecoveryLogger {
   return {
     debug: (message, context) =>
-      log.debug(`[CallRecovery:${callId}] ${message}`, context ?? ''),
-    info: (message, context) => log.info(`[CallRecovery:${callId}] ${message}`, context ?? ''),
-    warn: (message, context) => log.warn(`[CallRecovery:${callId}] ${message}`, context ?? ''),
-    error: (message, context) => log.error(`[CallRecovery:${callId}] ${message}`, context ?? ''),
+      log.debug(`[SignalingHealthMonitor:${callId}] ${message}`, context ?? ''),
+    info: (message, context) =>
+      log.info(`[SignalingHealthMonitor:${callId}] ${message}`, context ?? ''),
+    warn: (message, context) =>
+      log.warn(`[SignalingHealthMonitor:${callId}] ${message}`, context ?? ''),
+    error: (message, context) =>
+      log.error(`[SignalingHealthMonitor:${callId}] ${message}`, context ?? ''),
   };
 }
 
-export class CallRecoveryCoordinator {
-  private deps: CallRecoveryDeps;
+export class SignalingHealthMonitor {
+  private deps: SignalingHealthMonitorDeps;
+  private config: SignalingHealthMonitorConfig;
   private logger: RecoveryLogger;
 
-  private currentState: CallRecoveryState = 'idle';
+  private currentState: SignalingHealthMonitorState = 'idle';
   private currentGeneration = 0;
   private debounceHandle: unknown = null;
   private restartTimeoutHandle: unknown = null;
@@ -145,13 +180,20 @@ export class CallRecoveryCoordinator {
   private verifyDeadlineHandle: unknown = null;
   private verifyBaseline: number | null = null;
   private recoveryFailedLatch = false;
+  /**
+   * Media-failure episodes may carry a relay override into the replacement
+   * call; signaling health-check episodes never do (iOS
+   * `shouldEvaluateRelayFallback`).
+   */
+  private shouldEvaluateRelayFallback = false;
 
-  constructor(deps: CallRecoveryDeps) {
+  constructor(deps: SignalingHealthMonitorDeps) {
     this.deps = deps;
+    this.config = { ...DEFAULT_SIGNALING_HEALTH_MONITOR_CONFIG, ...deps.config };
     this.logger = deps.logger ?? defaultLogger(deps.callId);
   }
 
-  public get state(): CallRecoveryState {
+  public get state(): SignalingHealthMonitorState {
     return this.currentState;
   }
 
@@ -189,14 +231,9 @@ export class CallRecoveryCoordinator {
     this.recoveryFailedLatch = false;
     this.currentGeneration += 1;
     this.currentState = 'probing';
+    this.shouldEvaluateRelayFallback = true;
     this.logger.info('Test ICE failure injected', { generation: this.currentGeneration });
-
-    if (this.deps.isSignalingFresh()) {
-      this.logger.info('Signaling recently active, proceeding to test ICE restart');
-      void this.runRestart();
-    } else {
-      void this.runProbe('mediaRecovery');
-    }
+    this.beginMediaRecovery('test ICE failure');
 
     return true;
   }
@@ -210,7 +247,7 @@ export class CallRecoveryCoordinator {
    *
    * After the single reattach fallback failed, further notifications are
    * suppressed until ICE is observed connected again (notifyIceConnected)
-   * or the coordinator is cancelled: one recovery attempt per failure
+   * or the monitor is cancelled: one recovery attempt per failure
    * period.
    *
    * Failures on non-active calls or while the client reconnect flow owns
@@ -254,7 +291,7 @@ export class CallRecoveryCoordinator {
           return;
         }
         this.startEpisode('disconnected');
-      }, RECOVERY_DISCONNECT_DEBOUNCE_MS);
+      }, this.config.peerDisconnectedRecoveryDelayMs);
       return;
     }
 
@@ -279,21 +316,42 @@ export class CallRecoveryCoordinator {
   }
 
   /**
-   * Observe stale or unavailable signaling while an active call still has
-   * healthy media. This intentionally bypasses the connected-ICE guard used
-   * by ICE-triggered episodes: the transport can remain connected while the
-   * WebSocket is silently dead, so signaling must be probed independently.
+   * Periodic active-call signaling health check (iOS `checkSignalingHealth`).
+   * Driven by the client every `signalingHealthCheckIntervalMs` while calls
+   * are active. This intentionally bypasses the connected-ICE guard used by
+   * ICE-triggered episodes: media can stay connected while the WebSocket is
+   * silently dead, so signaling is judged independently.
+   *
+   * - socket unavailable: reattach immediately
+   * - inbound idle >= 20s or confirmed request/response idle >= 45s: probe;
+   *   an answered probe returns to idle, an unanswered one reattaches
    */
-  public notifySignalingUnhealthy(): void {
+  public checkSignalingHealth(): void {
     if (this.deps.callState() !== 'active' || this.deps.isClientReconnecting()) {
       return;
     }
     if (this.currentState !== 'idle' || this.recoveryFailedLatch) {
       return;
     }
+
+    if (!this.deps.isSignalingAvailable()) {
+      this.currentGeneration += 1;
+      this.shouldEvaluateRelayFallback = false;
+      this.logger.warn('Signaling socket is unavailable during an active call', {
+        generation: this.currentGeneration,
+      });
+      void this.performFallback('active-call-signaling-unavailable');
+      return;
+    }
+
+    if (!this.isSignalingStale()) {
+      return;
+    }
+
     this.currentGeneration += 1;
     this.currentState = 'probing';
-    this.logger.info('Signaling health check stale, probing active call', {
+    this.shouldEvaluateRelayFallback = false;
+    this.logger.warn('Signaling activity is stale during an active call; probing', {
       generation: this.currentGeneration,
     });
     void this.runProbe('healthCheck');
@@ -317,6 +375,7 @@ export class CallRecoveryCoordinator {
       this.logger.info('Recovery cancelled', { reason, state: this.currentState });
     }
     this.recoveryFailedLatch = false;
+    this.shouldEvaluateRelayFallback = false;
     this.currentGeneration += 1;
     this.currentState = 'idle';
   }
@@ -348,24 +407,52 @@ export class CallRecoveryCoordinator {
 
     this.currentGeneration += 1;
     this.currentState = 'probing';
+    this.shouldEvaluateRelayFallback = true;
     this.logger.info('Recovery episode started', { generation: this.currentGeneration, kind });
+    this.beginMediaRecovery(`ICE ${kind}`);
+  }
 
-    if (this.deps.isSignalingFresh()) {
-      this.logger.info('Signaling recently active, proceeding to ICE restart');
+  /**
+   * iOS `requestRecovery` decision: reattach when signaling is unavailable,
+   * restart ICE immediately when signaling was recently confirmed, and
+   * otherwise probe signaling before restarting.
+   */
+  private beginMediaRecovery(trigger: string): void {
+    if (!this.deps.isSignalingAvailable()) {
+      this.logger.warn(`${trigger} with signaling unavailable; starting reconnect/reattach`);
+      void this.performFallback('signaling-unavailable');
+      return;
+    }
+    if (this.hasRecentSignalingActivity()) {
+      this.logger.info(`${trigger} with signaling available; starting ICE restart`);
       void this.runRestart();
       return;
     }
-
+    this.logger.info(`${trigger} with stale signaling; probing before ICE restart`);
     void this.runProbe('mediaRecovery');
+  }
+
+  private hasRecentSignalingActivity(): boolean {
+    return (
+      this.deps.inboundSignalingIdleMs() <= this.config.recentInboundActivityThresholdMs &&
+      this.deps.confirmedOutboundIdleMs() <= this.config.confirmedOutboundActivityThresholdMs
+    );
+  }
+
+  private isSignalingStale(): boolean {
+    return (
+      this.deps.inboundSignalingIdleMs() >= this.config.staleInboundActivityThresholdMs ||
+      this.deps.confirmedOutboundIdleMs() >= this.config.confirmedOutboundActivityThresholdMs
+    );
   }
 
   private async runProbe(purpose: SignalingProbePurpose): Promise<void> {
     const generation = this.currentGeneration;
-    this.logger.info('Signaling stale or unknown, sending correlated ping probe');
+    this.logger.info('Sending correlated signaling ping probe', { purpose });
 
     const result = await this.withTimeout(
       this.deps.sendSignalingProbe(),
-      RECOVERY_PROBE_TIMEOUT_MS,
+      this.config.signalingProbeTimeoutMs,
       'timeout' as const
     ).catch(() => 'error' as const);
 
@@ -409,7 +496,7 @@ export class CallRecoveryCoordinator {
         return;
       }
       void this.performFallback('restart-timeout');
-    }, RECOVERY_RESTART_TIMEOUT_MS);
+    }, this.config.iceRestartTimeoutMs);
 
     try {
       const offerSdp = await this.deps.restartIce();
@@ -466,7 +553,7 @@ export class CallRecoveryCoordinator {
       }
       this.logger.warn('No inbound RTP growth within verification window');
       void this.performFallback('no-rtp-growth');
-    }, RECOVERY_RTP_VERIFY_WINDOW_MS);
+    }, this.config.postIceRestartMediaTimeoutMs);
 
     let pollsCompleted = 0;
 
@@ -498,10 +585,10 @@ export class CallRecoveryCoordinator {
           this.deps.onRecovered?.();
           return;
         }
-        this.verifyPollHandle = this.schedule(poll, RECOVERY_RTP_VERIFY_POLL_MS);
+        this.verifyPollHandle = this.schedule(poll, this.config.postIceRestartMediaPollMs);
       })();
     };
-    this.verifyPollHandle = this.schedule(poll, RECOVERY_RTP_VERIFY_POLL_MS);
+    this.verifyPollHandle = this.schedule(poll, this.config.postIceRestartMediaPollMs);
   }
 
   private async performFallback(reason: string): Promise<void> {
@@ -514,17 +601,21 @@ export class CallRecoveryCoordinator {
     this.setState('reattaching');
     this.logger.info('Falling back to reconnect/register/reattach', { reason });
 
+    const evaluateRelayFallback = this.shouldEvaluateRelayFallback;
+    this.shouldEvaluateRelayFallback = false;
     let evidence: CandidateEvidence | null = null;
-    try {
-      evidence = await this.deps.getSelectedCandidateEvidence();
-    } catch (error) {
-      this.logger.debug('Unable to capture selected candidate evidence', {
-        reason: error instanceof Error ? error.message : String(error),
-      });
+    if (evaluateRelayFallback) {
+      try {
+        evidence = await this.deps.getSelectedCandidateEvidence();
+      } catch (error) {
+        this.logger.debug('Unable to capture selected candidate evidence', {
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
     if (
       generation !== this.currentGeneration ||
-      (this.currentState as CallRecoveryState) !== 'reattaching' ||
+      (this.currentState as SignalingHealthMonitorState) !== 'reattaching' ||
       this.deps.callState() !== 'active'
     ) {
       return;
@@ -562,7 +653,7 @@ export class CallRecoveryCoordinator {
 
   // --- Helpers ---
 
-  private setState(state: CallRecoveryState): void {
+  private setState(state: SignalingHealthMonitorState): void {
     if (this.currentState !== state) {
       this.logger.debug('Recovery state transition', {
         from: this.currentState,

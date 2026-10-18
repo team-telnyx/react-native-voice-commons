@@ -6,7 +6,8 @@ import uuid from 'uuid-random';
 import { Platform } from 'react-native';
 import { Call } from './call';
 import type { CallRecoveryHooks } from './call';
-import type { CandidateEvidence } from './call-recovery-coordinator';
+import { DEFAULT_SIGNALING_HEALTH_MONITOR_CONFIG } from './signaling-health-monitor';
+import type { CandidateEvidence } from './signaling-health-monitor';
 import type { CallOptions } from './call-options';
 import type { ClientOptions } from './client-options';
 import type { CallReportConfig } from './call-report-models';
@@ -113,7 +114,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   // One-shot relay-only override captured from the recovering call's stats.
   private recoveryCandidateEvidenceByCallId: Map<string, CandidateEvidence> = new Map();
   private activeCallHealthCheckHandle: ReturnType<typeof setInterval> | null = null;
-  private static readonly ACTIVE_CALL_HEALTH_CHECK_MS = 3000;
+  private static readonly ACTIVE_CALL_HEALTH_CHECK_MS =
+    DEFAULT_SIGNALING_HEALTH_MONITOR_CONFIG.signalingHealthCheckIntervalMs;
   private static readonly RECONNECT_DELAY = 3000; // 3 seconds
   private static readonly RECONNECT_TIMEOUT = 60000; // 30 seconds
 
@@ -342,8 +344,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         return;
       }
       for (const call of this.calls.values()) {
-        if (typeof call.checkSignalingHealthForRecovery === 'function') {
-          call.checkSignalingHealthForRecovery();
+        if (typeof call.checkSignalingHealth === 'function') {
+          call.checkSignalingHealth();
         }
       }
     }, TelnyxRTC.ACTIVE_CALL_HEALTH_CHECK_MS);
@@ -739,9 +741,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     );
 
     if (callKitUUID) {
-      return (
-        candidates.find((call) => this.getCallKitIdentity(call) === callKitUUID) || null
-      );
+      return candidates.find((call) => this.getCallKitIdentity(call) === callKitUUID) || null;
     }
 
     return candidates.length === 1 ? candidates[0] : null;
@@ -1160,10 +1160,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     sipCallId: msg.params.sip_call_id,
   });
 
-  private handleRemoteCallEndedWithoutCall = (
-    msg: ByeEvent,
-    reason: CallTerminationReason
-  ) => {
+  private handleRemoteCallEndedWithoutCall = (msg: ByeEvent, reason: CallTerminationReason) => {
     const callKitUUID = this.pushNotificationCallKitUUID;
     const pushVoiceSDKId = (this as any)._pushVoiceSDKId;
 
@@ -1179,8 +1176,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     if (
       typeof pushVoiceSDKId === 'string' &&
       typeof msg.voice_sdk_id === 'string' &&
-      this.normalizeCallIdentity(pushVoiceSDKId) !==
-        this.normalizeCallIdentity(msg.voice_sdk_id)
+      this.normalizeCallIdentity(pushVoiceSDKId) !== this.normalizeCallIdentity(msg.voice_sdk_id)
     ) {
       log.debug('[TelnyxRTC] Ignoring pre-INVITE BYE from another push session', {
         callID: msg.params.callID,
@@ -1444,7 +1440,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
           // candidate evidence explicitly reports a VPN, force the replacement
           // call's media through a TURN relay once, then clear the evidence so
           // normal reattaches are not affected.
-          ...(this.consumeRelayOverride(msg.params.callID) ? { iceTransportPolicy: 'relay' as const } : {}),
+          ...(this.consumeRelayOverride(msg.params.callID)
+            ? { iceTransportPolicy: 'relay' as const }
+            : {}),
         },
       },
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
@@ -1467,10 +1465,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       log.error('[TelnyxRTC] Failed to execute answerAttach:', error);
       attachedCall.disposePeer();
       this.removeCall(attachedCall.callId);
-      this.emit(
-        'telnyx.client.error',
-        error instanceof Error ? error : new Error(String(error))
-      );
+      this.emit('telnyx.client.error', error instanceof Error ? error : new Error(String(error)));
       return;
     }
 
@@ -1781,8 +1776,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private buildRecoveryHooks(): CallRecoveryHooks {
     return {
       isClientReconnecting: () => this.reconnecting || this.recoveryReattachActive,
-      performReattachFallback: (callId: string) =>
-        this.performReattachFallbackForRecovery(callId),
+      performReattachFallback: (callId: string) => this.performReattachFallbackForRecovery(callId),
       captureCandidateEvidence: (evidence: CandidateEvidence) => {
         if (evidence.callId) {
           this.recoveryCandidateEvidenceByCallId.set(evidence.callId, evidence);
@@ -1829,7 +1823,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    */
   private performReattachFallbackForRecovery(callId: string): Promise<boolean> {
     if (this.recoveryReattachActive || this.reconnecting || this.explicitDisconnectRequested) {
-      log.debug('[TelnyxRTC] Recovery fallback skipped: a reconnect flow is already running or disconnected');
+      log.debug(
+        '[TelnyxRTC] Recovery fallback skipped: a reconnect flow is already running or disconnected'
+      );
       return Promise.resolve(false);
     }
 
@@ -1843,8 +1839,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     return new Promise<boolean>((resolve) => {
       let settled = false;
       const isCurrent = () =>
-        !this.explicitDisconnectRequested &&
-        recoveryGeneration === this.recoveryReattachGeneration;
+        !this.explicitDisconnectRequested && recoveryGeneration === this.recoveryReattachGeneration;
       // Only the recovering call's replacement attach settles the fallback:
       // in a multi-call session the first `telnyx.call.reattached` event may
       // belong to another call, and settling on it would report recovery for

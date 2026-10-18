@@ -1,5 +1,5 @@
-import { CallRecoveryCoordinator } from '../lib/call-recovery-coordinator';
-import type { CallRecoveryDeps } from '../lib/call-recovery-coordinator';
+import { SignalingHealthMonitor } from '../lib/signaling-health-monitor';
+import type { SignalingHealthMonitorDeps } from '../lib/signaling-health-monitor';
 
 // Mock loglevel (matches repo test conventions)
 jest.mock('loglevel', () => ({
@@ -15,6 +15,18 @@ const RESTART_TIMEOUT_MS = 15000;
 const VERIFY_WINDOW_MS = 5000;
 const VERIFY_POLL_MS = 1000;
 
+/** Inbound and confirmed request/response traffic seen just now. */
+const FRESH_SIGNALING = {
+  inboundSignalingIdleMs: jest.fn().mockReturnValue(0),
+  confirmedOutboundIdleMs: jest.fn().mockReturnValue(0),
+};
+
+/** Inbound traffic past the 20s periodic staleness threshold. */
+const STALE_SIGNALING = {
+  inboundSignalingIdleMs: jest.fn().mockReturnValue(20_000),
+  confirmedOutboundIdleMs: jest.fn().mockReturnValue(0),
+};
+
 /** Drain pending microtasks without advancing fake timers. */
 async function flush(): Promise<void> {
   for (let i = 0; i < 12; i += 1) {
@@ -23,12 +35,15 @@ async function flush(): Promise<void> {
   }
 }
 
-function createDeps(overrides: Partial<CallRecoveryDeps> = {}) {
+function createDeps(overrides: Partial<SignalingHealthMonitorDeps> = {}) {
   // mocks doubles as the source of deps so that test overrides and
   // assertions always observe the same functions the coordinator invokes.
   const mocks = {
     callState: jest.fn().mockReturnValue('active'),
-    isSignalingFresh: jest.fn().mockReturnValue(false),
+    isSignalingAvailable: jest.fn().mockReturnValue(true),
+    // Neither recent enough to skip the probe nor stale for the health check.
+    inboundSignalingIdleMs: jest.fn().mockReturnValue(10_000),
+    confirmedOutboundIdleMs: jest.fn().mockReturnValue(10_000),
     isClientReconnecting: jest.fn().mockReturnValue(false),
     sendSignalingProbe: jest.fn().mockResolvedValue('ok' as const),
     restartIce: jest.fn().mockResolvedValue('offer-sdp'),
@@ -45,7 +60,7 @@ function createDeps(overrides: Partial<CallRecoveryDeps> = {}) {
 
   Object.assign(mocks, overrides);
 
-  const deps: CallRecoveryDeps = {
+  const deps: SignalingHealthMonitorDeps = {
     callId: 'recovery-call-id',
     ...mocks,
   };
@@ -53,7 +68,7 @@ function createDeps(overrides: Partial<CallRecoveryDeps> = {}) {
   return { deps, mocks };
 }
 
-describe('CallRecoveryCoordinator', () => {
+describe('SignalingHealthMonitor', () => {
   beforeEach(() => {
     jest.useFakeTimers();
   });
@@ -65,7 +80,7 @@ describe('CallRecoveryCoordinator', () => {
   describe('guards', () => {
     it('ignores failures on non-active calls', async () => {
       const { deps, mocks } = createDeps({ callState: jest.fn().mockReturnValue('held') });
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -80,7 +95,7 @@ describe('CallRecoveryCoordinator', () => {
       const { deps, mocks } = createDeps({
         isClientReconnecting: jest.fn().mockReturnValue(true),
       });
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -93,7 +108,7 @@ describe('CallRecoveryCoordinator', () => {
       const { deps, mocks } = createDeps({
         getPeerIceState: jest.fn().mockReturnValue('connected'),
       });
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -108,9 +123,9 @@ describe('CallRecoveryCoordinator', () => {
     it('exercises ICE restart on a healthy connected call', async () => {
       const { deps, mocks } = createDeps({
         getPeerIceState: jest.fn().mockReturnValue('connected'),
-        isSignalingFresh: jest.fn().mockReturnValue(true),
+        ...FRESH_SIGNALING,
       });
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       const started = coordinator.simulateIceFailureForTesting();
       await flush();
@@ -125,7 +140,7 @@ describe('CallRecoveryCoordinator', () => {
 
     it('rejects the trigger when the call is not active', async () => {
       const { deps, mocks } = createDeps({ callState: jest.fn().mockReturnValue('held') });
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       const started = coordinator.simulateIceFailureForTesting();
       await flush();
@@ -139,7 +154,7 @@ describe('CallRecoveryCoordinator', () => {
   describe('duplicate suppression and debounce', () => {
     it('suppresses duplicate failure callbacks within one episode', async () => {
       const { deps, mocks } = createDeps();
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       coordinator.notifyIceFailure('failed');
@@ -151,7 +166,7 @@ describe('CallRecoveryCoordinator', () => {
 
     it('cancels a transient disconnect inside the debounce window', async () => {
       const { deps, mocks } = createDeps();
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('disconnected');
       jest.advanceTimersByTime(DEBOUNCE_MS - 100);
@@ -166,7 +181,7 @@ describe('CallRecoveryCoordinator', () => {
 
     it('starts an episode after the debounce window when ICE stays broken', async () => {
       const { deps, mocks } = createDeps();
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('disconnected');
       jest.advanceTimersByTime(DEBOUNCE_MS);
@@ -180,26 +195,97 @@ describe('CallRecoveryCoordinator', () => {
   describe('active-call signaling health', () => {
     it('probes stale signaling even when ICE is still connected', async () => {
       const { deps, mocks } = createDeps({
+        ...STALE_SIGNALING,
         getPeerIceState: jest.fn().mockReturnValue('connected'),
         sendSignalingProbe: jest.fn().mockResolvedValue('error' as const),
       });
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
-      coordinator.notifySignalingUnhealthy();
+      coordinator.checkSignalingHealth();
       await flush();
 
       expect(mocks.sendSignalingProbe).toHaveBeenCalledTimes(1);
       expect(mocks.performReattachFallback).toHaveBeenCalledTimes(1);
+      // Signaling failures never carry a relay override (iOS parity).
+      expect(mocks.getSelectedCandidateEvidence).not.toHaveBeenCalled();
+      expect(mocks.onCandidateEvidenceCaptured).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['inbound', 19_999, 44_999, false],
+      ['inbound', 20_000, 44_999, true],
+      ['confirmed outbound', 19_999, 45_000, true],
+    ])(
+      'applies the iOS %s staleness threshold (%dms inbound, %dms confirmed)',
+      async (_leg, inboundIdleMs, confirmedIdleMs, shouldProbe) => {
+        const { deps, mocks } = createDeps({
+          inboundSignalingIdleMs: jest.fn().mockReturnValue(inboundIdleMs),
+          confirmedOutboundIdleMs: jest.fn().mockReturnValue(confirmedIdleMs),
+        });
+        const coordinator = new SignalingHealthMonitor(deps);
+
+        coordinator.checkSignalingHealth();
+        await flush();
+
+        expect(mocks.sendSignalingProbe).toHaveBeenCalledTimes(shouldProbe ? 1 : 0);
+      }
+    );
+
+    it('reattaches immediately without probing when the socket is unavailable', async () => {
+      const { deps, mocks } = createDeps({
+        isSignalingAvailable: jest.fn().mockReturnValue(false),
+        getPeerIceState: jest.fn().mockReturnValue('connected'),
+      });
+      const coordinator = new SignalingHealthMonitor(deps);
+
+      coordinator.checkSignalingHealth();
+      expect(coordinator.state).toBe('reattaching');
+      await flush();
+
+      expect(mocks.sendSignalingProbe).not.toHaveBeenCalled();
+      expect(mocks.performReattachFallback).toHaveBeenCalledTimes(1);
+      expect(mocks.getSelectedCandidateEvidence).not.toHaveBeenCalled();
+    });
+
+    it('ignores the health check on non-active calls and while recovery runs', async () => {
+      const { deps, mocks } = createDeps({ ...STALE_SIGNALING });
+      const coordinator = new SignalingHealthMonitor(deps);
+
+      mocks.callState.mockReturnValue('held');
+      coordinator.checkSignalingHealth();
+      await flush();
+      expect(mocks.sendSignalingProbe).not.toHaveBeenCalled();
+
+      mocks.callState.mockReturnValue('active');
+      mocks.sendSignalingProbe.mockReturnValue(new Promise(() => {}));
+      coordinator.checkSignalingHealth();
+      coordinator.checkSignalingHealth();
+      await flush();
+      expect(mocks.sendSignalingProbe).toHaveBeenCalledTimes(1);
+    });
+
+    it('honors config overrides for the staleness thresholds', async () => {
+      const { deps, mocks } = createDeps({
+        inboundSignalingIdleMs: jest.fn().mockReturnValue(10_000),
+        config: { staleInboundActivityThresholdMs: 10_000 },
+      });
+      const coordinator = new SignalingHealthMonitor(deps);
+
+      coordinator.checkSignalingHealth();
+      await flush();
+
+      expect(mocks.sendSignalingProbe).toHaveBeenCalledTimes(1);
     });
 
     it('returns to idle after a successful periodic health probe without restarting ICE', async () => {
       const { deps, mocks } = createDeps({
+        ...STALE_SIGNALING,
         getPeerIceState: jest.fn().mockReturnValue('connected'),
         sendSignalingProbe: jest.fn().mockResolvedValue('ok' as const),
       });
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
-      coordinator.notifySignalingUnhealthy();
+      coordinator.checkSignalingHealth();
       await flush();
 
       expect(mocks.sendSignalingProbe).toHaveBeenCalledTimes(1);
@@ -211,8 +297,8 @@ describe('CallRecoveryCoordinator', () => {
 
   describe('probe correlation', () => {
     it('skips the probe when signaling is fresh', async () => {
-      const { deps, mocks } = createDeps({ isSignalingFresh: jest.fn().mockReturnValue(true) });
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const { deps, mocks } = createDeps({ ...FRESH_SIGNALING });
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -223,7 +309,7 @@ describe('CallRecoveryCoordinator', () => {
 
     it('restarts media after a correlated probe answers', async () => {
       const { deps, mocks } = createDeps();
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -242,7 +328,7 @@ describe('CallRecoveryCoordinator', () => {
         sendSignalingProbe: jest.fn().mockReturnValue(new Promise(() => {})),
         getSelectedCandidateEvidence: jest.fn().mockReturnValue(evidence),
       });
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -257,11 +343,29 @@ describe('CallRecoveryCoordinator', () => {
       expect(mocks.onRecoveryFailed).toHaveBeenCalledTimes(1);
     });
 
+    it('reattaches without probing when ICE fails and the socket is unavailable', async () => {
+      const evidence = { localNetworkType: 'vpn', localCandidateType: 'host' };
+      const { deps, mocks } = createDeps({
+        isSignalingAvailable: jest.fn().mockReturnValue(false),
+        getSelectedCandidateEvidence: jest.fn().mockReturnValue(evidence),
+      });
+      const coordinator = new SignalingHealthMonitor(deps);
+
+      coordinator.notifyIceFailure('failed');
+      await flush();
+
+      expect(mocks.sendSignalingProbe).not.toHaveBeenCalled();
+      expect(mocks.restartIce).not.toHaveBeenCalled();
+      expect(mocks.performReattachFallback).toHaveBeenCalledTimes(1);
+      // Media-failure episodes still evaluate the relay override.
+      expect(mocks.onCandidateEvidenceCaptured).toHaveBeenCalledWith(evidence);
+    });
+
     it('falls back to reattach when the probe errors', async () => {
       const { deps, mocks } = createDeps({
         sendSignalingProbe: jest.fn().mockResolvedValue('error' as const),
       });
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -274,13 +378,13 @@ describe('CallRecoveryCoordinator', () => {
 
   describe('ICE restart exchange', () => {
     it('applies the restart answer and succeeds on RTP growth', async () => {
-      const { deps, mocks } = createDeps({ isSignalingFresh: jest.fn().mockReturnValue(true) });
+      const { deps, mocks } = createDeps({ ...FRESH_SIGNALING });
       let pollCount = 0;
       mocks.getInboundAudioPackets.mockImplementation(async () => {
         pollCount += 1;
         return pollCount === 1 ? 100 : 105;
       });
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -297,9 +401,9 @@ describe('CallRecoveryCoordinator', () => {
     });
 
     it('falls back when the updateMedia exchange fails', async () => {
-      const { deps, mocks } = createDeps({ isSignalingFresh: jest.fn().mockReturnValue(true) });
+      const { deps, mocks } = createDeps({ ...FRESH_SIGNALING });
       mocks.sendUpdateMedia.mockRejectedValue(new Error('updateMedia rejected'));
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -309,9 +413,9 @@ describe('CallRecoveryCoordinator', () => {
     });
 
     it('falls back when applying the restart answer fails', async () => {
-      const { deps, mocks } = createDeps({ isSignalingFresh: jest.fn().mockReturnValue(true) });
+      const { deps, mocks } = createDeps({ ...FRESH_SIGNALING });
       mocks.applyRemoteAnswer.mockRejectedValue(new Error('remote answer rejected'));
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -322,13 +426,13 @@ describe('CallRecoveryCoordinator', () => {
     });
 
     it('verifies instead of falling back when ICE reconnected before the restart timeout', async () => {
-      const { deps, mocks } = createDeps({ isSignalingFresh: jest.fn().mockReturnValue(true) });
+      const { deps, mocks } = createDeps({ ...FRESH_SIGNALING });
       mocks.restartIce.mockReturnValue(new Promise(() => {}));
       // ICE is broken when the episode starts and has reconnected by the
       // time the restart timeout fires: first read happens at episode
       // start, second at the restart-timeout recheck.
       mocks.getPeerIceState.mockReturnValueOnce('disconnected').mockReturnValue('connected');
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -341,9 +445,9 @@ describe('CallRecoveryCoordinator', () => {
     });
 
     it('falls back when the restart times out and ICE is still broken', async () => {
-      const { deps, mocks } = createDeps({ isSignalingFresh: jest.fn().mockReturnValue(true) });
+      const { deps, mocks } = createDeps({ ...FRESH_SIGNALING });
       mocks.restartIce.mockReturnValue(new Promise(() => {}));
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -358,9 +462,9 @@ describe('CallRecoveryCoordinator', () => {
 
   describe('RTP verification', () => {
     it('falls back when inbound RTP never grows within the window', async () => {
-      const { deps, mocks } = createDeps({ isSignalingFresh: jest.fn().mockReturnValue(true) });
+      const { deps, mocks } = createDeps({ ...FRESH_SIGNALING });
       mocks.getInboundAudioPackets.mockResolvedValue(100);
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -373,9 +477,9 @@ describe('CallRecoveryCoordinator', () => {
     });
 
     it('falls back when the packet counter is unavailable (reports disabled)', async () => {
-      const { deps, mocks } = createDeps({ isSignalingFresh: jest.fn().mockReturnValue(true) });
+      const { deps, mocks } = createDeps({ ...FRESH_SIGNALING });
       mocks.getInboundAudioPackets.mockResolvedValue(null);
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -387,9 +491,9 @@ describe('CallRecoveryCoordinator', () => {
     });
 
     it('falls back immediately when ICE fails again during verification', async () => {
-      const { deps, mocks } = createDeps({ isSignalingFresh: jest.fn().mockReturnValue(true) });
+      const { deps, mocks } = createDeps({ ...FRESH_SIGNALING });
       mocks.getInboundAudioPackets.mockResolvedValue(100);
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -408,7 +512,7 @@ describe('CallRecoveryCoordinator', () => {
         sendSignalingProbe: jest.fn().mockResolvedValue('error' as const),
         performReattachFallback: jest.fn().mockResolvedValue(true),
       });
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -424,7 +528,7 @@ describe('CallRecoveryCoordinator', () => {
         sendSignalingProbe: jest.fn().mockResolvedValue('error' as const),
         performReattachFallback: jest.fn().mockRejectedValue(new Error('connect failed')),
       });
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -438,7 +542,7 @@ describe('CallRecoveryCoordinator', () => {
       const { deps, mocks } = createDeps({
         sendSignalingProbe: jest.fn().mockResolvedValue('error' as const),
       });
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -459,7 +563,7 @@ describe('CallRecoveryCoordinator', () => {
           })
         ),
       });
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -480,15 +584,16 @@ describe('CallRecoveryCoordinator', () => {
     it('explicit disconnect during a pending probe never runs reattach', async () => {
       let resolveProbe: (value: 'ok' | 'timeout' | 'error') => void = () => {};
       const { deps, mocks } = createDeps({
+        ...STALE_SIGNALING,
         sendSignalingProbe: jest.fn().mockReturnValue(
           new Promise((resolve) => {
             resolveProbe = resolve;
           })
         ),
       });
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
-      coordinator.notifySignalingUnhealthy();
+      coordinator.checkSignalingHealth();
       await flush();
       expect(coordinator.state).toBe('probing');
 
@@ -502,14 +607,14 @@ describe('CallRecoveryCoordinator', () => {
     });
 
     it('cancels pending timers and invalidates stale restart continuations', async () => {
-      const { deps, mocks } = createDeps({ isSignalingFresh: jest.fn().mockReturnValue(true) });
+      const { deps, mocks } = createDeps({ ...FRESH_SIGNALING });
       let resolveRestart: (sdp: string) => void = () => {};
       mocks.restartIce.mockReturnValue(
         new Promise<string>((resolve) => {
           resolveRestart = resolve;
         })
       );
-      const coordinator = new CallRecoveryCoordinator(deps);
+      const coordinator = new SignalingHealthMonitor(deps);
 
       coordinator.notifyIceFailure('failed');
       await flush();
@@ -529,11 +634,11 @@ describe('CallRecoveryCoordinator', () => {
       expect(mocks.performReattachFallback).not.toHaveBeenCalled();
     });
 
-    it('concurrent calls keep independent coordinators', async () => {
+    it('concurrent calls keep independent monitors', async () => {
       const { deps: depsA, mocks: mocksA } = createDeps();
       const { deps: depsB, mocks: mocksB } = createDeps();
-      const a = new CallRecoveryCoordinator(depsA);
-      const b = new CallRecoveryCoordinator(depsB);
+      const a = new SignalingHealthMonitor(depsA);
+      const b = new SignalingHealthMonitor(depsB);
 
       a.notifyIceFailure('failed');
       b.notifyIceFailure('failed');

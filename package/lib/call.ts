@@ -23,8 +23,8 @@ import {
   isUpdateMediaAnswer,
 } from './messages/call';
 import { TelnyxRTCMethod } from './messages/methods';
-import { CallRecoveryCoordinator } from './call-recovery-coordinator';
-import type { CandidateEvidence } from './call-recovery-coordinator';
+import { SignalingHealthMonitor } from './signaling-health-monitor';
+import type { CandidateEvidence } from './signaling-health-monitor';
 import { createAttachMessage } from './messages/attach';
 import { Peer } from './peer';
 import type { TrickleIceCandidate } from './peer';
@@ -43,15 +43,6 @@ import { DEFAULT_SDK_IDENTITY, type SDKIdentity } from './env';
 type CallEvents = {
   'telnyx.call.state': (call: Call, state: CallState) => void;
 };
-
-/**
- * Media recovery can skip the correlated probe only when inbound signaling was
- * very recent and request/response signaling has been confirmed recently.
- * Periodic health checks use the wider iOS staleness windows below.
- */
-const RECOVERY_RECENT_INBOUND_MS = 3000;
-const RECOVERY_CONFIRMED_OUTBOUND_MS = 45_000;
-const RECOVERY_STALE_INBOUND_MS = 20_000;
 
 /**
  * Possible states a call can be in.
@@ -275,7 +266,7 @@ export class Call extends EventEmitter<CallEvents> {
   private readonly pushDeviceToken?: string;
   private readonly sdkIdentity: SDKIdentity;
   private recoveryHooks?: CallRecoveryHooks;
-  private recoveryCoordinator: CallRecoveryCoordinator | null = null;
+  private signalingHealthMonitor: SignalingHealthMonitor | null = null;
 
   constructor({
     connection,
@@ -322,17 +313,17 @@ export class Call extends EventEmitter<CallEvents> {
       });
     }
 
-    // Active-call ICE restart recovery (VSDK-679). The coordinator is inert
-    // until a peer exists and ICE reports a failure; all client-owned
-    // behavior arrives through optional hooks.
+    // Active-call signaling health and ICE restart recovery (VSDK-679). The
+    // monitor is inert until the call is active and either ICE reports a
+    // failure or the client's periodic signaling health check finds the
+    // socket stale; all client-owned behavior arrives through optional hooks.
     this.recoveryHooks = recoveryHooks;
-    this.recoveryCoordinator = new CallRecoveryCoordinator({
+    this.signalingHealthMonitor = new SignalingHealthMonitor({
       callId: this.callId,
       callState: () => this.state,
-      isSignalingFresh: () =>
-        this.connection.isConnected &&
-        this.connection.inboundIdleMs <= RECOVERY_RECENT_INBOUND_MS &&
-        this.connection.confirmedOutboundIdleMs <= RECOVERY_CONFIRMED_OUTBOUND_MS,
+      isSignalingAvailable: () => this.connection.isConnected,
+      inboundSignalingIdleMs: () => this.connection.inboundIdleMs,
+      confirmedOutboundIdleMs: () => this.connection.confirmedOutboundIdleMs,
       isClientReconnecting: () => this.recoveryHooks?.isClientReconnecting() ?? false,
       sendSignalingProbe: () => this.sendRecoverySignalingProbe(),
       restartIce: async () => {
@@ -511,16 +502,19 @@ export class Call extends EventEmitter<CallEvents> {
       : {};
 
     await this.connection.sendAndWait(
-      createAnswerMessage({
-        callId: this.callId,
-        dialogParams: {},
-        sdp: this.getLocalSdpForSignaling(),
-        telnyxLegId: this.telnyxLegId!,
-        telnyxSessionId: this.telnyxSessionId!,
-        sessionId: this.sessionId,
-        customHeaders,
-        ...pushAnswerParams,
-      }, this.sdkIdentity)
+      createAnswerMessage(
+        {
+          callId: this.callId,
+          dialogParams: {},
+          sdp: this.getLocalSdpForSignaling(),
+          telnyxLegId: this.telnyxLegId!,
+          telnyxSessionId: this.telnyxSessionId!,
+          sessionId: this.sessionId,
+          customHeaders,
+          ...pushAnswerParams,
+        },
+        this.sdkIdentity
+      )
     );
 
     if (this.isTrickleIceEnabled()) {
@@ -565,17 +559,20 @@ export class Call extends EventEmitter<CallEvents> {
         throw new Error('[Call] Local SDP not available');
       }
 
-      const attachMessage = createAttachMessage({
-        callId: this.callId,
-        sessionId: this.sessionId,
-        sdp: this.getLocalSdpForSignaling(),
-        customHeaders: this.inviteCustomHeaders || [],
-        destinationNumber: this.options.destinationNumber || '',
-        callerIdName: this.options.callerIdName || '',
-        callerIdNumber: this.options.callerIdNumber || '',
-        clientState: this.options.clientState || '',
-        userVariables: [], // Not available in CallOptions, using empty array
-      }, this.sdkIdentity);
+      const attachMessage = createAttachMessage(
+        {
+          callId: this.callId,
+          sessionId: this.sessionId,
+          sdp: this.getLocalSdpForSignaling(),
+          customHeaders: this.inviteCustomHeaders || [],
+          destinationNumber: this.options.destinationNumber || '',
+          callerIdName: this.options.callerIdName || '',
+          callerIdNumber: this.options.callerIdNumber || '',
+          clientState: this.options.clientState || '',
+          userVariables: [], // Not available in CallOptions, using empty array
+        },
+        this.sdkIdentity
+      );
 
       log.debug('[Call] Sending attach message for reattachment:', {
         callId: this.callId,
@@ -926,13 +923,16 @@ export class Call extends EventEmitter<CallEvents> {
 
     try {
       const msg = await this.connection.sendAndWait(
-        createInviteMessage({
-          attach: false,
-          callOptions: this.options,
-          sessionId: this.sessionId,
-          callId: this.callId,
-          sdp: this.getLocalSdpForSignaling(),
-        }, this.sdkIdentity)
+        createInviteMessage(
+          {
+            attach: false,
+            callOptions: this.options,
+            sessionId: this.sessionId,
+            callId: this.callId,
+            sdp: this.getLocalSdpForSignaling(),
+          },
+          this.sdkIdentity
+        )
       );
 
       if (!isInviteACKMessage(msg)) {
@@ -1032,7 +1032,7 @@ export class Call extends EventEmitter<CallEvents> {
     // cancels an in-flight ICE restart recovery episode — terminal states,
     // network-loss drops, and hold renegotiations must not race recovery.
     if (state !== 'active') {
-      this.recoveryCoordinator?.cancel(`call-state:${state}`);
+      this.signalingHealthMonitor?.cancel(`call-state:${state}`);
     }
 
     // Start stats collection when call becomes active
@@ -1102,7 +1102,7 @@ export class Call extends EventEmitter<CallEvents> {
   public disposePeer = () => {
     if (this.peer) {
       log.debug('[Call] Disposing of existing peer connection');
-      this.recoveryCoordinator?.cancel('peer-disposed');
+      this.signalingHealthMonitor?.cancel('peer-disposed');
       this.peer.close();
       this.peer = null;
       log.debug('[Call] Peer connection disposed successfully');
@@ -1114,7 +1114,7 @@ export class Call extends EventEmitter<CallEvents> {
   // --- Active-call ICE restart recovery (VSDK-679) ---
 
   /**
-   * Feed peer ICE/connection state changes into the recovery coordinator.
+   * Feed peer ICE/connection state changes into the signaling health monitor.
    * The Peer surfaces both `iceConnectionState` and `connectionState` through
    * a single callback, so a peer-level failure still triggers recovery even
    * when the ICE callback does not fire.
@@ -1125,11 +1125,11 @@ export class Call extends EventEmitter<CallEvents> {
     }
     this.peer.onIceStateChange = (state: string) => {
       if (state === 'failed') {
-        this.recoveryCoordinator?.notifyIceFailure('failed');
+        this.signalingHealthMonitor?.notifyIceFailure('failed');
       } else if (state === 'disconnected') {
-        this.recoveryCoordinator?.notifyIceFailure('disconnected');
+        this.signalingHealthMonitor?.notifyIceFailure('disconnected');
       } else if (state === 'connected' || state === 'completed') {
-        this.recoveryCoordinator?.notifyIceConnected();
+        this.signalingHealthMonitor?.notifyIceConnected();
       }
       // 'closed' is terminal: recovery is cancelled via call-state and
       // disposePeer paths, so it is not re-triggered here.
@@ -1140,6 +1140,9 @@ export class Call extends EventEmitter<CallEvents> {
    * Send one uniquely correlated signaling probe (`telnyx_rtc.ping`).
    * The response is correlated by JSON-RPC id through the connection's
    * transaction registry, so unrelated socket traffic never satisfies it.
+   * Like iOS, a correlated JSON-RPC error still proves the signaling path is
+   * alive, so it counts as an answered probe; only a send failure or closed
+   * socket is an error.
    */
   private sendRecoverySignalingProbe = async (): Promise<'ok' | 'timeout' | 'error'> => {
     try {
@@ -1151,7 +1154,10 @@ export class Call extends EventEmitter<CallEvents> {
         voice_sdk_id: VOICE_SDK_ID,
       };
       const result = await this.connection.sendAndWait(probe);
-      return isJsonRpcErrorMessage(result) ? 'error' : 'ok';
+      if (isJsonRpcErrorMessage(result)) {
+        log.debug('[Call] Recovery signaling probe answered with an error response');
+      }
+      return 'ok';
     } catch (error) {
       log.debug('[Call] Recovery signaling probe failed', error);
       return 'error';
@@ -1283,7 +1289,7 @@ export class Call extends EventEmitter<CallEvents> {
   }
 
   public cancelRecovery(reason: string): void {
-    this.recoveryCoordinator?.cancel(reason);
+    this.signalingHealthMonitor?.cancel(reason);
   }
 
   /**
@@ -1299,25 +1305,15 @@ export class Call extends EventEmitter<CallEvents> {
       return false;
     }
 
-    return this.recoveryCoordinator?.simulateIceFailureForTesting() ?? false;
+    return this.signalingHealthMonitor?.simulateIceFailureForTesting() ?? false;
   };
 
-  public checkSignalingHealthForRecovery = (): void => {
-    if (this.state !== 'active') {
-      return;
-    }
-    // Periodic health check: mirror iOS staleness thresholds. Inbound gateway
-    // traffic can be quiet for up to 20s, and a confirmed request/response leg
-    // can be quiet for up to 45s before we probe. Do not reuse the 3s media
-    // recovery freshness window here, or healthy quiet calls will probe too
-    // aggressively.
-    if (
-      !this.connection.isConnected ||
-      this.connection.inboundIdleMs >= RECOVERY_STALE_INBOUND_MS ||
-      this.connection.confirmedOutboundIdleMs >= RECOVERY_CONFIRMED_OUTBOUND_MS
-    ) {
-      this.recoveryCoordinator?.notifySignalingUnhealthy();
-    }
+  /**
+   * Periodic active-call signaling health check, driven by the client's
+   * health-check timer. Delegates to the per-call signaling health monitor.
+   */
+  public checkSignalingHealth = (): void => {
+    this.signalingHealthMonitor?.checkSignalingHealth();
   };
 
   private onSocketMessage = (msg: unknown) => {

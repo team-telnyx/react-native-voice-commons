@@ -31,7 +31,7 @@ function createMockCall(callId: string, state: string = 'active') {
     }),
     disposePeer: jest.fn(),
     cancelRecovery: jest.fn(),
-    checkSignalingHealthForRecovery: jest.fn(),
+    checkSignalingHealth: jest.fn(),
   };
 }
 
@@ -153,14 +153,14 @@ describe('Recovery reattach fallback (VSDK-679 review fixes)', () => {
       confirmedOutboundIdleMs: Infinity,
     };
     jest.advanceTimersByTime((TelnyxRTC as any).ACTIVE_CALL_HEALTH_CHECK_MS);
-    expect(call.checkSignalingHealthForRecovery).toHaveBeenCalledTimes(1);
+    expect(call.checkSignalingHealth).toHaveBeenCalledTimes(1);
 
     // Explicit disconnect: the connection object is gone but the call is
     // still tracked as active. The monitor must stop — recovery must not
     // restart a session the consumer deliberately closed.
     (client as any).connection = null;
     jest.advanceTimersByTime((TelnyxRTC as any).ACTIVE_CALL_HEALTH_CHECK_MS * 3);
-    expect(call.checkSignalingHealthForRecovery).toHaveBeenCalledTimes(1);
+    expect(call.checkSignalingHealth).toHaveBeenCalledTimes(1);
     expect((client as any).activeCallHealthCheckHandle).toBeNull();
   });
 
