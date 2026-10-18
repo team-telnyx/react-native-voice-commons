@@ -298,6 +298,68 @@ describe('SignalingHealthMonitor', () => {
       expect(mocks.sendSignalingProbe).toHaveBeenCalledTimes(1);
     });
 
+    it('keeps recovering when the peer connection fails during an ICE episode and ICE reconnects', async () => {
+      const { deps, mocks } = createDeps({
+        getPeerIceState: jest.fn().mockReturnValue('failed'),
+        getPeerConnectionState: jest.fn().mockReturnValue('failed'),
+        sendSignalingProbe: jest.fn().mockReturnValue(new Promise(() => {})),
+      });
+      const monitor = new SignalingHealthMonitor(deps);
+
+      monitor.notifyIceFailure('failed');
+      await flush();
+      expect(monitor.state).toBe('probing');
+
+      // Suppressed as a duplicate episode, but the episode now covers it.
+      monitor.notifyPeerConnectionStateChange('failed');
+      mocks.getPeerIceState.mockReturnValue('connected');
+      monitor.notifyIceConnected();
+      expect(monitor.state).toBe('probing');
+
+      jest.advanceTimersByTime(PROBE_TIMEOUT_MS);
+      await flush();
+      expect(mocks.performReattachFallback).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls back at the restart timeout when the peer connection is still failed', async () => {
+      const { deps, mocks } = createDeps({
+        ...FRESH_SIGNALING,
+        getPeerIceState: jest.fn().mockReturnValue('connected'),
+        getPeerConnectionState: jest.fn().mockReturnValue('failed'),
+        sendUpdateMedia: jest.fn().mockReturnValue(new Promise(() => {})),
+      });
+      const monitor = new SignalingHealthMonitor(deps);
+
+      monitor.notifyPeerConnectionStateChange('failed');
+      await flush();
+      expect(monitor.state).toBe('iceRestarting');
+
+      jest.advanceTimersByTime(RESTART_TIMEOUT_MS);
+      await flush();
+
+      expect(mocks.performReattachFallback).toHaveBeenCalledTimes(1);
+    });
+
+    it('verifies media at the restart timeout when the peer connection reconnected', async () => {
+      const { deps, mocks } = createDeps({
+        ...FRESH_SIGNALING,
+        getPeerIceState: jest.fn().mockReturnValue('connected'),
+        getPeerConnectionState: jest.fn().mockReturnValue('failed'),
+        sendUpdateMedia: jest.fn().mockReturnValue(new Promise(() => {})),
+      });
+      const monitor = new SignalingHealthMonitor(deps);
+
+      monitor.notifyPeerConnectionStateChange('failed');
+      await flush();
+      mocks.getPeerConnectionState.mockReturnValue('connected');
+
+      jest.advanceTimersByTime(RESTART_TIMEOUT_MS);
+      await flush();
+
+      expect(monitor.state).toBe('verifyingMedia');
+      expect(mocks.performReattachFallback).not.toHaveBeenCalled();
+    });
+
     it('cancel clears a pending peer-connection disconnected delay', async () => {
       const { deps, mocks } = createDeps({
         getPeerConnectionState: jest.fn().mockReturnValue('disconnected'),

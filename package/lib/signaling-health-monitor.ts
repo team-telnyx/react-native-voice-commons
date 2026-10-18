@@ -312,6 +312,11 @@ export class SignalingHealthMonitor {
         this.cancelPeerDisconnectedRecovery();
         if (this.canStartFailureEpisode('peerConnection')) {
           this.startEpisode('failed', 'peerConnection');
+        } else if (this.isRecoveryActive && this.episodeSource === 'ice') {
+          // The running ICE episode now also covers a failed peer connection,
+          // so a later ICE 'connected' must not cancel it.
+          this.episodeSource = 'peerConnection';
+          this.logger.info('Peer connection failed during an ICE recovery episode');
         }
         return;
       case 'disconnected':
@@ -482,6 +487,19 @@ export class SignalingHealthMonitor {
     }
   }
 
+  /**
+   * Whether the transport that triggered the episode reports connected
+   * again. A peer-connection episode is judged by the peer connection: ICE
+   * can stay connected while the peer connection has failed.
+   */
+  private isMediaTransportConnected(): boolean {
+    if (this.episodeSource === 'peerConnection') {
+      return this.deps.getPeerConnectionState() === 'connected';
+    }
+    const iceState = this.deps.getPeerIceState();
+    return iceState != null && CONNECTED_ICE_STATES.has(iceState);
+  }
+
   private describeSource(source: RecoveryFailureSource): string {
     return source === 'ice' ? 'ICE' : 'Peer connection';
   }
@@ -599,8 +617,7 @@ export class SignalingHealthMonitor {
         return;
       }
       this.logger.warn('ICE restart timed out, re-checking peer state');
-      const iceState = this.deps.getPeerIceState();
-      if (iceState && CONNECTED_ICE_STATES.has(iceState)) {
+      if (this.isMediaTransportConnected()) {
         // The restart recovered media even without a completed answer
         // exchange; hand over to RTP verification as the final arbiter.
         void this.runVerification();
