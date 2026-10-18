@@ -1,5 +1,12 @@
 import { Call } from '@telnyx/react-native-voice-sdk';
 import type { TelnyxVoipClient } from '../telnyx-voip-client';
+export type RemoteCallEndedReason = {
+    cause?: string;
+    causeCode?: number;
+    sipCode?: number;
+    sipReason?: string;
+    sipCallId?: string;
+};
 /**
  * CallKit Coordinator - Manages the proper CallKit-first flow for iOS
  *
@@ -78,6 +85,8 @@ declare class CallKitCoordinator {
      * before calling this method.
      */
     handleCallKitPushReceived(callKitUUID: string, event?: any): Promise<boolean>;
+    /** End a still-pending PushKit CallKit call after a remote hangup. */
+    handlePendingPushCallRemoteEnded(callKitUUID: string, reason?: RemoteCallEndedReason): Promise<boolean>;
     /**
      * Handle push notification answer - when user answers from CallKit but we don't have a WebRTC call yet
      * This is the iOS equivalent of the Android FCM handler

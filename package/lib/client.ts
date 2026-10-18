@@ -17,12 +17,15 @@ import { LoginHandler } from './login-handler';
 import type {
   InviteEvent,
   AnswerEvent,
+  ByeEvent,
+  CallTerminationReason,
   CandidateEvent,
   EndOfCandidatesEvent,
 } from './messages/call';
 import {
   isInviteEvent,
   isAnswerEvent,
+  isByeEvent,
   isCandidateEvent,
   isEndOfCandidatesEvent,
   getCallIdFromTrickleParams,
@@ -43,6 +46,7 @@ type TelnyxRTCEvents = {
   'telnyx.call.reattached': (call: Call, msg: AttachEvent) => void;
   'telnyx.media.received': (msg: MediaEvent) => void;
   'telnyx.call.answered': (call: Call, msg: AnswerEvent) => void;
+  'telnyx.call.remoteEnded': (callId: string, reason: CallTerminationReason) => void;
   'telnyx.call.stateChanged': (call: Call, state: string) => void;
   'telnyx.call.removed': (callId: string) => void;
 };
@@ -1010,6 +1014,20 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private onSocketMessage = (msg: unknown) => {
     log.debug('[TelnyxRTC] Processing socket message:', msg);
 
+    if (isByeEvent(msg)) {
+      const reason = this.getCallTerminationReason(msg);
+      const targetCall = this.getCall(msg.params.callID);
+      if (targetCall) {
+        // Match the native SDKs' client-level remote-ended callback. The Call
+        // object will still consume this BYE and transition to `ended`.
+        this.emit('telnyx.call.remoteEnded', this.getCallKitIdentity(targetCall), reason);
+      } else {
+        // A push can wake the app after the caller has already hung up. In
+        // that race no Call object exists to consume the BYE.
+        return this.handleRemoteCallEndedWithoutCall(msg, reason);
+      }
+    }
+
     if (isInviteEvent(msg)) {
       log.debug('[TelnyxRTC] Detected invite event, processing...');
 
@@ -1065,6 +1083,76 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
 
     return;
+  };
+
+  private getCallTerminationReason = (msg: ByeEvent): CallTerminationReason => ({
+    cause: msg.params.cause,
+    causeCode: msg.params.causeCode,
+    sipCode: msg.params.sipCode,
+    sipReason: msg.params.sipReason,
+    sipCallId: msg.params.sip_call_id,
+  });
+
+  private handleRemoteCallEndedWithoutCall = (
+    msg: ByeEvent,
+    reason: CallTerminationReason
+  ) => {
+    const callKitUUID = this.pushNotificationCallKitUUID;
+    const pushVoiceSDKId = (this as any)._pushVoiceSDKId;
+
+    // Unknown BYEs can belong to calls from an earlier socket session. Only
+    // bridge the event while an explicit PushKit call is awaiting its INVITE.
+    if (!this.isCallFromPush || !callKitUUID) {
+      log.debug('[TelnyxRTC] Ignoring BYE without a matching pre-INVITE push context', {
+        callID: msg.params.callID,
+      });
+      return;
+    }
+
+    if (
+      typeof pushVoiceSDKId === 'string' &&
+      typeof msg.voice_sdk_id === 'string' &&
+      this.normalizeCallIdentity(pushVoiceSDKId) !==
+        this.normalizeCallIdentity(msg.voice_sdk_id)
+    ) {
+      log.debug('[TelnyxRTC] Ignoring pre-INVITE BYE from another push session', {
+        callID: msg.params.callID,
+      });
+      return;
+    }
+
+    log.debug('[TelnyxRTC] Push call ended before INVITE arrived', {
+      callID: msg.params.callID,
+      callKitUUID,
+      cause: msg.params.cause,
+      causeCode: msg.params.causeCode,
+    });
+
+    if (this.pendingInvite?.params.callID === msg.params.callID) {
+      this.pendingInvite = null;
+    }
+    this.pendingMediaEvents.delete(msg.params.callID);
+    this.pendingTrickleEvents.delete(msg.params.callID);
+
+    const actionKey = this.normalizeCallIdentity(callKitUUID);
+    this.pendingAnswerActions.delete(actionKey);
+    this.pendingEndActions.delete(actionKey);
+    this.pendingAnswerActions.delete(TelnyxRTC.LEGACY_PENDING_ACTION_KEY);
+    this.pendingEndActions.delete(TelnyxRTC.LEGACY_PENDING_ACTION_KEY);
+
+    // Native iOS exposes this as onRemoteCallEnded and Android emits a normal
+    // BYE terminal event. Preserve that general contract even though this
+    // particular path has no Call object yet. Once an INVITE has created a
+    // Call, commons can also run its existing state-listener teardown; both
+    // consumers deliberately keep their cleanup idempotent.
+    this.emit('telnyx.call.remoteEnded', callKitUUID, reason);
+
+    this.isCallFromPush = false;
+    this.pushNotificationPayload = null;
+    this.pushNotificationCallKitUUID = null;
+    this.clearPushState().catch((error) => {
+      log.warn('[TelnyxRTC] Failed to clear push state after pre-INVITE BYE:', error);
+    });
   };
 
   private handleCallInvite = async (msg: InviteEvent) => {
