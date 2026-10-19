@@ -275,13 +275,12 @@ export class SignalingHealthMonitor {
       if (this.debounceHandle != null) {
         return;
       }
-      const generation = this.currentGeneration;
       this.logger.info('ICE disconnected, scheduling recovery debounce');
       this.debounceHandle = this.schedule(() => {
+        // Like iOS, judge the delay at fire time (startEpisode requires an
+        // idle monitor and an active call) rather than by generation, so a
+        // health probe answered inside the window does not drop it.
         this.debounceHandle = null;
-        if (generation !== this.currentGeneration) {
-          return;
-        }
         const iceState = this.deps.getPeerIceState();
         if (iceState && CONNECTED_ICE_STATES.has(iceState)) {
           this.logger.info('Transient ICE disconnect recovered before debounce fired');
@@ -461,14 +460,13 @@ export class SignalingHealthMonitor {
       return;
     }
     this.cancelPeerDisconnectedRecovery();
-    const generation = this.currentGeneration;
     const delayMs = this.config.peerDisconnectedRecoveryDelayMs;
     this.logger.info('Peer connection disconnected, scheduling recovery delay');
     this.peerDisconnectedHandle = this.schedule(() => {
+      // iOS parity: the delay is judged at fire time (startEpisode requires an
+      // idle monitor and an active call), not by generation, so a health probe
+      // answered inside the window does not drop it.
       this.peerDisconnectedHandle = null;
-      if (generation !== this.currentGeneration) {
-        return;
-      }
       if (this.deps.getPeerConnectionState() === 'connected') {
         this.logger.info('Peer connection recovered before the disconnected delay elapsed');
         return;

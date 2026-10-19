@@ -360,6 +360,66 @@ describe('SignalingHealthMonitor', () => {
       expect(mocks.performReattachFallback).not.toHaveBeenCalled();
     });
 
+    it.each([
+      ['peer connection', 'peerConnection'],
+      ['ICE', 'ice'],
+    ])(
+      'still recovers when a health probe is answered inside the %s disconnected delay',
+      async (_label, source) => {
+        const { deps, mocks } = createDeps({
+          ...STALE_SIGNALING,
+          getPeerIceState: jest
+            .fn()
+            .mockReturnValue(source === 'ice' ? 'disconnected' : 'connected'),
+          getPeerConnectionState: jest
+            .fn()
+            .mockReturnValue(source === 'ice' ? 'connected' : 'disconnected'),
+        });
+        const monitor = new SignalingHealthMonitor(deps);
+
+        if (source === 'ice') {
+          monitor.notifyIceFailure('disconnected');
+        } else {
+          monitor.notifyPeerConnectionStateChange('disconnected');
+        }
+        jest.advanceTimersByTime(1000);
+        monitor.checkSignalingHealth();
+        await flush();
+        expect(monitor.state).toBe('idle');
+        expect(mocks.sendSignalingProbe).toHaveBeenCalledTimes(1);
+
+        jest.advanceTimersByTime(DEBOUNCE_MS);
+        await flush();
+
+        // The delay fired on an idle monitor and started media recovery.
+        expect(mocks.sendSignalingProbe).toHaveBeenCalledTimes(2);
+        expect(mocks.restartIce).toHaveBeenCalledTimes(1);
+      }
+    );
+
+    it('does not start a second episode when the delay fires during recovery', async () => {
+      const { deps, mocks } = createDeps({
+        ...STALE_SIGNALING,
+        getPeerIceState: jest.fn().mockReturnValue('connected'),
+        getPeerConnectionState: jest.fn().mockReturnValue('disconnected'),
+        sendSignalingProbe: jest.fn().mockReturnValue(new Promise(() => {})),
+      });
+      const monitor = new SignalingHealthMonitor(deps);
+
+      monitor.notifyPeerConnectionStateChange('disconnected');
+      monitor.checkSignalingHealth();
+      await flush();
+      expect(monitor.state).toBe('probing');
+      const generation = monitor.generation;
+
+      jest.advanceTimersByTime(DEBOUNCE_MS);
+      await flush();
+
+      expect(monitor.state).toBe('probing');
+      expect(monitor.generation).toBe(generation);
+      expect(mocks.sendSignalingProbe).toHaveBeenCalledTimes(1);
+    });
+
     it('cancel clears a pending peer-connection disconnected delay', async () => {
       const { deps, mocks } = createDeps({
         getPeerConnectionState: jest.fn().mockReturnValue('disconnected'),
