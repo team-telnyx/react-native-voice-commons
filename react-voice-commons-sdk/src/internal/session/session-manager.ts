@@ -14,6 +14,7 @@ import {
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
 const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
 const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
+const ICE_SERVERS_STORAGE_KEY = '@ice_servers';
 
 /**
  * Manages the connection lifecycle to the Telnyx platform.
@@ -243,6 +244,8 @@ export class SessionManager {
         const storedMissedCallNotifications = await AsyncStorage.getItem(
           MISSED_CALL_NOTIFICATIONS_STORAGE_KEY
         );
+        const storedIceServers = await AsyncStorage.getItem(ICE_SERVERS_STORAGE_KEY);
+        const iceServers = storedIceServers ? JSON.parse(storedIceServers) : undefined;
         const useTrickleIce = storedUseTrickleIce === 'true';
         const pushWhenActive = storedPushWhenActive === 'true';
         const enableMissedCallNotifications = storedMissedCallNotifications === 'true';
@@ -260,6 +263,7 @@ export class SessionManager {
             useTrickleIce,
             pushWhenActive,
             enableMissedCallNotifications,
+            iceServers,
           });
         }
         // Check if we have token-based authentication data
@@ -271,6 +275,7 @@ export class SessionManager {
             useTrickleIce,
             pushWhenActive,
             enableMissedCallNotifications,
+            iceServers,
           });
         }
 
@@ -489,6 +494,7 @@ export class SessionManager {
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
           callReportMaxLogEntries: config.callReportMaxLogEntries,
+          iceServers: config.iceServers,
           sdkName: REACT_NATIVE_COMMONS_SDK_IDENTITY.name,
           sdkVersion: REACT_NATIVE_COMMONS_SDK_IDENTITY.version,
         };
@@ -511,6 +517,7 @@ export class SessionManager {
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
           callReportMaxLogEntries: config.callReportMaxLogEntries,
+          iceServers: config.iceServers,
           sdkName: REACT_NATIVE_COMMONS_SDK_IDENTITY.name,
           sdkVersion: REACT_NATIVE_COMMONS_SDK_IDENTITY.version,
         };

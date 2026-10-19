@@ -41,6 +41,8 @@ declare module '@telnyx/react-native-voice-sdk' {
     callReportInterval?: number;
     callReportLogLevel?: string;
     callReportMaxLogEntries?: number;
+    /** Custom ICE servers (STUN/TURN) for WebRTC peer connections */
+    iceServers?: RTCIceServer[];
     sdkName?: string;
     sdkVersion?: string;
   }
