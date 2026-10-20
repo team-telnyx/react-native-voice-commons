@@ -328,17 +328,35 @@ export class Call extends EventEmitter<CallEvents> {
       sendSignalingProbe: () => this.sendRecoverySignalingProbe(),
       restartIce: async () => {
         if (!this.peer) {
+          this.recordRecoveryEvent('error', 'ICE restart failed - missing required parameters');
           throw new Error('[Call] Recovery: no peer connection for ICE restart');
         }
-        return this.peer.restartIce();
+        this.recordRecoveryEvent('info', 'ICE restart: initiated');
+        try {
+          return await this.peer.restartIce();
+        } catch (error) {
+          this.recordRecoveryEvent('error', 'ICE restart offer creation failed', {
+            error: this.describeRecoveryError(error),
+          });
+          throw error;
+        }
       },
       sendUpdateMedia: (offerSdp) => this.sendUpdateMediaForRecovery(offerSdp),
       applyRemoteAnswer: async (answerSdp) => {
         if (!this.peer) {
+          this.recordRecoveryEvent('error', 'ICE restart failed - missing required parameters');
           throw new Error('[Call] Recovery: no peer connection for recovery answer');
         }
-        await this.peer.setRemoteDescriptionStrict({ type: 'answer', sdp: answerSdp });
+        try {
+          await this.peer.setRemoteDescriptionStrict({ type: 'answer', sdp: answerSdp });
+        } catch (error) {
+          this.recordRecoveryEvent('error', 'ICE restart remote SDP apply failed', {
+            error: this.describeRecoveryError(error),
+          });
+          throw error;
+        }
         this.peer.finishIceRestart();
+        this.recordRecoveryEvent('info', 'ICE restart remote SDP applied');
       },
       getInboundAudioPackets: () => this.getRecoveryInboundAudioPackets(),
       getPeerIceState: () => this.peer?.getIceConnectionState() ?? null,
@@ -353,15 +371,16 @@ export class Call extends EventEmitter<CallEvents> {
         });
         this.recoveryHooks?.captureCandidateEvidence?.(evidence);
       },
-      onRecovered: () => {
-        this.callReportCollector?.log('info', 'ICE restart recovery succeeded', {
-          callId: this.callId,
-        });
+      onRecovered: (outcome) => {
+        this.recordRecoveryEvent(
+          'info',
+          outcome === 'iceRestart'
+            ? 'ICE restart recovery succeeded'
+            : 'Recovery reattach succeeded'
+        );
       },
       onRecoveryFailed: () => {
-        this.callReportCollector?.log('warn', 'ICE restart recovery failed after one attempt', {
-          callId: this.callId,
-        });
+        this.recordRecoveryEvent('warn', 'Recovery failed after one reattach attempt');
       },
     });
 
@@ -1165,18 +1184,57 @@ export class Call extends EventEmitter<CallEvents> {
    * Modify pattern already used by this call object.
    */
   private sendUpdateMediaForRecovery = async (offerSdp: string): Promise<string> => {
+    const trickle = this.isTrickleIceEnabled();
+    this.recordRecoveryEvent(
+      'info',
+      `ICE restart: sending ${trickle ? 'trickle ' : ''}Modify with new offer SDP`,
+      { trickle }
+    );
     const request = createUpdateMediaRequest({
       sessionId: this.sessionId,
       callId: this.callId,
       sdp: offerSdp,
-      trickleIce: this.isTrickleIceEnabled(),
+      trickleIce: trickle,
     });
-    const result = await this.connection.sendAndWait(request);
-    if (!isUpdateMediaAnswer(result)) {
-      throw new Error(`[Call] Invalid updateMedia response: ${JSON.stringify(result)}`);
+    let result: unknown;
+    try {
+      result = await this.connection.sendAndWait(request);
+    } catch (error) {
+      this.recordRecoveryEvent('error', 'ICE restart Modify request failed', {
+        error: this.describeRecoveryError(error),
+      });
+      throw error;
     }
+    if (!isUpdateMediaAnswer(result)) {
+      const response = result as { result?: { sdp?: unknown } } | null;
+      this.recordRecoveryEvent(
+        'error',
+        typeof response?.result?.sdp === 'string'
+          ? 'ICE restart Modify response invalid'
+          : 'ICE restart Modify response missing SDP'
+      );
+      throw new Error('[Call] Invalid updateMedia response');
+    }
+    this.recordRecoveryEvent('info', 'ICE restart Modify response received');
     return result.result.sdp;
   };
+
+  /** Record recovery lifecycle stages in the call report, including iOS ICE-restart parity. */
+  private recordRecoveryEvent(
+    level: 'info' | 'warn' | 'error',
+    message: string,
+    context: Record<string, unknown> = {}
+  ): void {
+    this.callReportCollector?.log(level, message, {
+      ...context,
+      callId: this.callId,
+      sessionId: this.sessionId,
+    });
+  }
+
+  private describeRecoveryError(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+  }
 
   /**
    * Latest cumulative inbound audio packet counter for RTP verification.

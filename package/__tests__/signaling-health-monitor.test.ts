@@ -779,7 +779,7 @@ describe('SignalingHealthMonitor', () => {
 
       jest.advanceTimersByTime(VERIFY_POLL_MS);
       await flush();
-      expect(mocks.onRecovered).toHaveBeenCalledTimes(1);
+      expect(mocks.onRecovered).toHaveBeenCalledWith('iceRestart');
       expect(mocks.onRecoveryFailed).not.toHaveBeenCalled();
       expect(coordinator.isRecoveryActive).toBe(false);
     });
@@ -971,7 +971,7 @@ describe('SignalingHealthMonitor', () => {
       await flush();
 
       expect(mocks.performReattachFallback).toHaveBeenCalledTimes(1);
-      expect(mocks.onRecovered).toHaveBeenCalledTimes(1);
+      expect(mocks.onRecovered).toHaveBeenCalledWith('reattach');
       expect(mocks.onRecoveryFailed).not.toHaveBeenCalled();
       expect(coordinator.isRecoveryActive).toBe(false);
     });

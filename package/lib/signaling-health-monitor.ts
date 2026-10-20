@@ -31,6 +31,7 @@ export type SignalingHealthMonitorState =
   | 'reattaching';
 
 export type RecoveryFailureKind = 'failed' | 'disconnected';
+export type RecoveryOutcome = 'iceRestart' | 'reattach';
 /** Which peer callback reported the failure that started an episode. */
 type RecoveryFailureSource = 'ice' | 'peerConnection';
 type SignalingProbePurpose = 'mediaRecovery' | 'healthCheck';
@@ -157,8 +158,8 @@ export type SignalingHealthMonitorDeps = {
   /** Invoked when the single fallback attempt failed. */
   onRecoveryFailed?(): void;
 
-  /** Invoked when recovery completed successfully. */
-  onRecovered?(): void;
+  /** Invoked when recovery completed successfully, with the path that recovered it. */
+  onRecovered?(outcome: RecoveryOutcome): void;
 
   config?: Partial<SignalingHealthMonitorConfig>;
   logger?: RecoveryLogger;
@@ -777,7 +778,7 @@ export class SignalingHealthMonitor {
           this.logger.info('Inbound RTP verified, recovery succeeded');
           this.clearVerifyTimers();
           this.setState('idle');
-          this.deps.onRecovered?.();
+          this.deps.onRecovered?.('iceRestart');
           return;
         }
         this.verifyPollHandle = this.schedule(poll, this.config.postIceRestartMediaPollMs);
@@ -840,7 +841,7 @@ export class SignalingHealthMonitor {
     if (reattached) {
       this.logger.info('Reattach accepted by backend, replacement call initiated');
       this.setState('idle');
-      this.deps.onRecovered?.();
+      this.deps.onRecovered?.('reattach');
       return;
     }
 
