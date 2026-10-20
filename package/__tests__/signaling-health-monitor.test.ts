@@ -435,6 +435,147 @@ describe('SignalingHealthMonitor', () => {
     });
   });
 
+  describe('media failures during a signaling health probe', () => {
+    /** A health probe that stays in flight until the test answers it. */
+    function createHealthProbeDeps(overrides: Partial<SignalingHealthMonitorDeps> = {}) {
+      let answerProbe: (value: 'ok' | 'timeout' | 'error') => void = () => {};
+      const created = createDeps({
+        ...STALE_SIGNALING,
+        getPeerIceState: jest.fn().mockReturnValue('connected'),
+        getPeerConnectionState: jest.fn().mockReturnValue('disconnected'),
+        sendSignalingProbe: jest
+          .fn()
+          .mockReturnValueOnce(
+            new Promise((resolve) => {
+              answerProbe = resolve;
+            })
+          )
+          .mockResolvedValue('ok' as const),
+        ...overrides,
+      });
+      return { ...created, answerProbe: (value: 'ok' | 'timeout' | 'error') => answerProbe(value) };
+    }
+
+    it('recovers a peer disconnect that outlives an answered health probe', async () => {
+      const { deps, mocks, answerProbe } = createHealthProbeDeps();
+      const monitor = new SignalingHealthMonitor(deps);
+
+      monitor.checkSignalingHealth();
+      await flush();
+      expect(monitor.state).toBe('probing');
+
+      monitor.notifyPeerConnectionStateChange('disconnected');
+      answerProbe('ok');
+      await flush();
+      expect(monitor.state).toBe('idle');
+      expect(mocks.restartIce).not.toHaveBeenCalled();
+
+      jest.advanceTimersByTime(DEBOUNCE_MS);
+      await flush();
+
+      expect(mocks.restartIce).toHaveBeenCalledTimes(1);
+    });
+
+    it('restarts ICE once the probe answers when the disconnect delay elapsed first', async () => {
+      const { deps, mocks, answerProbe } = createHealthProbeDeps();
+      const monitor = new SignalingHealthMonitor(deps);
+
+      monitor.checkSignalingHealth();
+      await flush();
+      monitor.notifyPeerConnectionStateChange('disconnected');
+      jest.advanceTimersByTime(DEBOUNCE_MS);
+      await flush();
+      expect(mocks.restartIce).not.toHaveBeenCalled();
+
+      answerProbe('ok');
+      await flush();
+
+      // The answered probe proved signaling, so no second probe is needed.
+      expect(mocks.sendSignalingProbe).toHaveBeenCalledTimes(1);
+      expect(mocks.restartIce).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancels recovery when the peer reconnects before the delay elapses', async () => {
+      const { deps, mocks, answerProbe } = createHealthProbeDeps();
+      const monitor = new SignalingHealthMonitor(deps);
+
+      monitor.checkSignalingHealth();
+      await flush();
+      monitor.notifyPeerConnectionStateChange('disconnected');
+      mocks.getPeerConnectionState.mockReturnValue('connected');
+      monitor.notifyPeerConnectionStateChange('connected');
+      answerProbe('ok');
+      jest.advanceTimersByTime(DEBOUNCE_MS);
+      await flush();
+
+      expect(mocks.restartIce).not.toHaveBeenCalled();
+      expect(monitor.state).toBe('idle');
+    });
+
+    it('drops a deferred recovery when the peer reconnects before the probe answers', async () => {
+      const { deps, mocks, answerProbe } = createHealthProbeDeps();
+      const monitor = new SignalingHealthMonitor(deps);
+
+      monitor.checkSignalingHealth();
+      await flush();
+      monitor.notifyPeerConnectionStateChange('disconnected');
+      jest.advanceTimersByTime(DEBOUNCE_MS);
+      await flush();
+
+      mocks.getPeerConnectionState.mockReturnValue('connected');
+      monitor.notifyPeerConnectionStateChange('connected');
+      answerProbe('ok');
+      await flush();
+
+      expect(mocks.restartIce).not.toHaveBeenCalled();
+      expect(monitor.state).toBe('idle');
+    });
+
+    it.each([
+      ['ICE', 'ice'],
+      ['peer connection', 'peerConnection'],
+    ])('recovers a %s failure that arrives during the health probe', async (_label, source) => {
+      const { deps, mocks, answerProbe } = createHealthProbeDeps({
+        getPeerIceState: jest.fn().mockReturnValue(source === 'ice' ? 'failed' : 'connected'),
+        getPeerConnectionState: jest.fn().mockReturnValue('failed'),
+      });
+      const monitor = new SignalingHealthMonitor(deps);
+
+      monitor.checkSignalingHealth();
+      await flush();
+      if (source === 'ice') {
+        monitor.notifyIceFailure('failed');
+      } else {
+        monitor.notifyPeerConnectionStateChange('failed');
+      }
+      expect(monitor.state).toBe('probing');
+
+      answerProbe('ok');
+      await flush();
+
+      expect(mocks.restartIce).toHaveBeenCalledTimes(1);
+    });
+
+    it('evaluates the relay override when the probe fails with a deferred media failure', async () => {
+      const evidence = { localNetworkType: 'vpn', localCandidateType: 'host' };
+      const { deps, mocks, answerProbe } = createHealthProbeDeps({
+        getPeerConnectionState: jest.fn().mockReturnValue('failed'),
+        getSelectedCandidateEvidence: jest.fn().mockReturnValue(evidence),
+      });
+      const monitor = new SignalingHealthMonitor(deps);
+
+      monitor.checkSignalingHealth();
+      await flush();
+      monitor.notifyPeerConnectionStateChange('failed');
+      answerProbe('timeout');
+      await flush();
+
+      expect(mocks.restartIce).not.toHaveBeenCalled();
+      expect(mocks.performReattachFallback).toHaveBeenCalledTimes(1);
+      expect(mocks.onCandidateEvidenceCaptured).toHaveBeenCalledWith(evidence);
+    });
+  });
+
   describe('active-call signaling health', () => {
     it('probes stale signaling even when ICE is still connected', async () => {
       const { deps, mocks } = createDeps({

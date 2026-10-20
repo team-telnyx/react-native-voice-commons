@@ -186,6 +186,15 @@ export class SignalingHealthMonitor {
   private debounceHandle: unknown = null;
   private peerDisconnectedHandle: unknown = null;
   private episodeSource: RecoveryFailureSource | null = null;
+  private probePurpose: SignalingProbePurpose | null = null;
+  /**
+   * A media failure observed while a signaling health probe was in flight.
+   * It is acted on when that probe settles instead of being dropped.
+   */
+  private pendingMediaRecovery: {
+    kind: RecoveryFailureKind;
+    source: RecoveryFailureSource;
+  } | null = null;
   private restartTimeoutHandle: unknown = null;
   private verifyPollHandle: unknown = null;
   private verifyDeadlineHandle: unknown = null;
@@ -267,7 +276,7 @@ export class SignalingHealthMonitor {
    * recovery are ignored.
    */
   public notifyIceFailure(kind: RecoveryFailureKind): void {
-    if (!this.canStartFailureEpisode('ice')) {
+    if (!this.canObserveFailure('ice')) {
       return;
     }
 
@@ -277,21 +286,19 @@ export class SignalingHealthMonitor {
       }
       this.logger.info('ICE disconnected, scheduling recovery debounce');
       this.debounceHandle = this.schedule(() => {
-        // Like iOS, judge the delay at fire time (startEpisode requires an
-        // idle monitor and an active call) rather than by generation, so a
-        // health probe answered inside the window does not drop it.
+        // Like iOS, judge the delay at fire time rather than by generation,
+        // so a health probe answered inside the window does not drop it.
         this.debounceHandle = null;
-        const iceState = this.deps.getPeerIceState();
-        if (iceState && CONNECTED_ICE_STATES.has(iceState)) {
+        if (this.isMediaTransportConnected('ice')) {
           this.logger.info('Transient ICE disconnect recovered before debounce fired');
           return;
         }
-        this.startEpisode('disconnected', 'ice');
+        this.requestMediaRecovery('disconnected', 'ice');
       }, this.config.peerDisconnectedRecoveryDelayMs);
       return;
     }
 
-    this.startEpisode('failed', 'ice');
+    this.requestMediaRecovery('failed', 'ice');
   }
 
   /**
@@ -309,13 +316,8 @@ export class SignalingHealthMonitor {
     switch (state) {
       case 'failed':
         this.cancelPeerDisconnectedRecovery();
-        if (this.canStartFailureEpisode('peerConnection')) {
-          this.startEpisode('failed', 'peerConnection');
-        } else if (this.isRecoveryActive && this.episodeSource === 'ice') {
-          // The running ICE episode now also covers a failed peer connection,
-          // so a later ICE 'connected' must not cancel it.
-          this.episodeSource = 'peerConnection';
-          this.logger.info('Peer connection failed during an ICE recovery episode');
+        if (this.canObserveFailure('peerConnection')) {
+          this.requestMediaRecovery('failed', 'peerConnection');
         }
         return;
       case 'disconnected':
@@ -324,6 +326,7 @@ export class SignalingHealthMonitor {
       case 'connected':
         this.recoveryFailedLatch = false;
         this.cancelPeerDisconnectedRecovery();
+        this.clearPendingMediaRecovery('peerConnection');
         return;
       default:
         return;
@@ -342,6 +345,7 @@ export class SignalingHealthMonitor {
       this.debounceHandle = null;
       this.logger.info('Transient ICE disconnect cleared, debounce cancelled');
     }
+    this.clearPendingMediaRecovery('ice');
     if (this.currentState === 'probing' && this.episodeSource === 'ice') {
       // A peer-connection episode is not cleared by ICE: ICE can report
       // connected while the peer connection itself has failed.
@@ -412,6 +416,8 @@ export class SignalingHealthMonitor {
     this.recoveryFailedLatch = false;
     this.shouldEvaluateRelayFallback = false;
     this.episodeSource = null;
+    this.probePurpose = null;
+    this.pendingMediaRecovery = null;
     this.currentGeneration += 1;
     this.currentState = 'idle';
   }
@@ -419,11 +425,11 @@ export class SignalingHealthMonitor {
   // --- Episode machinery ---
 
   /**
-   * Shared guard for ICE and peer-connection failure callbacks. A failure
-   * during media verification falls back immediately; any other in-flight
-   * episode suppresses the duplicate.
+   * Shared guard for ICE and peer-connection failure callbacks. Ignores
+   * failures on non-active calls and while the client reconnect flow owns
+   * recovery; a failure during media verification falls back immediately.
    */
-  private canStartFailureEpisode(source: RecoveryFailureSource): boolean {
+  private canObserveFailure(source: RecoveryFailureSource): boolean {
     if (this.deps.callState() !== 'active' || this.deps.isClientReconnecting()) {
       return false;
     }
@@ -442,8 +448,45 @@ export class SignalingHealthMonitor {
       return false;
     }
 
-    // Duplicate suppression: one episode at a time per call.
-    return this.currentState === 'idle';
+    return true;
+  }
+
+  /**
+   * Route an observed media failure: start an episode when idle, defer it
+   * behind an in-flight signaling health probe (acted on when the probe
+   * settles), or let the running media episode cover it.
+   */
+  private requestMediaRecovery(kind: RecoveryFailureKind, source: RecoveryFailureSource): void {
+    if (this.currentState === 'idle') {
+      this.startEpisode(kind, source);
+      return;
+    }
+
+    if (this.currentState === 'probing' && this.probePurpose === 'healthCheck') {
+      this.pendingMediaRecovery = { kind, source };
+      this.shouldEvaluateRelayFallback = true;
+      this.logger.info('Media failure during a signaling health probe; recovery deferred', {
+        kind,
+        source,
+      });
+      return;
+    }
+
+    if (source === 'peerConnection' && this.episodeSource === 'ice') {
+      // The running ICE episode now also covers a failed peer connection,
+      // so a later ICE 'connected' must not cancel it.
+      this.episodeSource = 'peerConnection';
+      this.logger.info('Peer connection failed during an ICE recovery episode');
+    }
+  }
+
+  private clearPendingMediaRecovery(source: RecoveryFailureSource): void {
+    if (this.pendingMediaRecovery?.source !== source) {
+      return;
+    }
+    this.pendingMediaRecovery = null;
+    this.shouldEvaluateRelayFallback = false;
+    this.logger.info(`${this.describeSource(source)} reconnected; deferred recovery cleared`);
   }
 
   /**
@@ -452,29 +495,27 @@ export class SignalingHealthMonitor {
    * 'connected' (or failure/cancel) clears it; ICE state does not.
    */
   private startPeerDisconnectedRecoveryDelay(): void {
-    if (
-      this.deps.callState() !== 'active' ||
-      this.deps.isClientReconnecting() ||
-      this.currentState !== 'idle'
-    ) {
+    // The delay is armed whatever the monitor is doing, so a disconnect seen
+    // during a signaling health probe is not dropped; requestMediaRecovery
+    // decides what to do with it when the delay fires.
+    if (this.deps.callState() !== 'active' || this.deps.isClientReconnecting()) {
       return;
     }
     this.cancelPeerDisconnectedRecovery();
     const delayMs = this.config.peerDisconnectedRecoveryDelayMs;
     this.logger.info('Peer connection disconnected, scheduling recovery delay');
     this.peerDisconnectedHandle = this.schedule(() => {
-      // iOS parity: the delay is judged at fire time (startEpisode requires an
-      // idle monitor and an active call), not by generation, so a health probe
-      // answered inside the window does not drop it.
+      // iOS parity: the delay is judged at fire time, not by generation, so a
+      // health probe answered inside the window does not drop it.
       this.peerDisconnectedHandle = null;
-      if (this.deps.getPeerConnectionState() === 'connected') {
+      if (this.isMediaTransportConnected('peerConnection')) {
         this.logger.info('Peer connection recovered before the disconnected delay elapsed');
         return;
       }
       this.logger.warn(
         `Peer connection remained disconnected for ${delayMs}ms; starting recovery`
       );
-      this.startEpisode('disconnected', 'peerConnection');
+      this.requestMediaRecovery('disconnected', 'peerConnection');
     }, delayMs);
   }
 
@@ -486,12 +527,15 @@ export class SignalingHealthMonitor {
   }
 
   /**
-   * Whether the transport that triggered the episode reports connected
-   * again. A peer-connection episode is judged by the peer connection: ICE
-   * can stay connected while the peer connection has failed.
+   * Whether the given transport (default: the one that triggered the
+   * episode) reports connected. A peer-connection failure is judged by the
+   * peer connection: ICE can stay connected while the peer connection has
+   * failed.
    */
-  private isMediaTransportConnected(): boolean {
-    if (this.episodeSource === 'peerConnection') {
+  private isMediaTransportConnected(
+    source: RecoveryFailureSource | null = this.episodeSource
+  ): boolean {
+    if (source === 'peerConnection') {
       return this.deps.getPeerConnectionState() === 'connected';
     }
     const iceState = this.deps.getPeerIceState();
@@ -575,6 +619,7 @@ export class SignalingHealthMonitor {
 
   private async runProbe(purpose: SignalingProbePurpose): Promise<void> {
     const generation = this.currentGeneration;
+    this.probePurpose = purpose;
     this.logger.info('Sending correlated signaling ping probe', { purpose });
 
     const result = await this.withTimeout(
@@ -586,8 +631,12 @@ export class SignalingHealthMonitor {
     if (generation !== this.currentGeneration || this.currentState !== 'probing') {
       return;
     }
+    this.probePurpose = null;
+    const pending = purpose === 'healthCheck' ? this.pendingMediaRecovery : null;
+    this.pendingMediaRecovery = null;
 
     if (result !== 'ok') {
+      // A deferred media failure keeps relay evaluation on for this fallback.
       this.logger.warn('Signaling probe did not answer, falling back to reattach', {
         result,
       });
@@ -596,7 +645,19 @@ export class SignalingHealthMonitor {
     }
 
     if (purpose === 'healthCheck') {
+      if (pending && !this.isMediaTransportConnected(pending.source)) {
+        // The answered probe just proved signaling is alive, so the deferred
+        // media failure goes straight to an ICE restart.
+        this.episodeSource = pending.source;
+        this.logger.info('Signaling health probe answered; starting deferred media recovery', {
+          kind: pending.kind,
+          source: pending.source,
+        });
+        await this.runRestart();
+        return;
+      }
       this.logger.info('Signaling health probe answered, recovery returning to idle');
+      this.shouldEvaluateRelayFallback = false;
       this.setState('idle');
       return;
     }
@@ -789,6 +850,8 @@ export class SignalingHealthMonitor {
     }
     if (state === 'idle') {
       this.episodeSource = null;
+      this.probePurpose = null;
+      this.pendingMediaRecovery = null;
     }
     this.currentState = state;
   }
