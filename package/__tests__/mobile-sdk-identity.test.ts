@@ -3,6 +3,8 @@ import { Call } from '../lib/call';
 import { createAttachCallMessage, createAttachMessage } from '../lib/messages/attach';
 import { createAnswerMessage, createInviteMessage } from '../lib/messages/call';
 import { createPasswordLoginMessage, createTokenLoginMessage } from '../lib/messages/login';
+import { DEFAULT_SDK_NAME } from '../lib/env';
+import { REACT_NATIVE_COMMONS_SDK_IDENTITY } from '../react-voice-commons-sdk/src/internal/sdk-identity';
 
 const coreIdentity = { mobile_sdk_name: 'webrtc-react-native', mobile_sdk_version: '1.1.0' };
 
@@ -94,5 +96,13 @@ describe('mobile SDK identity signaling', () => {
     expect(() => new TelnyxRTC({ login_token: 'token', sdkVersion: '2.3.4' })).toThrow(
       'sdkName and sdkVersion must be provided together'
     );
+  });
+
+  // VSDK-771 AFK review nit: pin the factory defaults consumers actually get
+  // so the webrtc-react-native / webrtc-react-native-commons convention can't
+  // silently regress in a later edit.
+  it('pins the factory default SDK identity names to the prefixed convention', () => {
+    expect(DEFAULT_SDK_NAME).toBe('webrtc-react-native');
+    expect(REACT_NATIVE_COMMONS_SDK_IDENTITY.name).toBe('webrtc-react-native-commons');
   });
 });
