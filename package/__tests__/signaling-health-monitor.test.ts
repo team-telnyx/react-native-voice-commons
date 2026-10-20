@@ -890,6 +890,75 @@ describe('SignalingHealthMonitor', () => {
     });
   });
 
+  describe('verification and fallback deadlines', () => {
+    it('falls back on time when the initial RTP baseline read never settles', async () => {
+      const { deps, mocks } = createDeps({
+        ...FRESH_SIGNALING,
+        getInboundAudioPackets: jest.fn().mockReturnValue(new Promise(() => {})),
+      });
+      const monitor = new SignalingHealthMonitor(deps);
+
+      monitor.notifyIceFailure('failed');
+      await flush();
+      expect(monitor.state).toBe('verifyingMedia');
+
+      jest.advanceTimersByTime(VERIFY_WINDOW_MS - 1);
+      await flush();
+      expect(mocks.performReattachFallback).not.toHaveBeenCalled();
+
+      jest.advanceTimersByTime(1);
+      await flush();
+      expect(mocks.performReattachFallback).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not let a late RTP baseline revive a timed-out verification', async () => {
+      let resolveBaseline: (value: number) => void = () => {};
+      const { deps, mocks } = createDeps({
+        ...FRESH_SIGNALING,
+        getInboundAudioPackets: jest
+          .fn()
+          .mockReturnValueOnce(
+            new Promise<number>((resolve) => {
+              resolveBaseline = resolve;
+            })
+          )
+          .mockResolvedValue(500),
+      });
+      const monitor = new SignalingHealthMonitor(deps);
+
+      monitor.notifyIceFailure('failed');
+      await flush();
+      jest.advanceTimersByTime(VERIFY_WINDOW_MS);
+      await flush();
+      expect(mocks.performReattachFallback).toHaveBeenCalledTimes(1);
+
+      resolveBaseline(100);
+      jest.advanceTimersByTime(VERIFY_POLL_MS * 3);
+      await flush();
+
+      expect(mocks.onRecovered).not.toHaveBeenCalled();
+      expect(monitor.state).not.toBe('verifyingMedia');
+    });
+
+    it('reattaches without evidence when the candidate stats read stalls', async () => {
+      const { deps, mocks } = createDeps({
+        sendSignalingProbe: jest.fn().mockResolvedValue('error' as const),
+        getSelectedCandidateEvidence: jest.fn().mockReturnValue(new Promise(() => {})),
+      });
+      const monitor = new SignalingHealthMonitor(deps);
+
+      monitor.notifyIceFailure('failed');
+      await flush();
+      expect(mocks.performReattachFallback).not.toHaveBeenCalled();
+
+      jest.advanceTimersByTime(1000);
+      await flush();
+
+      expect(mocks.performReattachFallback).toHaveBeenCalledTimes(1);
+      expect(mocks.onCandidateEvidenceCaptured).not.toHaveBeenCalled();
+    });
+  });
+
   describe('reattach fallback', () => {
     it('reports recovery success when the fallback reattaches', async () => {
       const { deps, mocks } = createDeps({

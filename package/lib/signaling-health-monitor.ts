@@ -75,6 +75,11 @@ export type SignalingHealthMonitorConfig = {
   postIceRestartMediaTimeoutMs: number;
   postIceRestartMediaPollMs: number;
   peerDisconnectedRecoveryDelayMs: number;
+  /**
+   * Upper bound on the optional candidate-evidence stats read before a
+   * reattach, so a stalled getStats() cannot prevent the fallback.
+   */
+  candidateEvidenceTimeoutMs: number;
 };
 
 export const DEFAULT_SIGNALING_HEALTH_MONITOR_CONFIG: Readonly<SignalingHealthMonitorConfig> =
@@ -88,6 +93,7 @@ export const DEFAULT_SIGNALING_HEALTH_MONITOR_CONFIG: Readonly<SignalingHealthMo
     postIceRestartMediaTimeoutMs: 5_000,
     postIceRestartMediaPollMs: 1_000,
     peerDisconnectedRecoveryDelayMs: 3_000,
+    candidateEvidenceTimeoutMs: 1_000,
   });
 
 export type SignalingHealthMonitorDeps = {
@@ -718,6 +724,17 @@ export class SignalingHealthMonitor {
     this.clearRestartTimeout();
     this.setState('verifyingMedia');
 
+    // Arm the deadline on entry: a slow or stalled stats read below must not
+    // extend the verification window or leave it without a deadline.
+    this.verifyDeadlineHandle = this.schedule(() => {
+      this.verifyDeadlineHandle = null;
+      if (generation !== this.currentGeneration || this.currentState !== 'verifyingMedia') {
+        return;
+      }
+      this.logger.warn('No inbound RTP growth within verification window');
+      void this.performFallback('no-rtp-growth');
+    }, this.config.postIceRestartMediaTimeoutMs);
+
     // Sample the packet counter immediately so the window starts from a
     // known point, then poll for growth. The first poll tick is a warm-up:
     // restarted media needs a moment to produce packets, so growth is only
@@ -732,15 +749,6 @@ export class SignalingHealthMonitor {
       return;
     }
     this.verifyBaseline = baseline;
-
-    this.verifyDeadlineHandle = this.schedule(() => {
-      this.verifyDeadlineHandle = null;
-      if (generation !== this.currentGeneration || this.currentState !== 'verifyingMedia') {
-        return;
-      }
-      this.logger.warn('No inbound RTP growth within verification window');
-      void this.performFallback('no-rtp-growth');
-    }, this.config.postIceRestartMediaTimeoutMs);
 
     let pollsCompleted = 0;
 
@@ -793,7 +801,11 @@ export class SignalingHealthMonitor {
     let evidence: CandidateEvidence | null = null;
     if (evaluateRelayFallback) {
       try {
-        evidence = await this.deps.getSelectedCandidateEvidence();
+        evidence = await this.withTimeout(
+          Promise.resolve(this.deps.getSelectedCandidateEvidence()),
+          this.config.candidateEvidenceTimeoutMs,
+          null
+        );
       } catch (error) {
         this.logger.debug('Unable to capture selected candidate evidence', {
           reason: error instanceof Error ? error.message : String(error),
