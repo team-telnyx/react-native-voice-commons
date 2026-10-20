@@ -1,5 +1,7 @@
 import { TelnyxRTC } from '../lib/client';
 import { Call } from '../lib/call';
+import type { CallReportPayload, CallReportSummary } from '../lib/call-report-models';
+import type { Connection } from '../lib/connection';
 
 jest.mock('@react-native-community/netinfo', () => ({
   addEventListener: jest.fn(() => jest.fn()),
@@ -30,9 +32,61 @@ function createMockCall(callId: string, state: string = 'active') {
       this.state = 'dropped';
     }),
     disposePeer: jest.fn(),
+    reportRecoveryReattachOutcome: jest.fn(),
     cancelRecovery: jest.fn(),
     checkSignalingHealth: jest.fn(),
   };
+}
+
+const REPORT_CONFIG = {
+  enableCallReports: true,
+  callReportInterval: 5,
+  callReportLogLevel: 'debug',
+  callReportMaxLogEntries: 1000,
+};
+
+function createReportingCall(client: TelnyxRTC, callId: string) {
+  const connection: any = {
+    addListener: jest.fn(),
+    isConnected: true,
+    inboundIdleMs: 0,
+    confirmedOutboundIdleMs: 0,
+    host: 'rtc.telnyx.com',
+  };
+  const call = new Call({
+    connection: connection as Connection,
+    options: { destinationNumber: '+155****4567' },
+    sessionId: 'session-id',
+    direction: 'inbound',
+    callId,
+    telnyxLegId: 'telnyx-leg-id',
+    telnyxSessionId: 'telnyx-session-id',
+    callState: 'active',
+    callReportConfig: REPORT_CONFIG,
+    recoveryHooks: (client as any).buildRecoveryHooks(),
+  });
+  const peer = { close: jest.fn() };
+  (call as any).peer = peer;
+  client.calls.set(callId, call);
+
+  const summary: CallReportSummary = {
+    callId,
+    direction: 'INCOMING',
+    state: 'active',
+    durationSeconds: null,
+    sdkVersion: '1.1.0',
+    startTimestamp: '2026-10-20T00:00:00.000Z',
+    endTimestamp: null,
+  };
+  const payload = (): CallReportPayload => (call as any).callReportCollector.buildPayload(summary);
+
+  return { call, monitor: (call as any).signalingHealthMonitor, payload, peer };
+}
+
+async function flushPromises() {
+  for (let index = 0; index < 5; index += 1) {
+    await Promise.resolve();
+  }
 }
 
 describe('Recovery reattach fallback (VSDK-679 review fixes)', () => {
@@ -80,6 +134,7 @@ describe('Recovery reattach fallback (VSDK-679 review fixes)', () => {
     const value = await fallback;
     expect(value).toBe(true);
     expect(connectSpy).toHaveBeenCalledTimes(1);
+    expect(callA.reportRecoveryReattachOutcome).toHaveBeenCalledWith(true);
   });
 
   it('disposes tracked peers and detaches stale state listeners before the reconnect', async () => {
@@ -107,6 +162,7 @@ describe('Recovery reattach fallback (VSDK-679 review fixes)', () => {
     await Promise.resolve();
     await Promise.resolve();
     await expect(fallback).resolves.toBe(false);
+    expect(callA.reportRecoveryReattachOutcome).toHaveBeenCalledWith(false);
     expect(callA.setDropped).toHaveBeenCalledTimes(1);
     expect(client.calls.has('call-a')).toBe(false);
     expect(clientError).toHaveBeenCalledWith(expect.any(Error));
@@ -200,6 +256,7 @@ describe('Recovery reattach fallback (VSDK-679 review fixes)', () => {
 
     await expect(fallback).resolves.toBe(false);
     expect(failSpy).not.toHaveBeenCalled();
+    expect(call.reportRecoveryReattachOutcome).not.toHaveBeenCalled();
     expect(call.setDropped).not.toHaveBeenCalled();
   });
 
@@ -218,5 +275,50 @@ describe('Recovery reattach fallback (VSDK-679 review fixes)', () => {
 
     await expect(fallback).resolves.toBe(true);
     expect(connectSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports successful reattach from the original Call after its monitor is cancelled', async () => {
+    const { monitor, payload, peer } = createReportingCall(client, 'call-a');
+
+    const recovery = (monitor as any).performFallback('integration-test');
+    await flushPromises();
+    expect(peer.close).toHaveBeenCalledTimes(1);
+
+    client.emit('telnyx.call.reattached', { callId: 'call-a' } as any, {} as any);
+    await recovery;
+
+    const messages = payload().logs.map((entry) => entry.message);
+    expect(messages).toContain('Recovery reattach succeeded');
+    expect(messages).not.toContain('Recovery failed after one reattach attempt');
+  });
+
+  it('reports reattach timeout from the original Call after its monitor is cancelled', async () => {
+    const { monitor, payload } = createReportingCall(client, 'call-a');
+
+    const recovery = (monitor as any).performFallback('integration-test');
+    await flushPromises();
+    jest.advanceTimersByTime((TelnyxRTC as any).RECONNECT_TIMEOUT);
+    await flushPromises();
+    await recovery;
+
+    const messages = payload().logs.map((entry) => entry.message);
+    expect(messages).toContain('Recovery failed after one reattach attempt');
+    expect(messages).not.toContain('Recovery reattach succeeded');
+  });
+
+  it('does not report a reattach failure after explicit user cancellation', async () => {
+    const { monitor, payload } = createReportingCall(client, 'call-a');
+
+    const recovery = (monitor as any).performFallback('integration-test');
+    await flushPromises();
+    (TelnyxRTC.prototype as any).disconnect.call(client, false);
+    client.emit('telnyx.call.reattached', { callId: 'call-a' } as any, {} as any);
+    jest.advanceTimersByTime((TelnyxRTC as any).RECONNECT_TIMEOUT);
+    await flushPromises();
+    await recovery;
+
+    const messages = payload().logs.map((entry) => entry.message);
+    expect(messages).not.toContain('Recovery failed after one reattach attempt');
+    expect(messages).not.toContain('Recovery reattach succeeded');
   });
 });

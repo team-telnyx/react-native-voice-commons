@@ -130,9 +130,9 @@ describe('ICE restart call-report lifecycle', () => {
   });
 
   it('distinguishes a successful reattach from an ICE restart success', () => {
-    const { monitor, payload } = buildCall();
+    const { call, payload } = buildCall();
 
-    monitor.deps.onRecovered('reattach');
+    call.reportRecoveryReattachOutcome(true);
 
     expect(logMessages(payload())).toContain('Recovery reattach succeeded');
     expect(logMessages(payload())).not.toContain('ICE restart recovery succeeded');

@@ -1811,14 +1811,16 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     return false;
   }
 
-  private failRecoveryReattach(callId: string): void {
-    const call = this.calls.get(callId);
+  private failRecoveryReattach(callId: string, recoveringCall?: Call): void {
+    const call = recoveringCall ?? this.calls.get(callId);
     if (!call) {
       return;
     }
     log.warn(`[TelnyxRTC] Recovery fallback exhausted for call ${callId}`);
     call.setDropped();
-    this.removeCall(callId);
+    if (this.calls.get(callId) === call) {
+      this.removeCall(callId);
+    }
     this.emit('telnyx.client.error', new Error(`Recovery reattach failed for call ${callId}`));
   }
 
@@ -1836,6 +1838,10 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
 
     const recoveryGeneration = this.recoveryReattachGeneration;
+    // Keep the original Call as the reporting owner. A successful ATTACH
+    // replaces the entry in `calls`, while disposePeer() deliberately cancels
+    // this Call's recovery monitor before the client-owned attempt settles.
+    const recoveringCall = this.calls.get(callId);
     this.recoveryReattachActive = true;
     // Reuse the existing reconnect-flow guard semantics: keeps push flags and
     // listeners intact while the teardown runs, and signals reconnecting to
@@ -1878,8 +1884,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         this.removeListener('telnyx.call.reattached', onReattach);
         this.reconnecting = false;
         this.recoveryReattachActive = false;
+        if (!options.silent) {
+          recoveringCall?.reportRecoveryReattachOutcome(value);
+        }
         if (!value && !options.silent) {
-          this.failRecoveryReattach(callId);
+          this.failRecoveryReattach(callId, recoveringCall);
         }
         resolve(value);
       };

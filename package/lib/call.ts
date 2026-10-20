@@ -372,12 +372,9 @@ export class Call extends EventEmitter<CallEvents> {
         this.recoveryHooks?.captureCandidateEvidence?.(evidence);
       },
       onRecovered: (outcome) => {
-        this.recordRecoveryEvent(
-          'info',
-          outcome === 'iceRestart'
-            ? 'ICE restart recovery succeeded'
-            : 'Recovery reattach succeeded'
-        );
+        if (outcome === 'iceRestart') {
+          this.recordRecoveryEvent('info', 'ICE restart recovery succeeded');
+        }
       },
       onRecoveryFailed: () => {
         this.recordRecoveryEvent('warn', 'Recovery failed after one reattach attempt');
@@ -1346,6 +1343,25 @@ export class Call extends EventEmitter<CallEvents> {
   }
 
   /**
+   * Record the client-owned reattach outcome after the original peer and its
+   * recovery monitor have been disposed. Successful reattach ends this
+   * collector segment; the replacement Call owns subsequent reporting.
+   * @internal
+   */
+  public reportRecoveryReattachOutcome(succeeded: boolean): void {
+    this.recordRecoveryEvent(
+      succeeded ? 'info' : 'warn',
+      succeeded ? 'Recovery reattach succeeded' : 'Recovery failed after one reattach attempt'
+    );
+
+    if (succeeded) {
+      this.stopAndPostCallReport('active').catch((err) => {
+        log.error('[Call] Failed to post pre-reattach call report:', err);
+      });
+    }
+  }
+
+  /**
    * Inject an ICE failure into the active-call recovery flow for manual
    * testing. This is available only when the SDK client was created with
    * `debug: true` and does not alter production ICE event handling.
@@ -1448,7 +1464,7 @@ export class Call extends EventEmitter<CallEvents> {
       });
   }
 
-  private async stopAndPostCallReport(finalState: 'done' | 'dropped'): Promise<void> {
+  private async stopAndPostCallReport(finalState: 'active' | 'done' | 'dropped'): Promise<void> {
     if (!this.callReportCollector) return;
     if (this.callReportPostingStarted) return;
     this.callReportPostingStarted = true;
