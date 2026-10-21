@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Security
+
+- **Signaling WebSocket connections now use the platform's default TLS certificate and hostname validation.** The transport that unconditionally bypassed certificate checks (`react-native-websocket-self-signed`) was removed: signaling now goes through the React Native built-in `WebSocket`, which validates certificates per platform defaults (OkHttp trust manager and hostname verifier on Android; default `URLSession` trust handling on iOS). This closes a network-interception path on the signaling connection.
+
 ### Bug Fixing
 
 - Accept the gateway's canonical `holdState: "active"` unhold response so repeated hold/resume cycles do not leave the call stuck in `HELD`.

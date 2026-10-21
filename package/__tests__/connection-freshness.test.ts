@@ -15,8 +15,8 @@ let mockSocket: {
 let openCallbacks: Array<() => void>;
 let messageCallbacks: Array<(message: string) => void>;
 
-jest.mock('react-native-websocket-self-signed', () => ({
-  getInstance: jest.fn(() => mockSocket),
+jest.mock('../lib/signaling-socket', () => ({
+  createSignalingSocket: jest.fn(() => mockSocket),
 }));
 
 describe('Connection freshness tracking (ICE restart recovery)', () => {
@@ -62,22 +62,24 @@ describe('Connection freshness tracking (ICE restart recovery)', () => {
   });
 
   it('uses the production signaling host by default', () => {
-    const socketFactory = require('react-native-websocket-self-signed') as {
-      getInstance: jest.Mock;
+    const socketFactory = require('../lib/signaling-socket') as {
+      createSignalingSocket: jest.Mock;
     };
 
     expect(connection.host).toBe('wss://rtc.telnyx.com');
-    expect(socketFactory.getInstance).toHaveBeenLastCalledWith('wss://rtc.telnyx.com/');
+    expect(socketFactory.createSignalingSocket).toHaveBeenLastCalledWith('wss://rtc.telnyx.com/');
   });
 
   it('uses the development signaling host when requested', () => {
-    const socketFactory = require('react-native-websocket-self-signed') as {
-      getInstance: jest.Mock;
+    const socketFactory = require('../lib/signaling-socket') as {
+      createSignalingSocket: jest.Mock;
     };
     const developmentConnection = new Connection(undefined, 'development');
 
     expect(developmentConnection.host).toBe('wss://rtcdev.telnyx.com');
-    expect(socketFactory.getInstance).toHaveBeenLastCalledWith('wss://rtcdev.telnyx.com/');
+    expect(socketFactory.createSignalingSocket).toHaveBeenLastCalledWith(
+      'wss://rtcdev.telnyx.com/'
+    );
   });
 
   it('treats a socket open as total activity but not confirmed traffic', () => {

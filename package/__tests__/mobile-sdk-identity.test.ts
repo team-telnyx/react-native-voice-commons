@@ -11,7 +11,7 @@ import { DEFAULT_SDK_NAME } from '../lib/env';
 // which is not a real path; using `../../` lands on the repo root correctly.
 import { REACT_NATIVE_COMMONS_SDK_IDENTITY } from '../../react-voice-commons-sdk/src/internal/sdk-identity';
 
-const coreIdentity = { mobile_sdk_name: 'webrtc-react-native', mobile_sdk_version: '1.1.0' };
+const coreIdentity = { mobile_sdk_name: 'webrtc-react-native', mobile_sdk_version: '1.1.1' };
 
 describe('mobile SDK identity signaling', () => {
   const expectCoreIdentity = (message: { params: Record<string, unknown> }) => {
@@ -73,7 +73,7 @@ describe('mobile SDK identity signaling', () => {
       name: 'webrtc-react-native-commons',
       version: '2.3.4',
     });
-    expect((core as any).sdkIdentity).toEqual({ name: 'webrtc-react-native', version: '1.1.0' });
+    expect((core as any).sdkIdentity).toEqual({ name: 'webrtc-react-native', version: '1.1.1' });
   });
 
   it('uses the per-client SDK version in call reports', () => {
