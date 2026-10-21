@@ -3,8 +3,18 @@ import { Platform } from 'react-native';
 import { TelnyxConnectionState } from './models/connection-state';
 import { Call } from './models/call';
 import { TelnyxCallState } from './models/call-state';
-import { Config, CredentialConfig, TokenConfig, validateConfig } from './models/config';
+import {
+  Config,
+  CredentialConfig,
+  TelnyxEnvironment,
+  TokenConfig,
+  validateConfig,
+} from './models/config';
 import { SessionManager } from './internal/session/session-manager';
+import {
+  SIGNALING_ENVIRONMENT_STORAGE_KEY,
+  resolveStoredEnvironment,
+} from './internal/signaling-environment';
 import { CallStateController, type CustomHeaders } from './internal/calls/call-state-controller';
 import { VoicePnBridge } from './internal/voice-pn-bridge';
 
@@ -30,6 +40,9 @@ export interface TelnyxVoipClientOptions {
 
   /** Enable Trickle ICE for calls created by this client */
   useTrickleIce?: boolean;
+
+  /** Signaling environment used for connections - default: production */
+  environment?: TelnyxEnvironment;
 }
 
 /**
@@ -84,11 +97,12 @@ export class TelnyxVoipClient {
       enableAppStateManagement: true,
       debug: false,
       useTrickleIce: false,
+      environment: 'production',
       ...options,
     };
 
     // Initialize core components
-    this._sessionManager = new SessionManager();
+    this._sessionManager = new SessionManager({ defaultEnvironment: this._options.environment });
     this._callStateController = new CallStateController(this._sessionManager);
 
     // Set up callback to initialize call state controller listeners when client is ready
@@ -304,6 +318,7 @@ export class TelnyxVoipClient {
     const loginConfig = await this._withNativeVoipPushToken({
       ...config,
       useTrickleIce: config.useTrickleIce ?? this._options.useTrickleIce,
+      environment: config.environment ?? this._options.environment,
     });
 
     await VoicePnBridge.setIncomingCallRingtone(loginConfig.incomingCallRingtone);
@@ -338,6 +353,7 @@ export class TelnyxVoipClient {
     const loginConfig = await this._withNativeVoipPushToken({
       ...config,
       useTrickleIce: config.useTrickleIce ?? this._options.useTrickleIce,
+      environment: config.environment ?? this._options.environment,
     });
 
     await VoicePnBridge.setIncomingCallRingtone(loginConfig.incomingCallRingtone);
@@ -394,10 +410,12 @@ export class TelnyxVoipClient {
       const storedMissedCallNotifications = await AsyncStorage.getItem(
         MISSED_CALL_NOTIFICATIONS_STORAGE_KEY
       );
+      const storedEnvironment = await AsyncStorage.getItem(SIGNALING_ENVIRONMENT_STORAGE_KEY);
       const useTrickleIce =
         storedUseTrickleIce === null ? this._options.useTrickleIce : storedUseTrickleIce === 'true';
       const pushWhenActive = storedPushWhenActive === 'true';
       const enableMissedCallNotifications = storedMissedCallNotifications === 'true';
+      const environment = resolveStoredEnvironment(storedEnvironment, this._options.environment);
       const nativePushToken =
         Platform.OS === 'ios' ? (await VoicePnBridge.getVoipToken())?.trim() : null;
       const pushNotificationDeviceToken = nativePushToken || storedPushToken;
@@ -415,6 +433,7 @@ export class TelnyxVoipClient {
           useTrickleIce,
           pushWhenActive,
           enableMissedCallNotifications,
+          environment,
         });
 
         if (this._options.debug) {
@@ -437,6 +456,7 @@ export class TelnyxVoipClient {
           useTrickleIce,
           pushWhenActive,
           enableMissedCallNotifications,
+          environment,
         });
 
         if (this._options.debug) {
@@ -750,6 +770,10 @@ export class TelnyxVoipClient {
         MISSED_CALL_NOTIFICATIONS_STORAGE_KEY,
         String(config.enableMissedCallNotifications ?? false)
       );
+      await AsyncStorage.setItem(
+        SIGNALING_ENVIRONMENT_STORAGE_KEY,
+        config.environment ?? this._options.environment ?? 'production'
+      );
 
       if (config.pushNotificationDeviceToken) {
         await AsyncStorage.setItem('@push_token', config.pushNotificationDeviceToken);
@@ -788,6 +812,10 @@ export class TelnyxVoipClient {
       await AsyncStorage.setItem(
         MISSED_CALL_NOTIFICATIONS_STORAGE_KEY,
         String(config.enableMissedCallNotifications ?? false)
+      );
+      await AsyncStorage.setItem(
+        SIGNALING_ENVIRONMENT_STORAGE_KEY,
+        config.environment ?? this._options.environment ?? 'production'
       );
 
       if (config.pushNotificationDeviceToken) {

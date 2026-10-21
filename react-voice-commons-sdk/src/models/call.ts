@@ -137,6 +137,19 @@ export class Call {
   }
 
   /**
+   * Inject an ICE failure into the underlying SDK recovery flow for manual
+   * testing. The underlying SDK accepts this only when debug mode is enabled.
+   *
+   * @returns true when a recovery episode was started.
+   */
+  simulateIceFailureForTesting(): boolean {
+    const testableCall = this._telnyxCall as TelnyxCall & {
+      simulateIceFailureForTesting?: () => boolean;
+    };
+    return testableCall.simulateIceFailureForTesting?.() ?? false;
+  }
+
+  /**
    * Observable stream of call state changes
    */
   get callState$(): Observable<TelnyxCallState> {

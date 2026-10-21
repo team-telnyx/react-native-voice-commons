@@ -12,13 +12,19 @@ import {
   createHangupRequest,
   createInviteMessage,
   createModifyCallRequest,
+  createUpdateMediaRequest,
   isAnswerEvent,
   isByeEvent,
   isDTMFResponse,
   isInviteACKMessage,
+  isJsonRpcErrorMessage,
   isModifyCallAnswer,
   isRingingEvent,
+  isUpdateMediaAnswer,
 } from './messages/call';
+import { TelnyxRTCMethod } from './messages/methods';
+import { SignalingHealthMonitor } from './signaling-health-monitor';
+import type { CandidateEvidence } from './signaling-health-monitor';
 import { createAttachMessage } from './messages/attach';
 import { Peer } from './peer';
 import type { TrickleIceCandidate } from './peer';
@@ -32,7 +38,7 @@ import { CallReportCollector } from './call-report-collector';
 import type { CallReportConfig, CallReportSummary } from './call-report-models';
 import { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
 import { CALL_REPORT_ID, VOICE_SDK_ID } from './global';
-import { DEFAULT_SDK_IDENTITY, PROD_HOST, type SDKIdentity } from './env';
+import { DEFAULT_SDK_IDENTITY, type SDKIdentity } from './env';
 
 type CallEvents = {
   'telnyx.call.state': (call: Call, state: CallState) => void;
@@ -67,9 +73,39 @@ type CallConstructorParams = {
   pushWhenActive?: boolean;
   pushDeviceToken?: string;
   sdkIdentity?: SDKIdentity;
+  recoveryHooks?: CallRecoveryHooks;
 };
 
 export type CallDirection = 'inbound' | 'outbound';
+
+/**
+ * Client-provided hooks for active-call ICE restart recovery (VSDK-679).
+ *
+ * The recovery coordinator runs per-call inside `Call`, but the final
+ * fallback (one reconnect/register/reattach) and the client reconnect state
+ * are owned by the `TelnyxRTC` client. The client injects these hooks when
+ * creating calls; when they are absent the coordinator degrades safely:
+ * episodes still attempt ICE restart, and the reattach fallback resolves
+ * `false` so recovery gives up after one attempt.
+ */
+export type CallRecoveryHooks = {
+  /** True while the client reconnect/recovery flow owns recovery. */
+  isClientReconnecting(): boolean;
+  /**
+   * Run the client-owned fallback: one reconnect/register/reattach.
+   * Resolves `true` when the backend attach for the recovering call
+   * (`callId`) was received (replacement call initiated) or `false` when the
+   * attempt failed. The call id correlates the reattach event so another
+   * call's attach cannot settle this fallback.
+   */
+  performReattachFallback(callId: string): Promise<boolean>;
+  /**
+   * Invoked with the latest selected candidate pair evidence before the
+   * fallback so the client can carry a one-shot relay override into the
+   * replacement call (fail closed when evidence is absent).
+   */
+  captureCandidateEvidence?(evidence: CandidateEvidence): void;
+};
 
 export type CreateInboundCall = {
   connection: Connection;
@@ -87,6 +123,7 @@ export type CreateInboundCall = {
   pushWhenActive?: boolean;
   pushDeviceToken?: string;
   sdkIdentity?: SDKIdentity;
+  recoveryHooks?: CallRecoveryHooks;
 };
 
 // TODO persist customHeaders and clientState
@@ -129,6 +166,7 @@ export class Call extends EventEmitter<CallEvents> {
     pushWhenActive = false,
     pushDeviceToken,
     sdkIdentity,
+    recoveryHooks,
   }: CreateInboundCall) {
     const call = new Call({
       connection,
@@ -145,6 +183,7 @@ export class Call extends EventEmitter<CallEvents> {
       pushWhenActive,
       pushDeviceToken,
       sdkIdentity,
+      recoveryHooks,
     });
 
     // Store the custom headers from the INVITE message
@@ -199,6 +238,7 @@ export class Call extends EventEmitter<CallEvents> {
 
     call.peer = new Peer(options);
     call.setupTrickleIceCallbacks();
+    call.wireIceRecovery();
     call.peer.createPeerConnection();
     call.peer.setRemoteDescription({ type: 'offer', sdp: remoteSDP });
 
@@ -225,6 +265,8 @@ export class Call extends EventEmitter<CallEvents> {
   private readonly pushWhenActive: boolean;
   private readonly pushDeviceToken?: string;
   private readonly sdkIdentity: SDKIdentity;
+  private recoveryHooks?: CallRecoveryHooks;
+  private signalingHealthMonitor: SignalingHealthMonitor | null = null;
 
   constructor({
     connection,
@@ -241,6 +283,7 @@ export class Call extends EventEmitter<CallEvents> {
     pushWhenActive = false,
     pushDeviceToken,
     sdkIdentity = DEFAULT_SDK_IDENTITY,
+    recoveryHooks,
   }: CallConstructorParams) {
     super();
 
@@ -269,6 +312,74 @@ export class Call extends EventEmitter<CallEvents> {
         direction: this.direction,
       });
     }
+
+    // Active-call signaling health and ICE restart recovery (VSDK-679). The
+    // monitor is inert until the call is active and either ICE reports a
+    // failure or the client's periodic signaling health check finds the
+    // socket stale; all client-owned behavior arrives through optional hooks.
+    this.recoveryHooks = recoveryHooks;
+    this.signalingHealthMonitor = new SignalingHealthMonitor({
+      callId: this.callId,
+      callState: () => this.state,
+      isSignalingAvailable: () => this.connection.isConnected,
+      inboundSignalingIdleMs: () => this.connection.inboundIdleMs,
+      confirmedOutboundIdleMs: () => this.connection.confirmedOutboundIdleMs,
+      isClientReconnecting: () => this.recoveryHooks?.isClientReconnecting() ?? false,
+      sendSignalingProbe: () => this.sendRecoverySignalingProbe(),
+      restartIce: async () => {
+        if (!this.peer) {
+          this.recordRecoveryEvent('error', 'ICE restart failed - missing required parameters');
+          throw new Error('[Call] Recovery: no peer connection for ICE restart');
+        }
+        this.recordRecoveryEvent('info', 'ICE restart: initiated');
+        try {
+          return await this.peer.restartIce();
+        } catch (error) {
+          this.recordRecoveryEvent('error', 'ICE restart offer creation failed', {
+            error: this.describeRecoveryError(error),
+          });
+          throw error;
+        }
+      },
+      sendUpdateMedia: (offerSdp) => this.sendUpdateMediaForRecovery(offerSdp),
+      applyRemoteAnswer: async (answerSdp) => {
+        if (!this.peer) {
+          this.recordRecoveryEvent('error', 'ICE restart failed - missing required parameters');
+          throw new Error('[Call] Recovery: no peer connection for recovery answer');
+        }
+        try {
+          await this.peer.setRemoteDescriptionStrict({ type: 'answer', sdp: answerSdp });
+        } catch (error) {
+          this.recordRecoveryEvent('error', 'ICE restart remote SDP apply failed', {
+            error: this.describeRecoveryError(error),
+          });
+          throw error;
+        }
+        this.peer.finishIceRestart();
+        this.recordRecoveryEvent('info', 'ICE restart remote SDP applied');
+      },
+      getInboundAudioPackets: () => this.getRecoveryInboundAudioPackets(),
+      getPeerIceState: () => this.peer?.getIceConnectionState() ?? null,
+      getPeerConnectionState: () => this.peer?.getConnectionState() ?? null,
+      getSelectedCandidateEvidence: () => this.getRecoverySelectedCandidateEvidence(),
+      performReattachFallback: () =>
+        this.recoveryHooks?.performReattachFallback(this.callId) ?? Promise.resolve(false),
+      onCandidateEvidenceCaptured: (evidence: CandidateEvidence) => {
+        this.callReportCollector?.log('info', 'Recovery candidate evidence captured', {
+          localNetworkType: evidence.localNetworkType ?? null,
+          localCandidateType: evidence.localCandidateType ?? null,
+        });
+        this.recoveryHooks?.captureCandidateEvidence?.(evidence);
+      },
+      onRecovered: (outcome) => {
+        if (outcome === 'iceRestart') {
+          this.recordRecoveryEvent('info', 'ICE restart recovery succeeded');
+        }
+      },
+      onRecoveryFailed: () => {
+        this.recordRecoveryEvent('warn', 'Recovery failed after one reattach attempt');
+      },
+    });
 
     this.connection.addListener('telnyx.socket.message', this.onSocketMessage);
   }
@@ -811,6 +922,7 @@ export class Call extends EventEmitter<CallEvents> {
   public invite = async () => {
     this.peer = await Peer.createOffer(this.options);
     this.setupTrickleIceCallbacks();
+    this.wireIceRecovery();
 
     // Initialize WebRTC reporter if debug mode is enabled
     if (this.debugEnabled) {
@@ -924,6 +1036,13 @@ export class Call extends EventEmitter<CallEvents> {
       previousState: prevState,
     });
 
+    // Recovery lifecycle (VSDK-679): any transition away from 'active'
+    // cancels an in-flight ICE restart recovery episode — terminal states,
+    // network-loss drops, and hold renegotiations must not race recovery.
+    if (state !== 'active') {
+      this.signalingHealthMonitor?.cancel(`call-state:${state}`);
+    }
+
     // Start stats collection when call becomes active
     if (state === 'active') {
       this.startCallReportCollector();
@@ -991,12 +1110,279 @@ export class Call extends EventEmitter<CallEvents> {
   public disposePeer = () => {
     if (this.peer) {
       log.debug('[Call] Disposing of existing peer connection');
+      this.signalingHealthMonitor?.cancel('peer-disposed');
       this.peer.close();
       this.peer = null;
       log.debug('[Call] Peer connection disposed successfully');
     } else {
       log.debug('[Call] No peer connection to dispose');
     }
+  };
+
+  // --- Active-call ICE restart recovery (VSDK-679) ---
+
+  /**
+   * Feed peer ICE and peer-connection state changes into the signaling health
+   * monitor. They arrive through separate callbacks (iOS
+   * `iceConnectionStateDidChange` / `peerConnectionStateDidChange`) so a
+   * peer-connection failure still triggers recovery while ICE is connected.
+   */
+  private wireIceRecovery = (): void => {
+    if (!this.peer) {
+      return;
+    }
+    this.peer.onIceStateChange = (state: string) => {
+      if (state === 'failed') {
+        this.signalingHealthMonitor?.notifyIceFailure('failed');
+      } else if (state === 'disconnected') {
+        this.signalingHealthMonitor?.notifyIceFailure('disconnected');
+      } else if (state === 'connected' || state === 'completed') {
+        this.signalingHealthMonitor?.notifyIceConnected();
+      }
+      // 'closed' is terminal: recovery is cancelled via call-state and
+      // disposePeer paths, so it is not re-triggered here.
+    };
+    this.peer.onPeerConnectionStateChange = (state: string) => {
+      this.signalingHealthMonitor?.notifyPeerConnectionStateChange(state);
+    };
+  };
+
+  /**
+   * Send one uniquely correlated signaling probe (`telnyx_rtc.ping`).
+   * The response is correlated by JSON-RPC id through the connection's
+   * transaction registry, so unrelated socket traffic never satisfies it.
+   * Like iOS, a correlated JSON-RPC error still proves the signaling path is
+   * alive, so it counts as an answered probe; only a send failure or closed
+   * socket is an error.
+   */
+  private sendRecoverySignalingProbe = async (): Promise<'ok' | 'timeout' | 'error'> => {
+    try {
+      const probe = {
+        id: uuid(),
+        jsonrpc: '2.0' as const,
+        method: TelnyxRTCMethod.PING,
+        params: {},
+        voice_sdk_id: VOICE_SDK_ID,
+      };
+      const result = await this.connection.sendAndWait(probe);
+      if (isJsonRpcErrorMessage(result)) {
+        log.debug('[Call] Recovery signaling probe answered with an error response');
+      }
+      return 'ok';
+    } catch (error) {
+      log.debug('[Call] Recovery signaling probe failed', error);
+      return 'error';
+    }
+  };
+
+  /**
+   * Send the ICE restart offer via `telnyx_rtc.modify` (action:
+   * `updateMedia`) and return the answer SDP. Mirrors the hold/unhold
+   * Modify pattern already used by this call object.
+   */
+  private sendUpdateMediaForRecovery = async (offerSdp: string): Promise<string> => {
+    const trickle = this.isTrickleIceEnabled();
+    this.recordRecoveryEvent(
+      'info',
+      `ICE restart: sending ${trickle ? 'trickle ' : ''}Modify with new offer SDP`,
+      { trickle }
+    );
+    const request = createUpdateMediaRequest({
+      sessionId: this.sessionId,
+      callId: this.callId,
+      sdp: offerSdp,
+      trickleIce: trickle,
+    });
+    let result: unknown;
+    try {
+      result = await this.connection.sendAndWait(request);
+    } catch (error) {
+      this.recordRecoveryEvent('error', 'ICE restart Modify request failed', {
+        error: this.describeRecoveryError(error),
+      });
+      throw error;
+    }
+    if (!isUpdateMediaAnswer(result)) {
+      const response = result as { result?: { sdp?: unknown } } | null;
+      this.recordRecoveryEvent(
+        'error',
+        typeof response?.result?.sdp === 'string'
+          ? 'ICE restart Modify response invalid'
+          : 'ICE restart Modify response missing SDP'
+      );
+      throw new Error('[Call] Invalid updateMedia response');
+    }
+    this.recordRecoveryEvent('info', 'ICE restart Modify response received');
+    return result.result.sdp;
+  };
+
+  /** Record recovery lifecycle stages in the call report, including iOS ICE-restart parity. */
+  private recordRecoveryEvent(
+    level: 'info' | 'warn' | 'error',
+    message: string,
+    context: Record<string, unknown> = {}
+  ): void {
+    this.callReportCollector?.log(level, message, {
+      ...context,
+      callId: this.callId,
+      sessionId: this.sessionId,
+    });
+  }
+
+  private describeRecoveryError(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  /**
+   * Latest cumulative inbound audio packet counter for RTP verification.
+   * Reads the live peer stats directly when call reports are disabled; the
+   * collector path is used when report collection is enabled.
+   */
+  private getRecoveryInboundAudioPackets = async (): Promise<number | null> => {
+    if (this.callReportCollector) {
+      return this.callReportCollector.getLatestInboundAudioPackets();
+    }
+    const pc = this.peer?.getPeerConnection();
+    if (!pc) {
+      return null;
+    }
+    try {
+      const stats = await (pc as any).getStats();
+      let packets: number | null = null;
+      stats.forEach((report: any) => {
+        if (report && report.type === 'inbound-rtp' && report.kind === 'audio') {
+          const value = typeof report.packetsReceived === 'number' ? report.packetsReceived : null;
+          if (value != null && (packets == null || value > packets)) {
+            packets = value;
+          }
+        }
+      });
+      return packets;
+    } catch (error) {
+      log.debug('[Call] Failed to read inbound audio packets for recovery', error);
+      return null;
+    }
+  };
+
+  private getRecoverySelectedCandidateEvidence = async (): Promise<CandidateEvidence | null> => {
+    const pc = this.peer?.getPeerConnection();
+    if (!pc) {
+      return this.callReportCollector?.getSelectedCandidateEvidence() ?? null;
+    }
+
+    try {
+      const stats = await (pc as any).getStats();
+      const evidence = this.extractSelectedCandidateEvidence(stats);
+      if (evidence) {
+        return evidence;
+      }
+    } catch (error) {
+      log.debug('[Call] Failed to read selected candidate evidence for recovery', error);
+    }
+
+    return this.callReportCollector?.getSelectedCandidateEvidence() ?? null;
+  };
+
+  private extractSelectedCandidateEvidence(stats: any): CandidateEvidence | null {
+    let selectedPair: any = null;
+    let transportSelectedPairId: string | null = null;
+
+    stats.forEach((report: any) => {
+      if (!report) {
+        return;
+      }
+      if (report.type === 'transport' && report.selectedCandidatePairId) {
+        transportSelectedPairId = report.selectedCandidatePairId;
+      }
+    });
+
+    stats.forEach((report: any) => {
+      if (!report || report.type !== 'candidate-pair') {
+        return;
+      }
+      if (transportSelectedPairId && report.id === transportSelectedPairId) {
+        selectedPair = report;
+        return;
+      }
+      if (!transportSelectedPairId && (report.selected || report.nominated)) {
+        selectedPair = report;
+      }
+    });
+
+    if (!selectedPair) {
+      return null;
+    }
+
+    const localCandidate = this.resolveStatsCandidate(stats, selectedPair.localCandidateId);
+    const remoteCandidate = this.resolveStatsCandidate(stats, selectedPair.remoteCandidateId);
+    return {
+      callId: this.callId,
+      localCandidateType: localCandidate?.candidateType,
+      remoteCandidateType: remoteCandidate?.candidateType,
+      localNetworkType: localCandidate?.networkType,
+      localAddress: localCandidate?.address,
+      localProtocol: localCandidate?.protocol,
+    };
+  }
+
+  private resolveStatsCandidate(stats: any, candidateId?: string): any | null {
+    if (!candidateId) {
+      return null;
+    }
+    let candidate: any | null = null;
+    stats.forEach((report: any) => {
+      if (report?.id === candidateId) {
+        candidate = report;
+      }
+    });
+    return candidate;
+  }
+
+  public cancelRecovery(reason: string): void {
+    this.signalingHealthMonitor?.cancel(reason);
+  }
+
+  /**
+   * Record the client-owned reattach outcome after the original peer and its
+   * recovery monitor have been disposed. Successful reattach ends this
+   * collector segment; the replacement Call owns subsequent reporting.
+   * @internal
+   */
+  public reportRecoveryReattachOutcome(succeeded: boolean): void {
+    this.recordRecoveryEvent(
+      succeeded ? 'info' : 'warn',
+      succeeded ? 'Recovery reattach succeeded' : 'Recovery failed after one reattach attempt'
+    );
+
+    if (succeeded) {
+      this.stopAndPostCallReport('active').catch((err) => {
+        log.error('[Call] Failed to post pre-reattach call report:', err);
+      });
+    }
+  }
+
+  /**
+   * Inject an ICE failure into the active-call recovery flow for manual
+   * testing. This is available only when the SDK client was created with
+   * `debug: true` and does not alter production ICE event handling.
+   *
+   * @returns true when a recovery episode was started.
+   */
+  public simulateIceFailureForTesting = (): boolean => {
+    if (!this.debugEnabled) {
+      log.warn('[Call] Ignoring test ICE failure because debug mode is disabled');
+      return false;
+    }
+
+    return this.signalingHealthMonitor?.simulateIceFailureForTesting() ?? false;
+  };
+
+  /**
+   * Periodic active-call signaling health check, driven by the client's
+   * health-check timer. Delegates to the per-call signaling health monitor.
+   */
+  public checkSignalingHealth = (): void => {
+    this.signalingHealthMonitor?.checkSignalingHealth();
   };
 
   private onSocketMessage = (msg: unknown) => {
@@ -1078,7 +1464,7 @@ export class Call extends EventEmitter<CallEvents> {
       });
   }
 
-  private async stopAndPostCallReport(finalState: 'done' | 'dropped'): Promise<void> {
+  private async stopAndPostCallReport(finalState: 'active' | 'done' | 'dropped'): Promise<void> {
     if (!this.callReportCollector) return;
     if (this.callReportPostingStarted) return;
     this.callReportPostingStarted = true;
@@ -1095,7 +1481,7 @@ export class Call extends EventEmitter<CallEvents> {
     const payload = this.callReportCollector.buildPayload(summary);
 
     this.callReportCollector
-      .sendPayload(payload, callReportId, PROD_HOST, VOICE_SDK_ID)
+      .sendPayload(payload, callReportId, this.connection.host, VOICE_SDK_ID)
       .then(() => {
         log.debug('[Call] Posted call report');
       })
@@ -1114,7 +1500,7 @@ export class Call extends EventEmitter<CallEvents> {
     const payload = this.callReportCollector.flush(summary);
 
     this.callReportCollector
-      .sendPayload(payload, callReportId, PROD_HOST, VOICE_SDK_ID)
+      .sendPayload(payload, callReportId, this.connection.host, VOICE_SDK_ID)
       .catch((err) => {
         log.error('[Call] Failed to send intermediate call report:', err);
       });

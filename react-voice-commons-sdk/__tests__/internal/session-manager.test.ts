@@ -53,6 +53,23 @@ describe('SessionManager', () => {
     );
   });
 
+  it('passes the selected signaling environment to the low-level SDK client', async () => {
+    const manager = new SessionManager();
+
+    await manager.connectWithCredential(
+      createCredentialConfig('sip-user', 'sip-password', {
+        environment: 'development',
+      })
+    );
+
+    const TelnyxRTCMock = TelnyxSDK.TelnyxRTC as unknown as jest.Mock;
+    expect(TelnyxRTCMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        environment: 'development',
+      })
+    );
+  });
+
   it('disconnects the underlying TelnyxRTC client before marking itself disposed', async () => {
     const manager = new SessionManager();
 

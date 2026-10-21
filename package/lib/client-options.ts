@@ -1,5 +1,11 @@
 import type { LogLevelNames } from 'loglevel';
+import type { TelnyxEnvironment } from './env';
 export interface ClientOptions {
+  /**
+   * Signaling environment used by the WebSocket connection.
+   * @default 'production'
+   */
+  environment?: TelnyxEnvironment;
   /**
    * The `username` to authenticate with your SIP Connection.
    * `login` and `password` will take precedence over
