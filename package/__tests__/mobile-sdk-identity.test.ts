@@ -4,7 +4,12 @@ import { createAttachCallMessage, createAttachMessage } from '../lib/messages/at
 import { createAnswerMessage, createInviteMessage } from '../lib/messages/call';
 import { createPasswordLoginMessage, createTokenLoginMessage } from '../lib/messages/login';
 import { DEFAULT_SDK_NAME } from '../lib/env';
-import { REACT_NATIVE_COMMONS_SDK_IDENTITY } from '../react-voice-commons-sdk/src/internal/sdk-identity';
+// VSDK-771: from package/__tests__/ we need two levels up to reach the repo root
+// where react-voice-commons-sdk/ lives (one `..` would land inside package/, which
+// does not contain the commons source). The AFK flag on this import was that
+// `package/__tests__/` + `../` resolves to `package/react-voice-commons-sdk/...`
+// which is not a real path; using `../../` lands on the repo root correctly.
+import { REACT_NATIVE_COMMONS_SDK_IDENTITY } from '../../react-voice-commons-sdk/src/internal/sdk-identity';
 
 const coreIdentity = { mobile_sdk_name: 'webrtc-react-native', mobile_sdk_version: '1.1.0' };
 
