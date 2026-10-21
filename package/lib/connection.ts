@@ -5,7 +5,7 @@ import { createDeferredPromise } from './promise';
 import type { DeferredPromise } from './promise';
 import log from 'loglevel';
 import { updateVoiceSDKId, VOICE_SDK_ID } from './global';
-import WebSocketSelfSigned from 'react-native-websocket-self-signed';
+import { createSignalingSocket, type SignalingSocket } from './signaling-socket';
 
 type ConnectionEvents = {
   'telnyx.socket.open': () => void;
@@ -15,7 +15,7 @@ type ConnectionEvents = {
 };
 
 export class Connection extends EventEmitter<ConnectionEvents> {
-  public socket: WebSocketSelfSigned;
+  public socket: SignalingSocket;
   private isSocketConnected: boolean = false;
   private customVoiceSDKId?: string;
   public _client: any = null; // Reference to the client for CallKit UUID storage
@@ -49,9 +49,11 @@ export class Connection extends EventEmitter<ConnectionEvents> {
     console.log('[Connection] RELEASE DEBUG - WebSocket URL:', wsUrl);
     console.log('[Connection] RELEASE DEBUG - Attempting to connect to:', wsUrl);
 
-    // Use WebSocketSelfSigned for iOS to handle self-signed certificates
-    log.debug('[Connection]: Using WebSocketSelfSigned with self-signed certificate support');
-    this.socket = WebSocketSelfSigned.getInstance(wsUrl);
+    // Use the platform's built-in WebSocket so TLS certificate and hostname
+    // validation follow platform defaults (VSDK-909). The previous transport
+    // unconditionally accepted any certificate for any host.
+    log.debug('[Connection]: Using built-in WebSocket with default TLS certificate validation');
+    this.socket = createSignalingSocket(wsUrl);
 
     this.socket.onOpen(() => {
       if (this.isClosed) {
