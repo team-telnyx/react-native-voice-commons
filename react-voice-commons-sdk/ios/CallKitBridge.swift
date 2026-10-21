@@ -156,7 +156,11 @@ import React
                 "handle": handle,
                 "uuid": uuid.uuidString,
                 "direction": "outgoing",
-                "source": "react_native",
+                // VSDK-771 AFK review: align internal source tag with the
+                // new prefixed convention so grep-based family completeness
+                // (webrtc-react-native / webrtc-react-native-commons) is
+                // clean across the SDK. Not consumed by the wire contract.
+                "source": "webrtc-react-native",
             ]
 
             callController.request(transaction) { error in
@@ -197,7 +201,9 @@ import React
                 "handle": handle,
                 "uuid": uuid.uuidString,
                 "direction": "incoming",
-                "source": "react_native",
+                // VSDK-771 AFK review: align internal source tag with the
+                // new prefixed convention. See outgoing branch above.
+                "source": "webrtc-react-native",
                 "isCallKitRegistered": false,
             ]
 
