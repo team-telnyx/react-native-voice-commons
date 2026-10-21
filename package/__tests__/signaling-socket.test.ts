@@ -8,6 +8,9 @@
  * the handshake: `connect()` rejects without ever dispatching open.
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 const WS_URL = 'wss://rtc.telnyx.com/wss';
 
 class FakeWebSocket {
@@ -217,5 +220,40 @@ describe('createSignalingSocket (platform-default TLS validation)', () => {
 
     await expect(socket.connect()).rejects.toThrow(/WebSocket is not available/);
     expect(FakeWebSocket.instances).toHaveLength(0);
+  });
+});
+
+describe('runtime global object resolution (VSDK-909: globalThis not required)', () => {
+  // Older JavaScriptCore/Hermes runtimes covered by the package's
+  // `react-native >=0.60.0` peer range do not define the `globalThis`
+  // identifier; evaluating that identifier as a value throws a synchronous
+  // ReferenceError from inside `connect()` before its promise exists (P1
+  // review thread oPr0VwHkEu73mA6NW1kwDQ on PR #153). The node test realm
+  // always defines `globalThis`, so the old-runtime path cannot be executed
+  // directly here; these tests pin the resolver's behavior and guard the
+  // source shape instead.
+
+  it('resolves the runtime global object where the globalThis identifier exists', () => {
+    const { getGlobalObject } = require('../lib/signaling-socket');
+
+    expect(getGlobalObject()).toBe(globalThis);
+  });
+
+  it('pins the source: global access is typeof-guarded with a `global` fallback', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', 'lib', 'signaling-socket.ts'),
+      'utf8'
+    );
+
+    // The exact shape the review flagged — evaluating `globalThis` as a
+    // bare value — must not come back:
+    expect(source).not.toMatch(
+      /\(\s*globalThis\s+as\s+unknown\s+as\s+Record<string,\s*unknown>\s*\)\s*\.\s*WebSocket/
+    );
+    // `typeof` never throws on unresolvable identifiers, so a runtime
+    // without `globalThis` degrades to React Native's universally available
+    // `global` object instead of throwing a synchronous ReferenceError.
+    expect(source).toContain('typeof globalThis ===');
+    expect(source).toContain('typeof global ===');
   });
 });

@@ -55,6 +55,32 @@ const OPEN = 1;
  * are supplied — a proxy or rogue endpoint presenting an untrusted certificate
  * fails the TLS handshake and the connection never opens.
  */
+/**
+ * Resolves the JavaScript global object for the current runtime without
+ * requiring the `globalThis` identifier (VSDK-909).
+ *
+ * Older JavaScriptCore/Hermes runtimes covered by the package's
+ * `react-native >=0.60.0` peer range may not define `globalThis`, and
+ * evaluating that identifier as a value throws a synchronous ReferenceError
+ * that escapes `connect()` before it can return a rejected promise — so
+ * `Connection` could never open signaling at all on those versions.
+ * `typeof` never throws for unresolvable identifiers, so the guards below
+ * are safe everywhere. React Native exposes the JS context's global object
+ * as `global` on every version of the supported range, so it is the
+ * fallback.
+ */
+declare const global: unknown;
+
+export const getGlobalObject = (): Record<string, unknown> | undefined => {
+  if (typeof globalThis === 'object' && globalThis !== null) {
+    return globalThis as unknown as Record<string, unknown>;
+  }
+  if (typeof global === 'object' && global !== null) {
+    return global as unknown as Record<string, unknown>;
+  }
+  return undefined;
+};
+
 export const createSignalingSocket = (wsUrl: string): SignalingSocket =>
   new DefaultValidatingSocket(wsUrl);
 
@@ -96,8 +122,12 @@ class DefaultValidatingSocket implements SignalingSocket {
       return Promise.resolve();
     }
 
-    const WebSocketImpl = (globalThis as unknown as Record<string, unknown>)
-      .WebSocket;
+    // Resolve the global object through the guarded helper: a bare
+    // `globalThis` identifier evaluation can throw a synchronous
+    // ReferenceError on older React Native runtimes (see getGlobalObject).
+    const globalObject = getGlobalObject();
+    const WebSocketImpl =
+      globalObject === undefined ? undefined : globalObject.WebSocket;
     if (typeof WebSocketImpl !== 'function') {
       return Promise.reject(
         new Error(
