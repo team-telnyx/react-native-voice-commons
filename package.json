@@ -62,7 +62,6 @@
     "react-native-voip-push-notification": "^3.3.3",
     "react-native-web": "~0.20.0",
     "react-native-webrtc": "^124.0.5",
-    "react-native-websocket-self-signed": "^0.4.0",
     "rxjs": "^7.8.2",
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "3.3.5",

@@ -12,8 +12,8 @@ let mockSocket: {
   removeOnMessageListener: jest.Mock;
 };
 
-jest.mock('react-native-websocket-self-signed', () => ({
-  getInstance: jest.fn(() => mockSocket),
+jest.mock('../lib/signaling-socket', () => ({
+  createSignalingSocket: jest.fn(() => mockSocket),
 }));
 
 describe('Connection teardown', () => {
