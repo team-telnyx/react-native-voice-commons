@@ -6,6 +6,7 @@
 
 - Accept the gateway's canonical `holdState: "active"` unhold response so repeated hold/resume cycles do not leave the call stuck in `HELD`.
 - Add opt-in `pushWhenActive` parity with the native iOS SDK. Login sends `push_when_active` and `pn_late_fanout`, and answers include `answered_device_token` when a non-empty PushKit token is configured.
+- `call.hangup()` now chooses the BYE cause from the call state instead of always sending `USER_BUSY`/17: established calls (`active`, `held`) end with `NORMAL_CLEARING`/16 — a normal clear for the carrier — while pre-answer declines (`new`, `ringing`, `connecting`) keep `USER_BUSY`/17, which tells the platform the call was rejected and stops TeXML INVITE retries. Previously every app-ended hangup of an answered call propagated `Q.850;cause=17` in the carrier-facing BYE, so carriers played a busy/unavailable announcement to the PSTN party after a normal call end (parity with the JS SDK's `state < Active` mapping).
 
 ## [0.4.5](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk-v0.4.5) (2026-04-30)
 
