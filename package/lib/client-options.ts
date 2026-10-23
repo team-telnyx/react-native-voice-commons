@@ -68,6 +68,13 @@ export interface ClientOptions {
    */
   debug?: boolean;
   /**
+   * Deliver real-time call quality metrics (MOS, jitter, RTT, audio levels)
+   * through `Call.onQualityMetrics` and the `telnyx.call.qualityMetrics` event
+   * while a call is active. Also enabled by `debug`. Default: false.
+   */
+  enableQualityMetrics?: boolean;
+
+  /**
    * Enable automatic call quality reporting to voice-sdk-proxy.
    * When enabled, the SDK collects WebRTC stats and structured logs during calls
    * and POSTs them to the /call_report endpoint when calls end.
