@@ -1,5 +1,5 @@
 import { EventEmitter } from 'eventemitter3';
-import { PROD_HOST } from './env';
+import { resolveSignalingHost, type TelnyxEnvironment } from './env';
 import { isMessage } from './message';
 import { createDeferredPromise } from './promise';
 import type { DeferredPromise } from './promise';
@@ -24,20 +24,23 @@ export class Connection extends EventEmitter<ConnectionEvents> {
   private reconnectTimer: any = null;
   private isClosed: boolean = false;
   private hasEmittedClose: boolean = false;
+  private readonly signalingHost: string;
 
   // Track last time we observed live traffic in either direction. Used by
   // callers to decide whether the socket is trustworthy after the app has
   // been frozen by iOS (which can leave the JS side thinking it's still
   // connected while the kernel has already discarded the TLS session).
   private _lastActivityAt: number = 0;
+  private _lastInboundAt: number = 0;
+  private _lastConfirmedOutboundAt: number = 0;
 
   private transactions: Map<string, DeferredPromise<unknown>>;
   private messageQueue: unknown[];
 
-  constructor(voiceSDKId?: string) {
+  constructor(voiceSDKId?: string, environment: TelnyxEnvironment = 'production') {
     super();
     this.customVoiceSDKId = voiceSDKId;
-    // TODO: Toggle between PROD and DEV
+    this.signalingHost = resolveSignalingHost(environment);
     const wsUrl = this.buildWebsocketURL();
     log.debug('[Connection]: WebSocket URL:', wsUrl);
     log.debug('[Connection]: Attempting to connect to:', wsUrl);
@@ -107,12 +110,21 @@ export class Connection extends EventEmitter<ConnectionEvents> {
 
       const parsedMessage = this.safeParseMessage(message);
       log.debug('Received message:', parsedMessage);
-      this._lastActivityAt = Date.now();
+      const now = Date.now();
+      this._lastActivityAt = now;
+      // Inbound leg only: client-initiated sends never refresh this.
+      this._lastInboundAt = now;
 
       if (isMessage(parsedMessage)) {
         const transaction = this.transactions.get(parsedMessage.id);
-        transaction?.resolve(parsedMessage);
-        this.transactions.delete(parsedMessage.id);
+        if (transaction) {
+          // The response confirms the outbound leg of the correlated request
+          // end-to-end. One-way sends (heartbeats, queue flushes) deliberately
+          // don't count toward confirmed-outbound freshness.
+          this._lastConfirmedOutboundAt = now;
+          transaction.resolve(parsedMessage);
+          this.transactions.delete(parsedMessage.id);
+        }
       }
 
       if (parsedMessage.voice_sdk_id) {
@@ -196,6 +208,10 @@ export class Connection extends EventEmitter<ConnectionEvents> {
     return this.isSocketConnected;
   }
 
+  public get host(): string {
+    return this.signalingHost;
+  }
+
   /**
    * Milliseconds since the last observed traffic on the socket (open, send,
    * or receive). Returns `Infinity` if we've never seen traffic. Used to
@@ -206,8 +222,30 @@ export class Connection extends EventEmitter<ConnectionEvents> {
     return Date.now() - this._lastActivityAt;
   }
 
+  /**
+   * Milliseconds since the last message received from the gateway. Returns
+   * `Infinity` if nothing inbound has ever been observed. Unlike `idleMs`,
+   * this is never refreshed by client-initiated sends, so it reflects the
+   * inbound leg of the link only.
+   */
+  public get inboundIdleMs(): number {
+    if (this._lastInboundAt === 0) return Infinity;
+    return Date.now() - this._lastInboundAt;
+  }
+
+  /**
+   * Milliseconds since the last inbound message resolved a pending outbound
+   * request (a `sendAndWait` transaction). Returns `Infinity` when no request
+   * has ever been confirmed. This distinguishes a live request/response link
+   * from a socket that merely accepts one-way sends.
+   */
+  public get confirmedOutboundIdleMs(): number {
+    if (this._lastConfirmedOutboundAt === 0) return Infinity;
+    return Date.now() - this._lastConfirmedOutboundAt;
+  }
+
   private buildWebsocketURL = () => {
-    const url = new URL(PROD_HOST);
+    const url = new URL(this.signalingHost);
 
     // Use custom voice_sdk_id from push notification if available, otherwise use global one
     const voiceSDKIdToUse = this.customVoiceSDKId || VOICE_SDK_ID;

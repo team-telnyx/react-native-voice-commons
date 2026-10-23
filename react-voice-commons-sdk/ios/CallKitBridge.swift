@@ -156,7 +156,11 @@ import React
                 "handle": handle,
                 "uuid": uuid.uuidString,
                 "direction": "outgoing",
-                "source": "react_native",
+                // VSDK-771 AFK review: align internal source tag with the
+                // new prefixed convention so grep-based family completeness
+                // (webrtc-react-native / webrtc-react-native-commons) is
+                // clean across the SDK. Not consumed by the wire contract.
+                "source": "webrtc-react-native",
             ]
 
             callController.request(transaction) { error in
@@ -197,7 +201,9 @@ import React
                 "handle": handle,
                 "uuid": uuid.uuidString,
                 "direction": "incoming",
-                "source": "react_native",
+                // VSDK-771 AFK review: align internal source tag with the
+                // new prefixed convention. See outgoing branch above.
+                "source": "webrtc-react-native",
                 "isCallKitRegistered": false,
             ]
 
@@ -782,6 +788,26 @@ import React
             return true
         }
 
+        fileprivate func ownsIncomingRegistration(_ callUUID: UUID, token: String) -> Bool {
+            guard let callData = activeCalls[callUUID] else {
+                return false
+            }
+
+            return callData["incomingRegistrationToken"] as? String == token
+        }
+
+        fileprivate func invalidateIncomingRegistration(_ callUUID: UUID) {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+
+            guard var callData = activeCalls[callUUID] else {
+                return
+            }
+
+            callData.removeValue(forKey: "incomingRegistrationToken")
+            activeCalls[callUUID] = callData
+        }
+
         private override init() {
             super.init()
             // Only setup if explicitly requested via setup() method
@@ -1064,7 +1090,36 @@ import React
             }
 
             if let activeCall = activeCalls[callUUID] {
-                guard activeCall["source"] as? String == "missed_call_push" else {
+                let activeSource = activeCall["source"] as? String
+
+                // A missed-call push normally reuses the original incoming
+                // push's call_id. End that still-ringing CallKit call and show
+                // the notification instead of treating it as a UUID collision.
+                if activeSource == "push_notification" || activeSource == "terminated_app_push"
+                    || activeSource == "push"
+                {
+                    NSLog(
+                        "TelnyxVoice: Missed call matched active incoming push UUID: \(callUUID)"
+                    )
+                    // Stop the original report callback from persisting or emitting
+                    // this call while the missed-call watchdog report is pending.
+                    invalidateIncomingRegistration(callUUID)
+                    // This is a second PushKit delivery, so report it to CallKit
+                    // with a fresh UUID before ending the original ringing call.
+                    reportAndEndWatchdogCall(
+                        callUUID: UUID(),
+                        callerName: callerName,
+                        callerNumber: callerNumber,
+                        payload: payload,
+                        source: "missed_call_matched_watchdog",
+                        endedReason: .remoteEnded
+                    ) {
+                        finishMissedCall()
+                    }
+                    return true
+                }
+
+                guard activeSource == "missed_call_push" else {
                     NSLog("TelnyxVoice: Suppressing missed call notification because UUID belongs to an active call: \(callUUID)")
                     markMissedCallProcessed(id: missedCallId)
                     reportAndEndWatchdogCall(
@@ -1723,6 +1778,7 @@ import React
 
             // Store call data manually and report to CallKit
             let isAppRunning = CallKitBridge.shared != nil
+            let registrationToken = UUID().uuidString
             callKitManager.activeCalls[callUUID] = [
                 "caller": callerName,
                 "handle": callerNumber,
@@ -1731,6 +1787,7 @@ import React
                 "direction": "incoming",
                 "source": isAppRunning ? "push_notification" : "terminated_app_push",
                 "isCallKitRegistered": false,
+                "incomingRegistrationToken": registrationToken,
             ]
 
             // Report to CallKit immediately
@@ -1742,6 +1799,17 @@ import React
             callUpdate.supportsHolding = true
 
             callKitProvider.reportNewIncomingCall(with: callUUID, update: callUpdate) { error in
+                defer { completion() }
+
+                guard callKitManager.ownsIncomingRegistration(
+                    callUUID, token: registrationToken
+                ) else {
+                    NSLog(
+                        "[TelnyxVoipPushHandler] Ignoring stale incoming registration completion for ended call: \(callUUID.uuidString)"
+                    )
+                    return
+                }
+
                 if let error = error {
                     let nsError = error as NSError
                     let reason =
@@ -1790,8 +1858,6 @@ import React
                         )
                     }
                 }
-
-                completion()
             }
         }
 

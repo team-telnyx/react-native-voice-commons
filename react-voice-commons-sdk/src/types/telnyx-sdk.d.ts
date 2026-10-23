@@ -25,6 +25,7 @@ declare module '@telnyx/react-native-voice-sdk' {
   }
 
   export interface ClientOptions {
+    environment?: 'production' | 'development';
     login?: string;
     password?: string;
     token?: string;
@@ -41,6 +42,7 @@ declare module '@telnyx/react-native-voice-sdk' {
     callReportInterval?: number;
     callReportLogLevel?: string;
     callReportMaxLogEntries?: number;
+    sdkName?: string;
     sdkVersion?: string;
   }
 

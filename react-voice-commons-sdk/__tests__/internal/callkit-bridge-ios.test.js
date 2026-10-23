@@ -69,6 +69,10 @@ const handleIncomingVoipPush = extractFunction('@objc public func handleVoipPush
 const setupCallKit = extractFunction('private func setupCallKit()');
 const reportCallConnected = extractFunction('@objc func reportCallConnected(');
 const activateWebRTCAudio = extractFunction('fileprivate func activateWebRTCAudio(');
+const ownsIncomingRegistration = extractFunction('fileprivate func ownsIncomingRegistration(');
+const invalidateIncomingRegistration = extractFunction(
+  'fileprivate func invalidateIncomingRegistration('
+);
 
 describe('iOS CallKitBridge audio lifecycle', () => {
   it('does not reset audio when CallKit is already installed', () => {
@@ -150,7 +154,7 @@ describe('iOS CallKitBridge PushKit watchdog handling', () => {
     );
     const collisionBranch = sliceBetween(
       handleMissedCallPushIfNeeded,
-      'guard activeCall["source"] as? String == "missed_call_push" else {',
+      'guard activeSource == "missed_call_push" else {',
       'return true'
     );
     const activeBranch = sliceBetween(
@@ -170,6 +174,41 @@ describe('iOS CallKitBridge PushKit watchdog handling', () => {
 
     expect(activeBranch).toContain('reportAndEndWatchdogCall(');
     expect(activeBranch).toContain('finishMissedCall()');
+  });
+
+  it('reports a matched missed-call push before ending and clearing the original call', () => {
+    const matchingIncomingPushBranch = sliceBetween(
+      handleMissedCallPushIfNeeded,
+      'if activeSource == "push_notification" || activeSource == "terminated_app_push"',
+      'return true'
+    );
+    const finishMissedCall = sliceBetween(
+      handleMissedCallPushIfNeeded,
+      'let finishMissedCall = {',
+      'if let activeCall = activeCalls[callUUID] {'
+    );
+    const watchdogReportIndex = matchingIncomingPushBranch.indexOf('reportAndEndWatchdogCall(');
+    const registrationInvalidationIndex = matchingIncomingPushBranch.indexOf(
+      'invalidateIncomingRegistration(callUUID)'
+    );
+    const originalFinishIndex = matchingIncomingPushBranch.indexOf('finishMissedCall()');
+
+    expect(registrationInvalidationIndex).toBeGreaterThanOrEqual(0);
+    expect(watchdogReportIndex).toBeGreaterThanOrEqual(0);
+    expect(registrationInvalidationIndex).toBeLessThan(watchdogReportIndex);
+    expect(matchingIncomingPushBranch).toContain('callUUID: UUID()');
+    expect(matchingIncomingPushBranch).toContain('source: "missed_call_matched_watchdog"');
+    expect(matchingIncomingPushBranch).toContain('endedReason: .remoteEnded');
+    expect(originalFinishIndex).toBeGreaterThan(watchdogReportIndex);
+    expect(matchingIncomingPushBranch).not.toContain('completion: completion');
+    expect(matchingIncomingPushBranch).not.toContain('markMissedCallProcessed');
+
+    expect(finishMissedCall).toContain(
+      'callKitProvider.reportCall(with: callUUID, endedAt: Date(), reason: .remoteEnded)'
+    );
+    expect(finishMissedCall).toContain('self.activeCalls.removeValue(forKey: callUUID)');
+    expect(finishMissedCall).toContain('self.clearPendingPushData(for: callId)');
+    expect(countOccurrences(finishMissedCall, 'completion\\?\\(\\)')).toBe(1);
   });
 
   it('fails placeholder answer actions instead of emitting normal RN answer events', () => {
@@ -222,6 +261,45 @@ describe('iOS CallKitBridge call waiting contract', () => {
     expect(registrationIndex).toBeGreaterThan(successStart);
     expect(persistIndex).toBeGreaterThan(registrationIndex);
     expect(persistIndex).toBeGreaterThan(successStart);
+  });
+
+  it('does not revive an ended push when incoming registration completes late', () => {
+    const tokenCreationIndex = handleIncomingVoipPush.indexOf(
+      'let registrationToken = UUID().uuidString'
+    );
+    const tokenStorageIndex = handleIncomingVoipPush.indexOf(
+      '"incomingRegistrationToken": registrationToken'
+    );
+    const reportIndex = handleIncomingVoipPush.indexOf('reportNewIncomingCall');
+    const completionDeferIndex = handleIncomingVoipPush.indexOf('defer { completion() }');
+    const ownershipGuardIndex = handleIncomingVoipPush.indexOf(
+      'guard callKitManager.ownsIncomingRegistration('
+    );
+    const persistIndex = handleIncomingVoipPush.indexOf(
+      'self.storePendingVoipPush(payload.dictionaryPayload)'
+    );
+    const emitIndex = handleIncomingVoipPush.indexOf('callKitBridge.emitCallEvent(');
+
+    expect(ownsIncomingRegistration).toContain('activeCalls[callUUID]');
+    expect(ownsIncomingRegistration).toContain(
+      'callData["incomingRegistrationToken"] as? String == token'
+    );
+    expect(invalidateIncomingRegistration).toContain('stateLock.lock()');
+    expect(invalidateIncomingRegistration).toContain(
+      'callData.removeValue(forKey: "incomingRegistrationToken")'
+    );
+    expect(invalidateIncomingRegistration).toContain('activeCalls[callUUID] = callData');
+    expect(invalidateIncomingRegistration).not.toContain('activeCalls.removeValue');
+    expect(handleMissedCallPushIfNeeded).toContain(
+      'self.activeCalls.removeValue(forKey: callUUID)'
+    );
+    expect(tokenCreationIndex).toBeGreaterThanOrEqual(0);
+    expect(tokenStorageIndex).toBeGreaterThan(tokenCreationIndex);
+    expect(reportIndex).toBeGreaterThan(tokenStorageIndex);
+    expect(completionDeferIndex).toBeGreaterThan(reportIndex);
+    expect(ownershipGuardIndex).toBeGreaterThan(completionDeferIndex);
+    expect(persistIndex).toBeGreaterThan(ownershipGuardIndex);
+    expect(emitIndex).toBeGreaterThan(ownershipGuardIndex);
   });
 
   it('emits held actions and waits for explicit JavaScript completion', () => {

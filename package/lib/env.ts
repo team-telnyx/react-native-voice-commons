@@ -1,10 +1,20 @@
 import * as pkg from '../package.json';
 export const DEV_HOST = 'wss://rtcdev.telnyx.com';
 export const PROD_HOST = 'wss://rtc.telnyx.com';
+
+export type TelnyxEnvironment = 'production' | 'development';
+
+export const resolveSignalingHost = (
+  environment: TelnyxEnvironment = 'production'
+): string => (environment === 'development' ? DEV_HOST : PROD_HOST);
 export const IS_DEV = process.env.NODE_ENV === 'development';
 export const DEFAULT_SDK_VERSION = pkg.version;
-export let SDK_VERSION = pkg.version;
+export const SDK_VERSION = pkg.version;
+export const DEFAULT_SDK_NAME = 'webrtc-react-native';
+export const SDK_NAME = DEFAULT_SDK_NAME;
 
-export function setSDKVersion(version: string) {
-  SDK_VERSION = version;
-}
+export type SDKIdentity = Readonly<{ name: string; version: string }>;
+export const DEFAULT_SDK_IDENTITY: SDKIdentity = Object.freeze({
+  name: DEFAULT_SDK_NAME,
+  version: DEFAULT_SDK_VERSION,
+});

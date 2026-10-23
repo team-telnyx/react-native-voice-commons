@@ -55,4 +55,21 @@ describe('Commons Call held state', () => {
     expect(telnyxCall.unhold).not.toHaveBeenCalled();
     call.dispose();
   });
+
+  it('forwards a manual ICE failure to the underlying SDK call', () => {
+    const telnyxCall = {
+      callId: 'signaling-call-id',
+      state: 'active',
+      direction: 'inbound',
+      inviteCustomHeaders: null,
+      answerCustomHeaders: null,
+      simulateIceFailureForTesting: jest.fn().mockReturnValue(true),
+      on: jest.fn(),
+    };
+    const call = new Call(telnyxCall as any, 'call-id', '+15551234567', true);
+
+    expect(call.simulateIceFailureForTesting()).toBe(true);
+    expect(telnyxCall.simulateIceFailureForTesting).toHaveBeenCalledTimes(1);
+    call.dispose();
+  });
 });
