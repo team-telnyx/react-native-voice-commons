@@ -66,12 +66,16 @@
   },
   "peerDependencies": {
     "@react-native-async-storage/async-storage": "^2.1.0",
+    "expo": ">=53.0.0",
     "react": ">=19.0.0 <20.0.0",
     "react-native": ">=0.79.0 <1.0.0",
     "react-native-webrtc": "^124.0.5"
   },
   "peerDependenciesMeta": {
     "@react-native-async-storage/async-storage": {
+      "optional": false
+    },
+    "expo": {
       "optional": false
     },
     "react": {
@@ -88,7 +92,6 @@
     "@react-native-community/eslint-config": "^3.2.0",
     "@telnyx/react-native-voice-sdk": "file:../package",
     "eventemitter3": "^5.0.1",
-    "expo": "~53.0.22",
     "react-native-url-polyfill": "^3.0.0",
     "react-native-voip-push-notification": "^3.3.3",
     "rxjs": "^7.8.2"
@@ -101,6 +104,7 @@
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "eslint": "^8.0.0",
+    "expo": "~53.0.22",
     "expo-router": "^5.1.0",
     "jest": "^29.5.0",
     "prettier": "^3.0.0",
