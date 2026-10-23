@@ -1,606 +1,330 @@
-import { QualityMetricsCollector } from '../lib/quality-metrics-collector';
-import { CallQualityLevel, estimateMOS, qualityLevelFromMOS, round4 } from '../lib/quality-metrics';
+import {
+  DEFAULT_QUALITY_METRICS_INTERVAL_MS,
+  QualityMetricsCollector,
+} from '../lib/quality-metrics-collector';
+import { CallQualityLevel, calculateMOS, getQuality } from '../lib/quality-metrics';
 import type { CallQualityMetrics } from '../lib/quality-metrics';
 
-// Mock loglevel
 jest.mock('loglevel', () => ({
   debug: jest.fn(),
+  info: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
 }));
 
-function createMockPeerConnection(statsMap: Map<string, any> = new Map()) {
-  return {
-    getStats: jest.fn().mockResolvedValue({
-      get: (id: string) => statsMap.get(id),
-      forEach: (cb: (report: any) => void) => {
-        statsMap.forEach((report) => cb(report));
-      },
-    }),
-  } as any;
+/** Drain pending microtasks without advancing fake timers. */
+async function flush(): Promise<void> {
+  for (let i = 0; i < 6; i += 1) {
+    await Promise.resolve();
+  }
 }
 
-function createAudioStatsMap(
-  overrides: {
-    packetsReceived?: number;
-    packetsLost?: number;
-    jitter?: number | null;
-    audioLevel?: number | null;
-    bytesReceived?: number;
-    packetsSent?: number;
-    bytesSent?: number;
-    audioLevelOut?: number | null;
-    currentRoundTripTime?: number | null;
-    timestamp?: number;
-  } = {}
-) {
-  const ts = overrides.timestamp ?? Date.now();
+type StatsOverrides = {
+  packetsReceived?: number;
+  packetsLost?: number;
+  inboundJitter?: number;
+  inboundAudioLevel?: number;
+  outboundAudioLevel?: number;
+  mediaSourceAudioLevel?: number;
+  remoteJitter?: number | null;
+  remoteRtt?: number | null;
+  candidateRtt?: number | null;
+};
+
+/** A stats report shaped like react-native-webrtc's getStats() result. */
+function createStats(overrides: StatsOverrides = {}) {
   const map = new Map<string, any>();
-  map.set('inbound', {
+  map.set('IT01', {
+    id: 'IT01',
     type: 'inbound-rtp',
     kind: 'audio',
-    timestamp: ts,
     packetsReceived: overrides.packetsReceived ?? 1000,
-    packetsLost: overrides.packetsLost ?? 10,
-    jitter: overrides.jitter ?? 0.005, // 5ms in seconds
-    audioLevel: overrides.audioLevel ?? 0.5,
-    bytesReceived: overrides.bytesReceived ?? 64000,
+    packetsLost: overrides.packetsLost ?? 0,
+    jitter: overrides.inboundJitter ?? 0.004,
+    audioLevel: overrides.inboundAudioLevel ?? 0.2,
   });
-  map.set('outbound', {
+  map.set('OT01', {
+    id: 'OT01',
     type: 'outbound-rtp',
     kind: 'audio',
-    timestamp: ts,
-    packetsSent: overrides.packetsSent ?? 950,
-    bytesSent: overrides.bytesSent ?? 60000,
-    mediaSourceId: 'media-src-1',
+    packetsSent: 1000,
+    audioLevel: overrides.outboundAudioLevel,
   });
-  map.set('candidate-pair', {
-    type: 'candidate-pair',
-    nominated: true,
-    state: 'succeeded',
-    currentRoundTripTime: overrides.currentRoundTripTime ?? 0.05, // 50ms in seconds
-  });
-  return map;
+  if (overrides.mediaSourceAudioLevel !== undefined) {
+    map.set('SA1', {
+      id: 'SA1',
+      type: 'media-source',
+      kind: 'audio',
+      audioLevel: overrides.mediaSourceAudioLevel,
+    });
+  }
+  if (overrides.remoteJitter !== null || overrides.remoteRtt !== null) {
+    map.set('RIA1', {
+      id: 'RIA1',
+      type: 'remote-inbound-rtp',
+      kind: 'audio',
+      ...(overrides.remoteJitter !== null ? { jitter: overrides.remoteJitter ?? 0.01 } : {}),
+      ...(overrides.remoteRtt !== null ? { roundTripTime: overrides.remoteRtt ?? 0.05 } : {}),
+    });
+  }
+  if (overrides.candidateRtt != null) {
+    map.set('CP1', {
+      id: 'CP1',
+      type: 'candidate-pair',
+      nominated: true,
+      state: 'succeeded',
+      currentRoundTripTime: overrides.candidateRtt,
+    });
+  }
+  return {
+    get: (id: string) => map.get(id),
+    forEach: (cb: (report: any) => void) => map.forEach((report) => cb(report)),
+  };
 }
 
-describe('round4', () => {
-  it('rounds to 4 decimal places', () => {
-    expect(round4(3.14159265)).toBe(3.1416);
-    expect(round4(1.23456789)).toBe(1.2346);
+function createPeerConnection(...samples: StatsOverrides[]) {
+  const getStats = jest.fn();
+  samples.forEach((sample) => getStats.mockResolvedValueOnce(createStats(sample)));
+  getStats.mockResolvedValue(createStats(samples[samples.length - 1] ?? {}));
+  return { getStats } as any;
+}
+
+function startCollector(peerConnection: any, intervalMs?: number) {
+  const collector = new QualityMetricsCollector({
+    peerConnection,
+    callId: 'quality-call',
+    intervalMs,
+  });
+  const samples: CallQualityMetrics[] = [];
+  collector.onMetrics = (metrics) => samples.push(metrics);
+  collector.start();
+  return { collector, samples };
+}
+
+describe('calculateMOS (iOS / Android MOSCalculator parity)', () => {
+  it.each([
+    [10, 50, 1000, 0, 4.3924393982079994],
+    [20, 100, 950, 50, 2.874428737304731],
+    [30, 200, 900, 100, 2.1691766577491927],
+    [5, 400, 500, 500, 1.0005506108428395],
+    [0, 0, 0, 0, 4.409285824],
+  ])(
+    'jitter %dms, rtt %dms, %d received, %d lost -> %d',
+    (jitter, rtt, received, lost, expected) => {
+      expect(calculateMOS(jitter, rtt, received, lost)).toBeCloseTo(expected, 10);
+    }
+  );
+
+  it.each([
+    [Infinity, 50],
+    [10, Infinity],
+    [10, -Infinity],
+    [NaN, 50],
+  ])('returns NaN for non-finite jitter %p / rtt %p', (jitter, rtt) => {
+    expect(calculateMOS(jitter, rtt, 1000, 0)).toBeNaN();
   });
 
-  it('returns null for null/undefined/NaN', () => {
-    expect(round4(null)).toBeNull();
-    expect(round4(undefined)).toBeNull();
-    expect(round4(NaN)).toBeNull();
+  it('stays within 1–5 for finite inputs', () => {
+    expect(calculateMOS(1000, 5000, 10, 1000)).toBe(1);
+    expect(calculateMOS(0, 0, 1000, 0)).toBeLessThanOrEqual(5);
   });
 
-  it('handles zero', () => {
-    expect(round4(0)).toBe(0);
-  });
-});
-
-describe('estimateMOS', () => {
-  it('returns null when both jitter and rtt are null', () => {
-    expect(estimateMOS(null, null, null)).toBeNull();
-  });
-
-  it('returns a high MOS for excellent conditions', () => {
-    const mos = estimateMOS(5, 20, 0);
-    expect(mos).not.toBeNull();
-    expect(mos!).toBeGreaterThan(3.9);
-  });
-
-  it('returns a lower MOS for poor conditions (high loss)', () => {
-    const mos = estimateMOS(20, 200, 10);
-    expect(mos).not.toBeNull();
-    expect(mos!).toBeLessThan(3.1);
-  });
-
-  it('returns 1 for extremely bad conditions', () => {
-    const mos = estimateMOS(100, 1000, 80);
+  it('reports MOS 1 rather than EXCELLENT for extreme latency (R < 0)', () => {
+    // ~1.2s one-way latency: the unguarded cubic would clamp this to 5.0.
+    const mos = calculateMOS(200, 2000, 1000, 0);
     expect(mos).toBe(1);
-  });
-
-  it('clamps MOS to 4.5 for perfect conditions', () => {
-    const mos = estimateMOS(0, 0, 0);
-    expect(mos).not.toBeNull();
-    expect(mos!).toBeLessThanOrEqual(4.5);
-  });
-
-  it('handles null jitter with valid rtt', () => {
-    const mos = estimateMOS(null, 30, 0);
-    expect(mos).not.toBeNull();
-    expect(mos!).toBeGreaterThan(3.9);
-  });
-
-  it('handles null rtt with valid jitter', () => {
-    const mos = estimateMOS(5, null, 0);
-    expect(mos).not.toBeNull();
-    expect(mos!).toBeGreaterThan(3.5);
-  });
-
-  it('handles null packet loss rate (treats as 0)', () => {
-    const mos = estimateMOS(5, 20, null);
-    expect(mos).not.toBeNull();
-    expect(mos!).toBeGreaterThan(3.9);
+    expect(getQuality(mos)).toBe(CallQualityLevel.BAD);
   });
 });
 
-describe('qualityLevelFromMOS', () => {
-  it('returns EXCELLENT for MOS >= 4.0', () => {
-    expect(qualityLevelFromMOS(4.0)).toBe(CallQualityLevel.EXCELLENT);
-    expect(qualityLevelFromMOS(4.5)).toBe(CallQualityLevel.EXCELLENT);
+describe('getQuality (iOS / Android band parity)', () => {
+  it.each([
+    [5.0, CallQualityLevel.EXCELLENT],
+    [4.3, CallQualityLevel.EXCELLENT],
+    [4.2, CallQualityLevel.GOOD],
+    [4.15, CallQualityLevel.GOOD],
+    [4.1, CallQualityLevel.GOOD],
+    [4.05, CallQualityLevel.FAIR],
+    [4.0, CallQualityLevel.FAIR],
+    [3.7, CallQualityLevel.FAIR],
+    [3.65, CallQualityLevel.POOR],
+    [3.1, CallQualityLevel.POOR],
+    [3.0, CallQualityLevel.BAD],
+    [1.0, CallQualityLevel.BAD],
+    [0, CallQualityLevel.BAD],
+  ])('maps MOS %p to %p', (mos, quality) => {
+    expect(getQuality(mos)).toBe(quality);
   });
 
-  it('returns GOOD for MOS >= 3.6', () => {
-    expect(qualityLevelFromMOS(3.6)).toBe(CallQualityLevel.GOOD);
-    expect(qualityLevelFromMOS(3.9)).toBe(CallQualityLevel.GOOD);
-  });
-
-  it('returns FAIR for MOS >= 3.1', () => {
-    expect(qualityLevelFromMOS(3.1)).toBe(CallQualityLevel.FAIR);
-    expect(qualityLevelFromMOS(3.5)).toBe(CallQualityLevel.FAIR);
-  });
-
-  it('returns POOR for MOS >= 2.6', () => {
-    expect(qualityLevelFromMOS(2.6)).toBe(CallQualityLevel.POOR);
-    expect(qualityLevelFromMOS(3.0)).toBe(CallQualityLevel.POOR);
-  });
-
-  it('returns BAD for MOS < 2.6', () => {
-    expect(qualityLevelFromMOS(2.5)).toBe(CallQualityLevel.BAD);
-    expect(qualityLevelFromMOS(1.0)).toBe(CallQualityLevel.BAD);
-  });
-
-  it('returns FAIR for null MOS (conservative default)', () => {
-    expect(qualityLevelFromMOS(null)).toBe(CallQualityLevel.FAIR);
+  it.each([NaN, Infinity, -Infinity, null])('maps %p to UNKNOWN', (mos) => {
+    expect(getQuality(mos)).toBe(CallQualityLevel.UNKNOWN);
   });
 });
 
 describe('QualityMetricsCollector', () => {
   beforeEach(() => {
     jest.useFakeTimers();
-    jest.clearAllMocks();
   });
 
   afterEach(() => {
     jest.useRealTimers();
   });
 
-  describe('constructor', () => {
-    it('creates a collector with default interval', () => {
-      const pc = createMockPeerConnection();
-      const collector = new QualityMetricsCollector({
-        peerConnection: pc,
-        callId: 'test-call-1',
-      });
-      expect(collector).toBeDefined();
-      expect(collector.isActive()).toBe(false);
-    });
-
-    it('accepts custom interval', () => {
-      const pc = createMockPeerConnection();
-      const collector = new QualityMetricsCollector({
-        peerConnection: pc,
-        callId: 'test-call-1',
-        intervalMs: 2000,
-      });
-      expect(collector).toBeDefined();
-    });
+  it('samples every 200 ms by default, like iOS', () => {
+    expect(DEFAULT_QUALITY_METRICS_INTERVAL_MS).toBe(200);
   });
 
-  describe('start / stop', () => {
-    it('starts collection and becomes active', () => {
-      const pc = createMockPeerConnection();
-      const collector = new QualityMetricsCollector({
-        peerConnection: pc,
-        callId: 'test-call-1',
-      });
-      collector.start();
-      expect(collector.isActive()).toBe(true);
-      collector.stop();
-    });
+  it('takes the first sample immediately on start', async () => {
+    const pc = createPeerConnection({});
+    const { samples, collector } = startCollector(pc);
+    await flush();
 
-    it('is idempotent — start() twice is a no-op', () => {
-      const pc = createMockPeerConnection();
-      const collector = new QualityMetricsCollector({
-        peerConnection: pc,
-        callId: 'test-call-1',
-      });
-      collector.start();
-      collector.start();
-      expect(collector.isActive()).toBe(true);
-      collector.stop();
-    });
-
-    it('stop() deactivates the collector', () => {
-      const pc = createMockPeerConnection();
-      const collector = new QualityMetricsCollector({
-        peerConnection: pc,
-        callId: 'test-call-1',
-      });
-      collector.start();
-      expect(collector.isActive()).toBe(true);
-      collector.stop();
-      expect(collector.isActive()).toBe(false);
-    });
-
-    it('stop() is idempotent when not running', () => {
-      const pc = createMockPeerConnection();
-      const collector = new QualityMetricsCollector({
-        peerConnection: pc,
-        callId: 'test-call-1',
-      });
-      collector.stop();
-      expect(collector.isActive()).toBe(false);
-    });
-
-    it('does not start without a peer connection', () => {
-      const collector = new QualityMetricsCollector({
-        peerConnection: null as any,
-        callId: 'test-call-1',
-      });
-      collector.start();
-      expect(collector.isActive()).toBe(false);
-    });
+    expect(pc.getStats).toHaveBeenCalledTimes(1);
+    expect(samples).toHaveLength(1);
+    collector.stop();
   });
 
-  describe('metrics collection', () => {
-    it('collects metrics on each interval and calls onMetrics', async () => {
-      const statsMap = createAudioStatsMap();
-      const pc = createMockPeerConnection(statsMap);
-      const collected: CallQualityMetrics[] = [];
+  it('samples on each interval and stops cleanly', async () => {
+    const pc = createPeerConnection({});
+    const { samples, collector } = startCollector(pc, 1000);
+    await flush();
+    jest.advanceTimersByTime(1000);
+    await flush();
+    jest.advanceTimersByTime(1000);
+    await flush();
+    expect(samples).toHaveLength(3);
 
-      const collector = new QualityMetricsCollector({
-        peerConnection: pc,
-        callId: 'test-call-1',
-        intervalMs: 1000,
-      });
-      collector.onMetrics = (m) => collected.push(m);
+    collector.stop();
+    expect(collector.isActive()).toBe(false);
+    jest.advanceTimersByTime(5000);
+    await flush();
+    expect(samples).toHaveLength(3);
+  });
 
-      collector.start();
-      jest.advanceTimersByTime(1000);
-      await Promise.resolve();
-      await Promise.resolve();
+  it('is idempotent and does not start without a peer connection', () => {
+    const pc = createPeerConnection({});
+    const { collector } = startCollector(pc);
+    collector.start();
+    expect(pc.getStats).toHaveBeenCalledTimes(1);
+    collector.stop();
+    collector.stop();
 
-      expect(pc.getStats).toHaveBeenCalledTimes(1);
-      expect(collected.length).toBe(1);
+    const orphan = new QualityMetricsCollector({ peerConnection: null, callId: 'x' });
+    orphan.start();
+    expect(orphan.isActive()).toBe(false);
+  });
 
-      const metrics = collected[0];
-      expect(metrics.callId).toBe('test-call-1');
-      expect(metrics.timestamp).toBeDefined();
-      expect(metrics.qualityLevel).toBeDefined();
-      expect(metrics.inbound).not.toBeNull();
-      expect(metrics.inbound!.packetsReceived).toBe(1000);
-      expect(metrics.inbound!.packetsLost).toBe(10);
-      expect(metrics.inbound!.jitter).toBe(5); // 0.005s -> 5ms
-      expect(metrics.outbound).not.toBeNull();
-      expect(metrics.outbound!.packetsSent).toBe(950);
-      expect(metrics.roundTripTime).toBe(50); // 0.05s -> 50ms
+  it('never overlaps getStats reads when a read is slow', async () => {
+    let resolveFirst: (value: unknown) => void = () => {};
+    const pc = {
+      getStats: jest
+        .fn()
+        .mockReturnValueOnce(new Promise((resolve) => (resolveFirst = resolve)))
+        .mockResolvedValue(createStats()),
+    };
+    const { collector } = startCollector(pc, 200);
 
-      collector.stop();
+    jest.advanceTimersByTime(1000);
+    await flush();
+    expect(pc.getStats).toHaveBeenCalledTimes(1);
+
+    resolveFirst(createStats());
+    await flush();
+    jest.advanceTimersByTime(200);
+    await flush();
+    expect(pc.getStats).toHaveBeenCalledTimes(2);
+    collector.stop();
+  });
+
+  it('reports jitter and RTT in seconds from remote-inbound-rtp, with the iOS MOS', async () => {
+    const pc = createPeerConnection({ remoteJitter: 0.01, remoteRtt: 0.05, packetsReceived: 1000 });
+    const { samples, collector } = startCollector(pc);
+    await flush();
+
+    const [metrics] = samples;
+    expect(metrics.jitter).toBe(0.01);
+    expect(metrics.rtt).toBe(0.05);
+    expect(metrics.mos).toBeCloseTo(calculateMOS(10, 50, 1000, 0), 10);
+    expect(metrics.quality).toBe(CallQualityLevel.EXCELLENT);
+    expect(metrics.remoteInboundAudio).toEqual(
+      expect.objectContaining({ type: 'remote-inbound-rtp', roundTripTime: 0.05 })
+    );
+    expect(metrics.inboundAudio).toEqual(expect.objectContaining({ type: 'inbound-rtp' }));
+    collector.stop();
+  });
+
+  it('falls back to inbound-rtp jitter and the nominated pair RTT', async () => {
+    const pc = createPeerConnection({
+      remoteJitter: null,
+      remoteRtt: null,
+      inboundJitter: 0.02,
+      candidateRtt: 0.1,
     });
+    const { samples, collector } = startCollector(pc);
+    await flush();
 
-    it('collects multiple samples over multiple intervals', async () => {
-      const statsMap = createAudioStatsMap();
-      const pc = createMockPeerConnection(statsMap);
-      const collected: CallQualityMetrics[] = [];
+    expect(samples[0].jitter).toBe(0.02);
+    expect(samples[0].rtt).toBe(0.1);
+    expect(samples[0].mos).not.toBeNull();
+    collector.stop();
+  });
 
-      const collector = new QualityMetricsCollector({
-        peerConnection: pc,
-        callId: 'test-call-1',
-        intervalMs: 1000,
-      });
-      collector.onMetrics = (m) => collected.push(m);
+  it('reports UNKNOWN with a null MOS when RTT is unavailable', async () => {
+    const pc = createPeerConnection({ remoteRtt: null, candidateRtt: null });
+    const { samples, collector } = startCollector(pc);
+    await flush();
 
-      collector.start();
-      for (let i = 0; i < 3; i++) {
-        jest.advanceTimersByTime(1000);
-        await Promise.resolve();
-        await Promise.resolve();
-      }
+    expect(samples[0].rtt).toBeNull();
+    expect(samples[0].mos).toBeNull();
+    expect(samples[0].quality).toBe(CallQualityLevel.UNKNOWN);
+    collector.stop();
+  });
 
-      expect(collected.length).toBe(3);
-      collector.stop();
+  it('measures packet loss per sample, so an early loss burst does not stick', async () => {
+    const pc = createPeerConnection(
+      { packetsReceived: 900, packetsLost: 100 },
+      { packetsReceived: 1900, packetsLost: 100 }
+    );
+    const { samples, collector } = startCollector(pc, 1000);
+    await flush();
+    jest.advanceTimersByTime(1000);
+    await flush();
+
+    // First sample: 10% loss. Second: 1000 received, 0 lost in the interval.
+    expect(samples[0].mos).toBeCloseTo(calculateMOS(10, 50, 900, 100), 10);
+    expect(samples[1].mos).toBeCloseTo(calculateMOS(10, 50, 1000, 0), 10);
+    expect(samples[1].quality).toBe(CallQualityLevel.EXCELLENT);
+    collector.stop();
+  });
+
+  it('reports audio levels, preferring the media-source level for outbound', async () => {
+    const pc = createPeerConnection({
+      inboundAudioLevel: 0.3,
+      outboundAudioLevel: 0.1,
+      mediaSourceAudioLevel: 0.6,
     });
+    const { samples, collector } = startCollector(pc);
+    await flush();
 
-    it('computes packet loss rate correctly', async () => {
-      const statsMap = createAudioStatsMap({
-        packetsReceived: 2000,
-        packetsLost: 100,
-      });
-      const pc = createMockPeerConnection(statsMap);
-      const collected: CallQualityMetrics[] = [];
+    expect(samples[0].inboundAudioLevel).toBe(0.3);
+    expect(samples[0].outboundAudioLevel).toBe(0.6);
+    collector.stop();
+  });
 
-      const collector = new QualityMetricsCollector({
-        peerConnection: pc,
-        callId: 'test-call-1',
-        intervalMs: 1000,
-      });
-      collector.onMetrics = (m) => collected.push(m);
+  it('keeps sampling after a getStats() rejection', async () => {
+    const pc = {
+      getStats: jest
+        .fn()
+        .mockRejectedValueOnce(new Error('closed'))
+        .mockResolvedValue(createStats()),
+    };
+    const { samples, collector } = startCollector(pc, 200);
+    await flush();
+    expect(samples).toHaveLength(0);
 
-      collector.start();
-      jest.advanceTimersByTime(1000);
-      await Promise.resolve();
-      await Promise.resolve();
-
-      expect(collected[0].packetLossRate).toBe(5); // 100/2000 * 100 = 5%
-      collector.stop();
-    });
-
-    it('normalizes missing fields to null', async () => {
-      const map = new Map<string, any>();
-      map.set('inbound', {
-        type: 'inbound-rtp',
-        kind: 'audio',
-        timestamp: Date.now(),
-        packetsReceived: 500,
-        packetsLost: 0,
-        // jitter, audioLevel, bytesReceived missing
-      });
-      const pc = createMockPeerConnection(map);
-      const collected: CallQualityMetrics[] = [];
-
-      const collector = new QualityMetricsCollector({
-        peerConnection: pc,
-        callId: 'test-call-1',
-        intervalMs: 1000,
-      });
-      collector.onMetrics = (m) => collected.push(m);
-
-      collector.start();
-      jest.advanceTimersByTime(1000);
-      await Promise.resolve();
-      await Promise.resolve();
-
-      const metrics = collected[0];
-      expect(metrics.inbound).not.toBeNull();
-      expect(metrics.inbound!.jitter).toBeNull();
-      expect(metrics.inbound!.audioLevel).toBeNull();
-      expect(metrics.inbound!.bitrateAvg).toBeNull();
-      expect(metrics.inbound!.packetsReceived).toBe(500);
-      expect(metrics.inbound!.packetsLost).toBe(0);
-      // outbound should be null since no outbound-rtp report
-      expect(metrics.outbound).toBeNull();
-      // rtt should be null since no candidate-pair
-      expect(metrics.roundTripTime).toBeNull();
-
-      collector.stop();
-    });
-
-    it('does not crash when getStats rejects', async () => {
-      const pc = {
-        getStats: jest.fn().mockRejectedValue(new Error('getStats failed')),
-      } as any;
-      const collected: CallQualityMetrics[] = [];
-
-      const collector = new QualityMetricsCollector({
-        peerConnection: pc,
-        callId: 'test-call-1',
-        intervalMs: 1000,
-      });
-      collector.onMetrics = (m) => collected.push(m);
-
-      collector.start();
-      jest.advanceTimersByTime(1000);
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-
-      expect(collected.length).toBe(0);
-      collector.stop();
-    });
-
-    it('computes bitrate on second sample using delta', async () => {
-      const ts1 = 1000;
-      const ts2 = 2000;
-      let callCount = 0;
-      const statsMap1 = new Map<string, any>();
-      statsMap1.set('inbound', {
-        type: 'inbound-rtp',
-        kind: 'audio',
-        timestamp: ts1,
-        packetsReceived: 1000,
-        packetsLost: 0,
-        jitter: 0.003,
-        bytesReceived: 64000,
-      });
-
-      const statsMap2 = new Map<string, any>();
-      statsMap2.set('inbound', {
-        type: 'inbound-rtp',
-        kind: 'audio',
-        timestamp: ts2,
-        packetsReceived: 2000,
-        packetsLost: 0,
-        jitter: 0.003,
-        bytesReceived: 128000,
-      });
-
-      const pc = {
-        getStats: jest.fn(() => {
-          callCount++;
-          return Promise.resolve(
-            callCount === 1
-              ? {
-                  get: (id: string) => statsMap1.get(id),
-                  forEach: (cb: (r: any) => void) => statsMap1.forEach((r) => cb(r)),
-                }
-              : {
-                  get: (id: string) => statsMap2.get(id),
-                  forEach: (cb: (r: any) => void) => statsMap2.forEach((r) => cb(r)),
-                }
-          );
-        }),
-      } as any;
-
-      const collected: CallQualityMetrics[] = [];
-      const collector = new QualityMetricsCollector({
-        peerConnection: pc,
-        callId: 'test-call-1',
-        intervalMs: 1000,
-      });
-      collector.onMetrics = (m) => collected.push(m);
-
-      collector.start();
-
-      // First interval
-      jest.advanceTimersByTime(1000);
-      await Promise.resolve();
-      await Promise.resolve();
-
-      // Second interval
-      jest.advanceTimersByTime(1000);
-      await Promise.resolve();
-      await Promise.resolve();
-
-      expect(collected.length).toBe(2);
-      // First sample: bitrateAvg should be null (no previous baseline)
-      expect(collected[0].inbound!.bitrateAvg).toBeNull();
-      // Second sample: bitrateAvg should be computed
-      // delta = (128000 - 64000) * 8 * 1000 / (2000 - 1000) = 512000 bps
-      expect(collected[1].inbound!.bitrateAvg).toBe(512000);
-
-      collector.stop();
-    });
-
-    it('prefers the nominated pair RTT over a later non-nominated succeeded pair', async () => {
-      const map = createAudioStatsMap();
-      // A non-nominated succeeded pair reported AFTER the nominated pair must
-      // not overwrite the nominated pair's RTT (0.05s -> 50ms, not 400ms).
-      map.set('candidate-pair-alt', {
-        type: 'candidate-pair',
-        nominated: false,
-        state: 'succeeded',
-        currentRoundTripTime: 0.4,
-      });
-      const pc = createMockPeerConnection(map);
-      const collected: CallQualityMetrics[] = [];
-
-      const collector = new QualityMetricsCollector({
-        peerConnection: pc,
-        callId: 'test-call-1',
-        intervalMs: 1000,
-      });
-      collector.onMetrics = (m) => collected.push(m);
-
-      collector.start();
-      jest.advanceTimersByTime(1000);
-      await Promise.resolve();
-      await Promise.resolve();
-
-      expect(collected[0].roundTripTime).toBe(50);
-
-      collector.stop();
-    });
-
-    it('prefers the nominated pair RTT even when it appears after a non-nominated pair', async () => {
-      const map = createAudioStatsMap();
-      // Reinsert the nominated pair after the non-nominated one (Map.delete +
-      // Map.set moves the entry to the end of iteration order).
-      map.delete('candidate-pair');
-      map.set('candidate-pair-alt', {
-        type: 'candidate-pair',
-        nominated: false,
-        state: 'succeeded',
-        currentRoundTripTime: 0.4,
-      });
-      map.set('candidate-pair', {
-        type: 'candidate-pair',
-        nominated: true,
-        state: 'succeeded',
-        currentRoundTripTime: 0.05,
-      });
-      const pc = createMockPeerConnection(map);
-      const collected: CallQualityMetrics[] = [];
-
-      const collector = new QualityMetricsCollector({
-        peerConnection: pc,
-        callId: 'test-call-1',
-        intervalMs: 1000,
-      });
-      collector.onMetrics = (m) => collected.push(m);
-
-      collector.start();
-      jest.advanceTimersByTime(1000);
-      await Promise.resolve();
-      await Promise.resolve();
-
-      expect(collected[0].roundTripTime).toBe(50);
-
-      collector.stop();
-    });
-
-    it('falls back to the first succeeded pair RTT when no nominated pair exists', async () => {
-      const map = createAudioStatsMap();
-      map.delete('candidate-pair');
-      map.set('pair-a', {
-        type: 'candidate-pair',
-        nominated: false,
-        state: 'succeeded',
-        currentRoundTripTime: 0.07,
-      });
-      map.set('pair-b', {
-        type: 'candidate-pair',
-        nominated: false,
-        state: 'succeeded',
-        currentRoundTripTime: 0.12,
-      });
-      const pc = createMockPeerConnection(map);
-      const collected: CallQualityMetrics[] = [];
-
-      const collector = new QualityMetricsCollector({
-        peerConnection: pc,
-        callId: 'test-call-1',
-        intervalMs: 1000,
-      });
-      collector.onMetrics = (m) => collected.push(m);
-
-      collector.start();
-      jest.advanceTimersByTime(1000);
-      await Promise.resolve();
-      await Promise.resolve();
-
-      // No nominated pair: the first succeeded pair wins and stays stable
-      expect(collected[0].roundTripTime).toBe(70);
-
-      collector.stop();
-    });
-
-    it('falls back to a succeeded pair RTT when the nominated pair omits it', async () => {
-      const map = createAudioStatsMap();
-      map.delete('candidate-pair');
-      map.set('candidate-pair', {
-        type: 'candidate-pair',
-        nominated: true,
-        state: 'in-progress',
-        currentRoundTripTime: null,
-      });
-      map.set('candidate-pair-alt', {
-        type: 'candidate-pair',
-        nominated: false,
-        state: 'succeeded',
-        currentRoundTripTime: 0.1,
-      });
-      const pc = createMockPeerConnection(map);
-      const collected: CallQualityMetrics[] = [];
-
-      const collector = new QualityMetricsCollector({
-        peerConnection: pc,
-        callId: 'test-call-1',
-        intervalMs: 1000,
-      });
-      collector.onMetrics = (m) => collected.push(m);
-
-      collector.start();
-      jest.advanceTimersByTime(1000);
-      await Promise.resolve();
-      await Promise.resolve();
-
-      expect(collected[0].roundTripTime).toBe(100);
-
-      collector.stop();
-    });
+    jest.advanceTimersByTime(200);
+    await flush();
+    expect(samples).toHaveLength(1);
+    collector.stop();
   });
 });

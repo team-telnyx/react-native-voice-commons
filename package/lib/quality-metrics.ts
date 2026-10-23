@@ -1,21 +1,23 @@
 /**
  * Call quality metrics types for React Voice Commons.
  *
- * These interfaces expose application-level visibility into network and audio
- * quality during active calls, mirroring the call quality telemetry available
- * in the Android SDK (`team-telnyx/telnyx-webrtc-android`).
+ * These mirror the call quality telemetry of the native SDKs (iOS
+ * `CallQualityMetrics` / `MOSCalculator`, Android `MOSCalculator`): the same
+ * MOS formula, quality bands, and `unknown` handling, so one call reports the
+ * same score and rating on every platform.
  *
  * @module quality-metrics
  */
 
 /**
- * Quality level classification derived from the estimated MOS score.
+ * Quality rating derived from the MOS score (same bands as iOS and Android).
  *
- * - EXCELLENT: MOS >= 4.0 — call quality is indistinguishable from a direct connection
- * - GOOD:      MOS >= 3.6 — minor impairments that do not affect conversation flow
- * - FAIR:      MOS >= 3.1 — noticeable degradation but conversation remains possible
- * - POOR:      MOS >= 2.6 — significant degradation; communication is difficult
- * - BAD:       MOS <  2.6 — severe degradation; communication is nearly impossible
+ * - EXCELLENT: MOS > 4.2
+ * - GOOD:      4.1 <= MOS <= 4.2
+ * - FAIR:      3.7 <= MOS < 4.1
+ * - POOR:      3.1 <= MOS < 3.7
+ * - BAD:       MOS < 3.1
+ * - UNKNOWN:   MOS could not be calculated (missing jitter or RTT)
  */
 export enum CallQualityLevel {
   EXCELLENT = 'excellent',
@@ -23,66 +25,41 @@ export enum CallQualityLevel {
   FAIR = 'fair',
   POOR = 'poor',
   BAD = 'bad',
+  UNKNOWN = 'unknown',
 }
 
-/**
- * Normalized inbound (received) audio quality statistics.
- *
- * All values are extracted from WebRTC `getStats()` reports and normalized so
- * that missing fields are `null` rather than `undefined` or `0`. This makes
- * the interface safe to serialize and consume without guarding every field.
- */
-export interface AudioInboundQualityStats {
-  /** Total number of RTP packets received for this audio stream. */
-  packetsReceived: number;
-  /** Total number of RTP packets reported as lost. */
-  packetsLost: number;
-  /** Average jitter in milliseconds over the sampling interval, or null when unavailable. */
-  jitter: number | null;
-  /** Average audio level (0–1, RFC 6464), or null when unavailable. */
-  audioLevel: number | null;
-  /** Average bitrate in bits per second, or null for the first sample. */
-  bitrateAvg: number | null;
-}
+/** A raw WebRTC stats report, copied as a plain object. */
+export type QualityStatsRecord = Record<string, unknown>;
 
 /**
- * Normalized outbound (sent) audio quality statistics.
- */
-export interface AudioOutboundQualityStats {
-  /** Total number of RTP packets sent for this audio stream. */
-  packetsSent: number;
-  /** Average audio level (0–1, RFC 6464), or null when unavailable. */
-  audioLevel: number | null;
-  /** Average bitrate in bits per second, or null for the first sample. */
-  bitrateAvg: number | null;
-}
-
-/**
- * Snapshot of call quality metrics at a single sampling point.
- *
- * The collector emits this object on each polling interval while a call is
- * active. Consumers can subscribe via the `Call` object's callback or the
- * React wrapper's `qualityMetrics$` observable.
+ * Snapshot of call quality metrics at a single sampling point. Field names and
+ * units match iOS `CallQualityMetrics`.
  */
 export interface CallQualityMetrics {
   /** The call identifier this metrics snapshot belongs to. */
   callId: string;
   /** ISO-8601 timestamp of when the metrics were collected. */
   timestamp: string;
-  /** Derived quality level classification. */
-  qualityLevel: CallQualityLevel;
-  /** Estimated Mean Opinion Score (1.0–4.5), or null when insufficient data. */
-  mos: number | null;
-  /** Average jitter in milliseconds, or null when unavailable. */
+  /** Jitter in seconds, or null when unavailable. */
   jitter: number | null;
-  /** Round-trip time in milliseconds, or null when unavailable. */
-  roundTripTime: number | null;
-  /** Packet loss rate as a percentage (0–100), or null when unavailable. */
-  packetLossRate: number | null;
-  /** Normalized inbound audio stats, or null when no inbound audio is flowing. */
-  inbound: AudioInboundQualityStats | null;
-  /** Normalized outbound audio stats, or null when no outbound audio is flowing. */
-  outbound: AudioOutboundQualityStats | null;
+  /** Round-trip time in seconds, or null when unavailable. */
+  rtt: number | null;
+  /** Mean Opinion Score (1.0–5.0), or null when it cannot be calculated. */
+  mos: number | null;
+  /** Quality rating derived from `mos`; UNKNOWN when `mos` is null. */
+  quality: CallQualityLevel;
+  /** Instantaneous inbound (remote) audio level, 0.0–1.0. */
+  inboundAudioLevel: number;
+  /** Instantaneous outbound (local) audio level, 0.0–1.0. */
+  outboundAudioLevel: number;
+  /** Raw `inbound-rtp` audio stats, or null when unavailable. */
+  inboundAudio: QualityStatsRecord | null;
+  /** Raw `outbound-rtp` audio stats, or null when unavailable. */
+  outboundAudio: QualityStatsRecord | null;
+  /** Raw `remote-inbound-rtp` audio stats, or null when unavailable. */
+  remoteInboundAudio: QualityStatsRecord | null;
+  /** Raw `remote-outbound-rtp` audio stats, or null when unavailable. */
+  remoteOutboundAudio: QualityStatsRecord | null;
 }
 
 /**
@@ -93,83 +70,80 @@ export interface QualityMetricsCollectorOptions {
   peerConnection: any;
   /** The call identifier to include in each metrics snapshot. */
   callId: string;
-  /** Polling interval in milliseconds. Default: 5000 (5 seconds). */
+  /** Polling interval in milliseconds. Default: 200 (iOS parity). */
   intervalMs?: number;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const R0 = 93.2; // Base value for the G.711 codec
 
 /**
- * Round a number to 4 decimal places, returning null for NaN/null/undefined.
+ * Calculate the Mean Opinion Score with the simplified E-model used by the
+ * iOS and Android SDKs.
+ *
+ * @param jitterMs - Jitter in milliseconds.
+ * @param rttMs - Round-trip time in milliseconds.
+ * @param packetsReceived - Packets received in the sampling interval.
+ * @param packetsLost - Packets lost in the sampling interval.
+ * @returns MOS in the inclusive range 1.0–5.0, or NaN when an input is
+ *   non-finite or the computation overflows. Pair it with {@link getQuality},
+ *   which maps NaN to UNKNOWN.
  */
-function round4(val: number | null | undefined): number | null {
-  if (val == null || isNaN(val)) return null;
-  return Math.round(val * 10000) / 10000;
+export function calculateMOS(
+  jitterMs: number,
+  rttMs: number,
+  packetsReceived: number,
+  packetsLost: number
+): number {
+  // A missing jitter/RTT must report UNKNOWN rather than a clamped score.
+  if (!Number.isFinite(jitterMs) || !Number.isFinite(rttMs)) {
+    return NaN;
+  }
+
+  const Id = calculateDelayImpairment(jitterMs, rttMs);
+  const Ie = calculateEquipmentImpairment(packetsLost, packetsReceived);
+  const R = R0 - Id - Ie;
+
+  // ITU-T G.107: R < 0 maps to MOS 1. Without this guard the cubic term turns
+  // back upward for very negative R, so ~1.2s of one-way latency would clamp
+  // to 5.0 (EXCELLENT). The native SDKs currently lack this guard.
+  if (R < 0) {
+    return 1;
+  }
+
+  const mos = 1 + 0.035 * R + 0.000007 * R * (R - 60) * (100 - R);
+  if (!Number.isFinite(mos)) {
+    return NaN;
+  }
+  return Math.min(Math.max(mos, 1), 5);
 }
 
 /**
- * Compute the arithmetic mean of a non-empty array, or null for empty input.
+ * Map a MOS score to a quality rating. Non-finite input is UNKNOWN; finite
+ * values map to exactly one band.
  */
-function avg(values: number[]): number | null {
-  if (values.length === 0) return null;
-  return values.reduce((s, v) => s + v, 0) / values.length;
-}
-
-/**
- * Estimate MOS (Mean Opinion Score) using a simplified E-model.
- *
- * The E-model (ITU-T G.107) maps network impairments to a rating factor R,
- * which is then converted to a 1–5 MOS scale. This simplified version
- * considers latency (RTT + jitter buffer), packet loss rate, and applies
- * the standard R-to-MOS curve.
- *
- * @param jitterMs - Average jitter in milliseconds, or null.
- * @param rttMs - Round-trip time in milliseconds, or null.
- * @param packetLossRate - Packet loss as a percentage (0–100), or null.
- * @returns Estimated MOS (1.0–4.5), or null when both jitter and RTT are null.
- */
-export function estimateMOS(
-  jitterMs: number | null,
-  rttMs: number | null,
-  packetLossRate: number | null,
-): number | null {
-  if (jitterMs == null && rttMs == null) return null;
-
-  const latency = (rttMs ?? 0) + (jitterMs ?? 0) * 2;
-  const loss = Math.max(0, packetLossRate ?? 0);
-
-  // Delay impairment (Id) per E-model
-  const Id =
-    0.024 * latency + 0.11 * (latency > 177.3 ? latency - 177.3 : 0);
-
-  // Equipment impairment (Ie) — ITU-T G.107 packet-loss robustness model
-  // with the G.711 (PLC) baseline: Ie0 = 0, Bpl = 25.1.
-  const Ie = 95 * (1 - Math.exp(-loss / 25.1));
-
-  // Rating factor R
-  const R = 93.2 - Id - Ie;
-
-  if (R < 0) return 1;
-  if (R > 100) return 4.5;
-
-  // R-to-MOS mapping per ITU-T G.107: MOS = 1 + 0.035R + 7e-6·R(R−60)(100−R)
-  return round4(1 + 0.035 * R + 0.000007 * R * (R - 60) * (100 - R));
-}
-
-/**
- * Classify a MOS value into a quality level.
- *
- * @param mos - Estimated MOS (1.0–4.5). If null, returns `CallQualityLevel.FAIR`
- *   as a conservative default.
- */
-export function qualityLevelFromMOS(mos: number | null): CallQualityLevel {
-  if (mos == null) return CallQualityLevel.FAIR;
-  if (mos >= 4.0) return CallQualityLevel.EXCELLENT;
-  if (mos >= 3.6) return CallQualityLevel.GOOD;
-  if (mos >= 3.1) return CallQualityLevel.FAIR;
-  if (mos >= 2.6) return CallQualityLevel.POOR;
+export function getQuality(mos: number | null): CallQualityLevel {
+  if (mos == null || !Number.isFinite(mos)) {
+    return CallQualityLevel.UNKNOWN;
+  }
+  if (mos > 4.2) return CallQualityLevel.EXCELLENT;
+  if (mos >= 4.1) return CallQualityLevel.GOOD;
+  if (mos >= 3.7) return CallQualityLevel.FAIR;
+  if (mos >= 3.1) return CallQualityLevel.POOR;
   return CallQualityLevel.BAD;
 }
 
-// Export helpers for testing
-export { round4, avg };
+/** Delay impairment (Id) from one-way latency, approximated as jitter + RTT/2. */
+function calculateDelayImpairment(jitterMs: number, rttMs: number): number {
+  const latency = jitterMs + rttMs / 2;
+  return 0.024 * latency + 0.11 * (latency - 177.3) * (latency > 177.3 ? 1 : 0);
+}
+
+/** Equipment impairment (Ie) from the packet loss percentage in the interval. */
+function calculateEquipmentImpairment(packetsLost: number, packetsReceived: number): number {
+  const total = packetsReceived + packetsLost;
+  if (total <= 0) {
+    return 0;
+  }
+  const packetLossPercentage = (packetsLost / total) * 100;
+  return 20 * Math.log(1 + packetLossPercentage);
+}

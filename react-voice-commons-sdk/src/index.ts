@@ -54,11 +54,7 @@ export type { Call as TelnyxCall } from '@telnyx/react-native-voice-sdk';
 
 // Re-export call quality metrics types from the underlying SDK
 export { CallQualityLevel } from '@telnyx/react-native-voice-sdk';
-export type {
-  CallQualityMetrics,
-  AudioInboundQualityStats,
-  AudioOutboundQualityStats,
-} from '@telnyx/react-native-voice-sdk';
+export type { CallQualityMetrics, QualityStatsRecord } from '@telnyx/react-native-voice-sdk';
 
 // Export CallKit functionality
 export * from './callkit';

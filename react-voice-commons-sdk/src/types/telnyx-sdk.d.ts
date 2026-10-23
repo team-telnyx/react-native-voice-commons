@@ -39,6 +39,7 @@ declare module '@telnyx/react-native-voice-sdk' {
     enableMissedCallNotifications?: boolean;
     useTrickleIce?: boolean;
     enableCallReports?: boolean;
+    enableQualityMetrics?: boolean;
     callReportInterval?: number;
     callReportLogLevel?: string;
     callReportMaxLogEntries?: number;
@@ -58,7 +59,7 @@ declare module '@telnyx/react-native-voice-sdk' {
   }
 
   /**
-   * Quality level classification derived from the estimated MOS score.
+   * Quality rating derived from the MOS score (same bands as iOS and Android).
    */
   export enum CallQualityLevel {
     EXCELLENT = 'excellent',
@@ -66,59 +67,41 @@ declare module '@telnyx/react-native-voice-sdk' {
     FAIR = 'fair',
     POOR = 'poor',
     BAD = 'bad',
+    UNKNOWN = 'unknown',
   }
 
-  /**
-   * Normalized inbound (received) audio quality statistics.
-   * All values come from WebRTC `getStats()` reports; missing fields are `null`.
-   */
-  export interface AudioInboundQualityStats {
-    /** Total number of RTP packets received for this audio stream. */
-    packetsReceived: number;
-    /** Total number of RTP packets reported as lost. */
-    packetsLost: number;
-    /** Average jitter in milliseconds over the sampling interval, or null when unavailable. */
-    jitter: number | null;
-    /** Average audio level (0–1, RFC 6464), or null when unavailable. */
-    audioLevel: number | null;
-    /** Average bitrate in bits per second, or null for the first sample. */
-    bitrateAvg: number | null;
-  }
+  /** A raw WebRTC stats report, copied as a plain object. */
+  export type QualityStatsRecord = Record<string, unknown>;
 
   /**
-   * Normalized outbound (sent) audio quality statistics.
-   */
-  export interface AudioOutboundQualityStats {
-    /** Total number of RTP packets sent for this audio stream. */
-    packetsSent: number;
-    /** Average audio level (0–1, RFC 6464), or null when unavailable. */
-    audioLevel: number | null;
-    /** Average bitrate in bits per second, or null for the first sample. */
-    bitrateAvg: number | null;
-  }
-
-  /**
-   * Snapshot of call quality metrics at a single sampling point.
+   * Snapshot of call quality metrics at a single sampling point. Field names
+   * and units match iOS `CallQualityMetrics`.
    */
   export interface CallQualityMetrics {
     /** The call identifier this metrics snapshot belongs to. */
     callId: string;
     /** ISO-8601 timestamp of when the metrics were collected. */
     timestamp: string;
-    /** Derived quality level classification. */
-    qualityLevel: CallQualityLevel;
-    /** Estimated Mean Opinion Score (1.0–4.5), or null when insufficient data. */
-    mos: number | null;
-    /** Average jitter in milliseconds, or null when unavailable. */
+    /** Jitter in seconds, or null when unavailable. */
     jitter: number | null;
-    /** Round-trip time in milliseconds, or null when unavailable. */
-    roundTripTime: number | null;
-    /** Packet loss rate as a percentage (0–100), or null when unavailable. */
-    packetLossRate: number | null;
-    /** Normalized inbound audio stats, or null when no inbound audio is flowing. */
-    inbound: AudioInboundQualityStats | null;
-    /** Normalized outbound audio stats, or null when no outbound audio is flowing. */
-    outbound: AudioOutboundQualityStats | null;
+    /** Round-trip time in seconds, or null when unavailable. */
+    rtt: number | null;
+    /** Mean Opinion Score (1.0–5.0), or null when it cannot be calculated. */
+    mos: number | null;
+    /** Quality rating derived from `mos`; UNKNOWN when `mos` is null. */
+    quality: CallQualityLevel;
+    /** Instantaneous inbound (remote) audio level, 0.0–1.0. */
+    inboundAudioLevel: number;
+    /** Instantaneous outbound (local) audio level, 0.0–1.0. */
+    outboundAudioLevel: number;
+    /** Raw `inbound-rtp` audio stats, or null when unavailable. */
+    inboundAudio: QualityStatsRecord | null;
+    /** Raw `outbound-rtp` audio stats, or null when unavailable. */
+    outboundAudio: QualityStatsRecord | null;
+    /** Raw `remote-inbound-rtp` audio stats, or null when unavailable. */
+    remoteInboundAudio: QualityStatsRecord | null;
+    /** Raw `remote-outbound-rtp` audio stats, or null when unavailable. */
+    remoteOutboundAudio: QualityStatsRecord | null;
   }
 
   export class Call extends EventEmitter {
@@ -145,8 +128,9 @@ declare module '@telnyx/react-native-voice-sdk' {
     answerCustomHeaders: { name: string; value: string }[] | null;
 
     /**
-     * Callback invoked periodically (default every 5 seconds) while the call
-     * is active with a snapshot of call quality metrics.
+     * Callback invoked with each call quality metrics snapshot (every 200 ms by
+     * default) while collection is active. Snapshots are also emitted as the
+     * `telnyx.call.qualityMetrics` event.
      */
     onQualityMetrics: ((metrics: CallQualityMetrics) => void) | null;
 

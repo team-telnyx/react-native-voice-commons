@@ -18,6 +18,9 @@ export class Call {
   private readonly _isHeld = new BehaviorSubject<boolean>(false);
   private readonly _duration = new BehaviorSubject<number>(0);
   private readonly _qualityMetrics = new BehaviorSubject<CallQualityMetrics | null>(null);
+  private readonly _onQualityMetrics = (metrics: CallQualityMetrics) => {
+    this._qualityMetrics.next(metrics);
+  };
 
   private _durationTimer?: NodeJS.Timeout;
   private _startTime?: Date;
@@ -445,6 +448,7 @@ export class Call {
    */
   dispose(): void {
     this._stopDurationTimer();
+    this._telnyxCall.off?.('telnyx.call.qualityMetrics', this._onQualityMetrics);
     this._callState.complete();
     this._isMuted.complete();
     this._isHeld.complete();
@@ -553,9 +557,9 @@ export class Call {
     });
 
     // Forward quality metrics from the underlying SDK
-    this._telnyxCall.onQualityMetrics = (metrics: CallQualityMetrics | null) => {
-      this._qualityMetrics.next(metrics);
-    };
+    // Subscribe to the event rather than the single onQualityMetrics slot, so
+    // an app can still set that callback on the underlying call.
+    this._telnyxCall.on('telnyx.call.qualityMetrics', this._onQualityMetrics);
   }
 
   /**

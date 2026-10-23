@@ -1,25 +1,24 @@
 import log from 'loglevel';
-import type { QualityMetricsCollectorOptions } from './quality-metrics';
-import {
-  CallQualityLevel,
+import type {
   CallQualityMetrics,
-  AudioInboundQualityStats,
-  AudioOutboundQualityStats,
-  estimateMOS,
-  qualityLevelFromMOS,
-  round4,
+  QualityMetricsCollectorOptions,
+  QualityStatsRecord,
 } from './quality-metrics';
+import { calculateMOS, getQuality } from './quality-metrics';
 
-const DEFAULT_INTERVAL_MS = 5000;
+/** iOS samples every 0.2s so audio levels can drive a live level meter. */
+export const DEFAULT_QUALITY_METRICS_INTERVAL_MS = 200;
 
 /**
- * QualityMetricsCollector periodically polls WebRTC `getStats()` on the
- * peer connection, normalizes audio inbound/outbound and connection metrics,
- * estimates a MOS score, and emits a `CallQualityMetrics` snapshot via a
- * callback on every polling interval.
+ * QualityMetricsCollector polls WebRTC `getStats()` on the peer connection and
+ * emits a {@link CallQualityMetrics} snapshot per sample, computed the same way
+ * as the iOS `WebRTCStatsReporter`:
  *
- * The collector never throws when the platform omits individual stats fields —
- * missing values are reported as `null` so consumers can degrade gracefully.
+ * - jitter/RTT come from `remote-inbound-rtp` (RTCP); when the platform has not
+ *   reported it yet, local `inbound-rtp` jitter and the nominated candidate
+ *   pair RTT are used instead
+ * - packet loss is measured per sample (delta since the previous sample)
+ * - a missing jitter or RTT yields `mos: null` and `quality: UNKNOWN`
  */
 export class QualityMetricsCollector {
   private peerConnection: any;
@@ -27,24 +26,20 @@ export class QualityMetricsCollector {
   private intervalMs: number;
   private timerId: ReturnType<typeof setInterval> | null = null;
   private started = false;
+  private collecting = false;
+  private previousPackets: { received: number; lost: number } | null = null;
 
-  // Previous values for delta calculations
-  private prevInboundBytes = 0;
-  private prevInboundTimestamp = 0;
-  private prevOutboundBytes = 0;
-  private prevOutboundTimestamp = 0;
-
-  /** Called with the latest metrics snapshot on each polling interval. */
+  /** Called with the latest metrics snapshot on each sample. */
   public onMetrics: ((metrics: CallQualityMetrics) => void) | null = null;
 
   constructor(options: QualityMetricsCollectorOptions) {
     this.peerConnection = options.peerConnection;
     this.callId = options.callId;
-    this.intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
+    this.intervalMs = options.intervalMs ?? DEFAULT_QUALITY_METRICS_INTERVAL_MS;
   }
 
   /**
-   * Start periodic quality metrics collection.
+   * Start collection, taking the first sample immediately.
    * Idempotent — calling `start()` twice is a no-op.
    */
   start(): void {
@@ -63,16 +58,12 @@ export class QualityMetricsCollector {
       intervalMs: this.intervalMs,
     });
 
-    this.timerId = setInterval(() => {
-      this.collect().catch((err) => {
-        log.error('[QualityMetricsCollector] Error collecting metrics:', err);
-      });
-    }, this.intervalMs);
+    this.sample();
+    this.timerId = setInterval(() => this.sample(), this.intervalMs);
   }
 
   /**
-   * Stop quality metrics collection.
-   * Idempotent — safe to call when not running.
+   * Stop collection. Idempotent — safe to call when not running.
    */
   stop(): void {
     if (!this.started) return;
@@ -83,6 +74,7 @@ export class QualityMetricsCollector {
     }
 
     this.started = false;
+    this.previousPackets = null;
     log.debug('[QualityMetricsCollector] Stopped quality metrics collection');
   }
 
@@ -91,6 +83,19 @@ export class QualityMetricsCollector {
    */
   isActive(): boolean {
     return this.started;
+  }
+
+  private sample(): void {
+    // A slow getStats() must not stack overlapping reads at short intervals.
+    if (this.collecting) return;
+    this.collecting = true;
+    this.collect()
+      .catch((err) => {
+        log.error('[QualityMetricsCollector] Error collecting metrics:', err);
+      })
+      .finally(() => {
+        this.collecting = false;
+      });
   }
 
   /**
@@ -107,141 +112,87 @@ export class QualityMetricsCollector {
       return;
     }
 
-    if (!stats) return;
+    if (!stats || !this.started) return;
 
-    let inbound: AudioInboundQualityStats | null = null;
-    let outbound: AudioOutboundQualityStats | null = null;
+    let inbound: QualityStatsRecord | null = null;
+    let outbound: QualityStatsRecord | null = null;
+    let remoteInbound: QualityStatsRecord | null = null;
+    let remoteOutbound: QualityStatsRecord | null = null;
+    let mediaSourceAudioLevel: number | null = null;
     let nominatedRtt: number | null = null;
     let fallbackRtt: number | null = null;
-    let jitterMs: number | null = null;
-    let packetLossRate: number | null = null;
-
-    const inJitters: number[] = [];
 
     stats.forEach((report: any) => {
+      if (!report) return;
       switch (report.type) {
         case 'inbound-rtp':
-          if (report.kind === 'audio') {
-            const now = report.timestamp;
-            const bytes = report.bytesReceived ?? 0;
-            let bitrateAvg: number | null = null;
-            if (this.prevInboundTimestamp > 0) {
-              const timeDelta = now - this.prevInboundTimestamp;
-              if (timeDelta > 0) {
-                bitrateAvg = ((bytes - this.prevInboundBytes) * 8 * 1000) / timeDelta;
-              }
-            }
-            this.prevInboundBytes = bytes;
-            this.prevInboundTimestamp = now;
-
-            // Jitter: WebRTC reports in seconds; convert to ms
-            const jitter =
-              report.jitter != null ? report.jitter * 1000 : null;
-            if (jitter != null) inJitters.push(jitter);
-
-            jitterMs = round4(inJitters.length > 0 ? inJitters[0] : null);
-
-            const packetsReceived = report.packetsReceived ?? 0;
-            const packetsLost = report.packetsLost ?? 0;
-
-            if (packetsReceived > 0) {
-              packetLossRate = round4(
-                (packetsLost / packetsReceived) * 100,
-              );
-            }
-
-            inbound = {
-              packetsReceived,
-              packetsLost,
-              jitter: jitterMs,
-              audioLevel: round4(report.audioLevel ?? null),
-              bitrateAvg: round4(bitrateAvg),
-            };
-          }
+          if (report.kind === 'audio') inbound = { ...report };
           break;
-
         case 'outbound-rtp':
-          if (report.kind === 'audio') {
-            const now = report.timestamp;
-            const bytes = report.bytesSent ?? 0;
-            let bitrateAvg: number | null = null;
-            if (this.prevOutboundTimestamp > 0) {
-              const timeDelta = now - this.prevOutboundTimestamp;
-              if (timeDelta > 0) {
-                bitrateAvg = ((bytes - this.prevOutboundBytes) * 8 * 1000) / timeDelta;
-              }
-            }
-            this.prevOutboundBytes = bytes;
-            this.prevOutboundTimestamp = now;
-
-            // Audio level may come from the associated media-source report
-            let audioLevel: number | null = null;
-            if (report.mediaSourceId && typeof stats.get === 'function') {
-              const mediaSource = stats.get(report.mediaSourceId);
-              if (mediaSource && mediaSource.audioLevel != null) {
-                audioLevel = round4(mediaSource.audioLevel);
-              }
-            }
-
-            outbound = {
-              packetsSent: report.packetsSent ?? 0,
-              audioLevel,
-              bitrateAvg: round4(bitrateAvg),
-            };
-          }
+          if (report.kind === 'audio') outbound = { ...report };
           break;
-
-        case 'candidate-pair':
-          if (report.currentRoundTripTime != null) {
-            // RTT is in seconds; convert to ms
-            const rttMs = round4(report.currentRoundTripTime * 1000);
-            if (report.nominated) {
-              // The nominated pair is the connection in use — its RTT is
-              // authoritative. A later non-nominated succeeded pair must not
-              // overwrite it (skews RTT and the downstream MOS/quality level).
-              nominatedRtt = rttMs;
-            } else if (report.state === 'succeeded' && fallbackRtt == null) {
-              // Fallback for platforms that omit the nominated flag: take the
-              // first succeeded pair and keep it stable across the report walk.
-              fallbackRtt = rttMs;
-            }
-          }
+        case 'remote-inbound-rtp':
+          if (report.kind === 'audio') remoteInbound = { ...report };
           break;
-
+        case 'remote-outbound-rtp':
+          if (report.kind === 'audio') remoteOutbound = { ...report };
+          break;
         case 'media-source':
-          // Fallback: if we haven't found audio level from outbound-rtp
-          if (!outbound && report.kind === 'audio' && report.audioLevel != null) {
-            outbound = {
-              packetsSent: 0,
-              audioLevel: round4(report.audioLevel),
-              bitrateAvg: null,
-            };
+          if (report.kind === 'audio' && typeof report.audioLevel === 'number') {
+            mediaSourceAudioLevel = report.audioLevel;
+          }
+          break;
+        case 'candidate-pair':
+          if (typeof report.currentRoundTripTime === 'number') {
+            if (report.nominated) {
+              nominatedRtt = report.currentRoundTripTime;
+            } else if (report.state === 'succeeded' && fallbackRtt == null) {
+              fallbackRtt = report.currentRoundTripTime;
+            }
           }
           break;
       }
     });
 
-    // Prefer the nominated pair's RTT; fall back to a succeeded pair only when
-    // no nominated pair reported an RTT.
-    const rtt = nominatedRtt ?? fallbackRtt;
+    const jitter = numberOrNull(remoteInbound, 'jitter') ?? numberOrNull(inbound, 'jitter');
+    const rtt = numberOrNull(remoteInbound, 'roundTripTime') ?? nominatedRtt ?? fallbackRtt;
 
-    const mos = estimateMOS(jitterMs, rtt, packetLossRate);
-    const qualityLevel = qualityLevelFromMOS(mos);
+    const packetsReceived = numberOrNull(inbound, 'packetsReceived') ?? 0;
+    const packetsLost = numberOrNull(inbound, 'packetsLost') ?? 0;
+    let deltaReceived = packetsReceived;
+    let deltaLost = packetsLost;
+    if (this.previousPackets) {
+      deltaReceived = Math.max(0, packetsReceived - this.previousPackets.received);
+      deltaLost = Math.max(0, packetsLost - this.previousPackets.lost);
+    }
+    this.previousPackets = { received: packetsReceived, lost: packetsLost };
+
+    const mos =
+      jitter != null && rtt != null
+        ? calculateMOS(jitter * 1000, rtt * 1000, deltaReceived, deltaLost)
+        : NaN;
 
     const metrics: CallQualityMetrics = {
       callId: this.callId,
       timestamp: new Date().toISOString(),
-      qualityLevel,
-      mos,
-      jitter: jitterMs,
-      roundTripTime: rtt,
-      packetLossRate,
-      inbound,
-      outbound,
+      jitter,
+      rtt,
+      mos: Number.isFinite(mos) ? mos : null,
+      quality: getQuality(mos),
+      inboundAudioLevel: numberOrNull(inbound, 'audioLevel') ?? 0,
+      outboundAudioLevel:
+        mediaSourceAudioLevel ?? numberOrNull(outbound, 'audioLevel') ?? 0,
+      inboundAudio: inbound,
+      outboundAudio: outbound,
+      remoteInboundAudio: remoteInbound,
+      remoteOutboundAudio: remoteOutbound,
     };
 
-    if (this.onMetrics) {
-      this.onMetrics(metrics);
-    }
+    this.onMetrics?.(metrics);
   }
+}
+
+function numberOrNull(record: QualityStatsRecord | null, key: string): number | null {
+  const value = record?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }

@@ -35,14 +35,9 @@ export type {
 export { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
 
 // Call Quality Metrics
+export { CallQualityLevel, calculateMOS, getQuality } from './quality-metrics';
+export type { CallQualityMetrics, QualityStatsRecord } from './quality-metrics';
 export {
-  CallQualityLevel,
-  estimateMOS,
-  qualityLevelFromMOS,
-} from './quality-metrics';
-export type {
-  AudioInboundQualityStats,
-  AudioOutboundQualityStats,
-  CallQualityMetrics,
-} from './quality-metrics';
-export { QualityMetricsCollector } from './quality-metrics-collector';
+  QualityMetricsCollector,
+  DEFAULT_QUALITY_METRICS_INTERVAL_MS,
+} from './quality-metrics-collector';

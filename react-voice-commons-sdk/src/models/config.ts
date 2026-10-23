@@ -21,6 +21,11 @@ export interface CredentialConfig {
   environment?: TelnyxEnvironment;
   /** Enable automatic call quality reporting. Default: true */
   enableCallReports?: boolean;
+  /**
+   * Deliver real-time call quality metrics on `Call.qualityMetrics$` while a
+   * call is active. Also enabled by `debug`. Default: false
+   */
+  enableQualityMetrics?: boolean;
   /** Stats collection interval in seconds. Default: 5 */
   callReportInterval?: number;
   /** Minimum log level for call reports: 'debug' | 'info' | 'warn' | 'error'. Default: 'debug' */
@@ -49,6 +54,11 @@ export interface TokenConfig {
   environment?: TelnyxEnvironment;
   /** Enable automatic call quality reporting. Default: true */
   enableCallReports?: boolean;
+  /**
+   * Deliver real-time call quality metrics on `Call.qualityMetrics$` while a
+   * call is active. Also enabled by `debug`. Default: false
+   */
+  enableQualityMetrics?: boolean;
   /** Stats collection interval in seconds. Default: 5 */
   callReportInterval?: number;
   /** Minimum log level for call reports: 'debug' | 'info' | 'warn' | 'error'. Default: 'debug' */
