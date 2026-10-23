@@ -77,6 +77,85 @@ describe('push-when-active configuration persistence', () => {
   describe.each([
     [
       'credential',
+      () => createCredentialConfig('sip-user', 'sip-password'),
+      'connectWithCredential',
+      'login',
+    ],
+    ['token', () => createTokenConfig('stored-token'), 'connectWithToken', 'loginWithToken'],
+  ])(
+    'quality metrics opt-in round trip for %s auth',
+    (_kind, makeConfig, connectMethod, loginMethod) => {
+      // In-memory AsyncStorage so a login's writes are what the restore reads.
+      let store: Record<string, string>;
+      beforeEach(() => {
+        store = {};
+        (AsyncStorage.setItem as jest.Mock).mockImplementation(
+          async (key: string, value: string) => {
+            store[key] = value;
+          }
+        );
+        (AsyncStorage.removeItem as jest.Mock).mockImplementation(async (key: string) => {
+          delete store[key];
+        });
+        (AsyncStorage.getItem as jest.Mock).mockImplementation(
+          async (key: string) => store[key] ?? null
+        );
+      });
+
+      const loginWith = async (enableQualityMetrics: boolean) => {
+        const client = new TelnyxVoipClient();
+        const connect = jest
+          .spyOn((client as any)._sessionManager, connectMethod)
+          .mockResolvedValue(undefined);
+        await (client as any)[loginMethod]({ ...makeConfig(), enableQualityMetrics });
+        expect(connect).toHaveBeenCalledWith(expect.objectContaining({ enableQualityMetrics }));
+      };
+
+      it.each([true, false])(
+        'restores enableQualityMetrics=%p in the foreground and on a cold push',
+        async (enableQualityMetrics) => {
+          await loginWith(enableQualityMetrics);
+          expect(store['@enable_quality_metrics']).toBe(String(enableQualityMetrics));
+
+          // Foreground restore (process restart with automatic login).
+          const restored = new TelnyxVoipClient();
+          const connect = jest
+            .spyOn((restored as any)._sessionManager, connectMethod)
+            .mockResolvedValue(undefined);
+          await expect(restored.loginFromStoredConfig()).resolves.toBe(true);
+          expect(connect).toHaveBeenCalledWith(expect.objectContaining({ enableQualityMetrics }));
+
+          // Cold-start push restore builds the core client from storage.
+          const pushed = new TelnyxVoipClient();
+          await (pushed as any)._sessionManager.handlePushNotification({
+            metadata: { call_id: 'call-id' },
+          });
+          const TelnyxRTCMock = TelnyxSDK.TelnyxRTC as unknown as jest.Mock;
+          const clientOptions = TelnyxRTCMock.mock.calls[TelnyxRTCMock.mock.calls.length - 1][0];
+          expect(clientOptions.enableQualityMetrics).toBe(enableQualityMetrics);
+        }
+      );
+
+      it('turns the opt-in off again after a later login disables it', async () => {
+        await loginWith(true);
+        await loginWith(false);
+
+        expect(store['@enable_quality_metrics']).toBe('false');
+        const restored = new TelnyxVoipClient();
+        const connect = jest
+          .spyOn((restored as any)._sessionManager, connectMethod)
+          .mockResolvedValue(undefined);
+        await restored.loginFromStoredConfig();
+        expect(connect).toHaveBeenCalledWith(
+          expect.objectContaining({ enableQualityMetrics: false })
+        );
+      });
+    }
+  );
+
+  describe.each([
+    [
+      'credential',
       { '@telnyx_username': 'sip-user', '@telnyx_password': 'sip-password' },
       'connectWithCredential',
     ],

@@ -19,6 +19,7 @@ import {
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
 const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
 const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
+const QUALITY_METRICS_STORAGE_KEY = '@enable_quality_metrics';
 
 export interface SessionManagerOptions {
   /** Environment used when a config or stored restore does not specify one */
@@ -256,9 +257,11 @@ export class SessionManager {
           MISSED_CALL_NOTIFICATIONS_STORAGE_KEY
         );
         const storedEnvironment = await AsyncStorage.getItem(SIGNALING_ENVIRONMENT_STORAGE_KEY);
+        const storedQualityMetrics = await AsyncStorage.getItem(QUALITY_METRICS_STORAGE_KEY);
         const useTrickleIce = storedUseTrickleIce === 'true';
         const pushWhenActive = storedPushWhenActive === 'true';
         const enableMissedCallNotifications = storedMissedCallNotifications === 'true';
+        const enableQualityMetrics = storedQualityMetrics === 'true';
         const environment = resolveStoredEnvironment(storedEnvironment, this._defaultEnvironment);
 
         if (this._isTeardownActive()) {
@@ -274,6 +277,7 @@ export class SessionManager {
             useTrickleIce,
             pushWhenActive,
             enableMissedCallNotifications,
+            enableQualityMetrics,
             environment,
           });
         }
@@ -286,6 +290,7 @@ export class SessionManager {
             useTrickleIce,
             pushWhenActive,
             enableMissedCallNotifications,
+            enableQualityMetrics,
             environment,
           });
         }
