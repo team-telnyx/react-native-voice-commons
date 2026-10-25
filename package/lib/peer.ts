@@ -13,6 +13,7 @@ import type { CallOptions } from './call-options';
 import type { DeferredPromise } from './promise';
 import { createDeferredPromise } from './promise';
 import type { WebRTCReporter } from './webrtc-reporter';
+import { DEFAULT_PROD_ICE_SERVERS } from './ice-servers';
 
 type MediaConstraints = {
   audio?: boolean | MediaTrackConstraints;
@@ -503,11 +504,10 @@ export class Peer {
     ) {
       return this.options.peerConnectionOptions.iceServers;
     }
-    return [
-      {
-        urls: 'stun:stun.l.google.com:19302',
-      },
-    ];
+    // Fall back to Telnyx production default ICE servers (STUN → TURN UDP →
+    // TURN TCP → TURNS 443) instead of the Google-only STUN fallback used
+    // previously. This matches the JS, iOS, Android, and Flutter SDKs.
+    return DEFAULT_PROD_ICE_SERVERS;
   }
 
   private onTrackEvent = (event: RTCTrackEvent<'track'>) => {
