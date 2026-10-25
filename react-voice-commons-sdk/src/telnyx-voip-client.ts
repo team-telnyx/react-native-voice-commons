@@ -17,12 +17,12 @@ import {
 } from './internal/signaling-environment';
 import { CallStateController, type CustomHeaders } from './internal/calls/call-state-controller';
 import { VoicePnBridge } from './internal/voice-pn-bridge';
+import { ICE_SERVERS_STORAGE_KEY, parseStoredIceServers } from './internal/ice-servers-storage';
 
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
 const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
 const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
 const QUALITY_METRICS_STORAGE_KEY = '@enable_quality_metrics';
-const ICE_SERVERS_STORAGE_KEY = '@ice_servers';
 const LEGACY_CALLKIT_ANSWER_KEY = '__legacy_callkit_answer__';
 
 interface PendingCallKitAnswer {
@@ -414,6 +414,7 @@ export class TelnyxVoipClient {
       );
       const storedEnvironment = await AsyncStorage.getItem(SIGNALING_ENVIRONMENT_STORAGE_KEY);
       const storedQualityMetrics = await AsyncStorage.getItem(QUALITY_METRICS_STORAGE_KEY);
+      const iceServers = parseStoredIceServers(await AsyncStorage.getItem(ICE_SERVERS_STORAGE_KEY));
       const useTrickleIce =
         storedUseTrickleIce === null ? this._options.useTrickleIce : storedUseTrickleIce === 'true';
       const pushWhenActive = storedPushWhenActive === 'true';
@@ -439,6 +440,7 @@ export class TelnyxVoipClient {
           enableMissedCallNotifications,
           enableQualityMetrics,
           environment,
+          iceServers,
         });
 
         if (this._options.debug) {
@@ -463,6 +465,7 @@ export class TelnyxVoipClient {
           enableMissedCallNotifications,
           enableQualityMetrics,
           environment,
+          iceServers,
         });
 
         if (this._options.debug) {
