@@ -2,6 +2,7 @@ import { BehaviorSubject, Observable } from 'rxjs';
 import { distinctUntilChanged, map } from 'rxjs/operators';
 import { TelnyxCallState, CallStateHelpers } from './call-state';
 import { Call as TelnyxCall } from '@telnyx/react-native-voice-sdk';
+import type { CallQualityMetrics } from '@telnyx/react-native-voice-sdk';
 import { Platform } from 'react-native';
 
 /**
@@ -16,6 +17,10 @@ export class Call {
   private readonly _isMuted = new BehaviorSubject<boolean>(false);
   private readonly _isHeld = new BehaviorSubject<boolean>(false);
   private readonly _duration = new BehaviorSubject<number>(0);
+  private readonly _qualityMetrics = new BehaviorSubject<CallQualityMetrics | null>(null);
+  private readonly _onQualityMetrics = (metrics: CallQualityMetrics) => {
+    this._qualityMetrics.next(metrics);
+  };
 
   private _durationTimer?: NodeJS.Timeout;
   private _startTime?: Date;
@@ -175,6 +180,23 @@ export class Call {
    */
   get duration$(): Observable<number> {
     return this._duration.asObservable().pipe(distinctUntilChanged());
+  }
+
+  /**
+   * Observable stream of call quality metrics updates.
+   * Emits `null` initially, then a {@link CallQualityMetrics} object
+   * each time the underlying SDK collects a new sample.
+   */
+  get qualityMetrics$(): Observable<CallQualityMetrics | null> {
+    return this._qualityMetrics.asObservable().pipe(distinctUntilChanged());
+  }
+
+  /**
+   * Current call quality metrics (synchronous access).
+   * Returns `null` until the first metrics sample is collected.
+   */
+  get currentQualityMetrics(): CallQualityMetrics | null {
+    return this._qualityMetrics.value;
   }
 
   /**
@@ -426,10 +448,12 @@ export class Call {
    */
   dispose(): void {
     this._stopDurationTimer();
+    this._telnyxCall.off?.('telnyx.call.qualityMetrics', this._onQualityMetrics);
     this._callState.complete();
     this._isMuted.complete();
     this._isHeld.complete();
     this._duration.complete();
+    this._qualityMetrics.complete();
   }
 
   /**
@@ -531,6 +555,11 @@ export class Call {
         }
       }
     });
+
+    // Forward quality metrics from the underlying SDK
+    // Subscribe to the event rather than the single onQualityMetrics slot, so
+    // an app can still set that callback on the underlying call.
+    this._telnyxCall.on('telnyx.call.qualityMetrics', this._onQualityMetrics);
   }
 
   /**

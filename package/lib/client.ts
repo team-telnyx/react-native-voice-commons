@@ -499,6 +499,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       callId: null,
       options,
       debug: this.options.debug,
+      enableQualityMetrics: this.options.enableQualityMetrics,
       callReportConfig: this.getCallReportConfig(),
       pushWhenActive: this.options.pushWhenActive,
       pushDeviceToken: this.options.pushNotificationDeviceToken,
@@ -1293,6 +1294,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         },
         inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
         debug: this.options.debug,
+        enableQualityMetrics: this.options.enableQualityMetrics,
         callReportConfig: this.getCallReportConfig(),
         pushWhenActive: this.options.pushWhenActive,
         pushDeviceToken: this.options.pushNotificationDeviceToken,
@@ -1452,6 +1454,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
       initialState: 'connecting', // Set initial state to connecting
       debug: this.options.debug,
+      enableQualityMetrics: this.options.enableQualityMetrics,
       callReportConfig: this.getCallReportConfig(),
       pushWhenActive: this.options.pushWhenActive,
       pushDeviceToken: this.options.pushNotificationDeviceToken,

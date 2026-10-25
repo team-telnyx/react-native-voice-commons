@@ -21,6 +21,7 @@ import { VoicePnBridge } from './internal/voice-pn-bridge';
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
 const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
 const MISSED_CALL_NOTIFICATIONS_STORAGE_KEY = '@enable_missed_call_notifications';
+const QUALITY_METRICS_STORAGE_KEY = '@enable_quality_metrics';
 const LEGACY_CALLKIT_ANSWER_KEY = '__legacy_callkit_answer__';
 
 interface PendingCallKitAnswer {
@@ -411,10 +412,12 @@ export class TelnyxVoipClient {
         MISSED_CALL_NOTIFICATIONS_STORAGE_KEY
       );
       const storedEnvironment = await AsyncStorage.getItem(SIGNALING_ENVIRONMENT_STORAGE_KEY);
+      const storedQualityMetrics = await AsyncStorage.getItem(QUALITY_METRICS_STORAGE_KEY);
       const useTrickleIce =
         storedUseTrickleIce === null ? this._options.useTrickleIce : storedUseTrickleIce === 'true';
       const pushWhenActive = storedPushWhenActive === 'true';
       const enableMissedCallNotifications = storedMissedCallNotifications === 'true';
+      const enableQualityMetrics = storedQualityMetrics === 'true';
       const environment = resolveStoredEnvironment(storedEnvironment, this._options.environment);
       const nativePushToken =
         Platform.OS === 'ios' ? (await VoicePnBridge.getVoipToken())?.trim() : null;
@@ -433,6 +436,7 @@ export class TelnyxVoipClient {
           useTrickleIce,
           pushWhenActive,
           enableMissedCallNotifications,
+          enableQualityMetrics,
           environment,
         });
 
@@ -456,6 +460,7 @@ export class TelnyxVoipClient {
           useTrickleIce,
           pushWhenActive,
           enableMissedCallNotifications,
+          enableQualityMetrics,
           environment,
         });
 
@@ -771,6 +776,10 @@ export class TelnyxVoipClient {
         String(config.enableMissedCallNotifications ?? false)
       );
       await AsyncStorage.setItem(
+        QUALITY_METRICS_STORAGE_KEY,
+        String(config.enableQualityMetrics ?? false)
+      );
+      await AsyncStorage.setItem(
         SIGNALING_ENVIRONMENT_STORAGE_KEY,
         config.environment ?? this._options.environment ?? 'production'
       );
@@ -812,6 +821,10 @@ export class TelnyxVoipClient {
       await AsyncStorage.setItem(
         MISSED_CALL_NOTIFICATIONS_STORAGE_KEY,
         String(config.enableMissedCallNotifications ?? false)
+      );
+      await AsyncStorage.setItem(
+        QUALITY_METRICS_STORAGE_KEY,
+        String(config.enableQualityMetrics ?? false)
       );
       await AsyncStorage.setItem(
         SIGNALING_ENVIRONMENT_STORAGE_KEY,

@@ -37,11 +37,14 @@ import { WebRTCReporter } from './webrtc-reporter';
 import { CallReportCollector } from './call-report-collector';
 import type { CallReportConfig, CallReportSummary } from './call-report-models';
 import { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
+import { QualityMetricsCollector } from './quality-metrics-collector';
+import type { CallQualityMetrics } from './quality-metrics';
 import { CALL_REPORT_ID, VOICE_SDK_ID } from './global';
 import { DEFAULT_SDK_IDENTITY, type SDKIdentity } from './env';
 
 type CallEvents = {
   'telnyx.call.state': (call: Call, state: CallState) => void;
+  'telnyx.call.qualityMetrics': (metrics: CallQualityMetrics) => void;
 };
 
 /**
@@ -69,6 +72,8 @@ type CallConstructorParams = {
   callId: string | null;
   callState?: CallState;
   debug?: boolean;
+  /** Deliver call quality metrics while active (also enabled by `debug`). */
+  enableQualityMetrics?: boolean;
   callReportConfig?: CallReportConfig;
   pushWhenActive?: boolean;
   pushDeviceToken?: string;
@@ -119,6 +124,8 @@ export type CreateInboundCall = {
   inviteCustomHeaders?: { name: string; value: string }[] | null;
   initialState?: CallState;
   debug?: boolean;
+  /** Deliver call quality metrics while active (also enabled by `debug`). */
+  enableQualityMetrics?: boolean;
   callReportConfig?: CallReportConfig;
   pushWhenActive?: boolean;
   pushDeviceToken?: string;
@@ -162,6 +169,7 @@ export class Call extends EventEmitter<CallEvents> {
     inviteCustomHeaders = null,
     initialState = 'ringing',
     debug = false,
+    enableQualityMetrics = false,
     callReportConfig,
     pushWhenActive = false,
     pushDeviceToken,
@@ -179,6 +187,7 @@ export class Call extends EventEmitter<CallEvents> {
       callId,
       callState: initialState,
       debug,
+      enableQualityMetrics,
       callReportConfig,
       pushWhenActive,
       pushDeviceToken,
@@ -262,6 +271,17 @@ export class Call extends EventEmitter<CallEvents> {
   private callReportConfig: CallReportConfig;
   private callReportPostingStarted = false;
   private callStartTimestamp: string;
+  private qualityMetricsCollector: QualityMetricsCollector | null = null;
+  private latestQualityMetrics: CallQualityMetrics | null = null;
+  private readonly qualityMetricsEnabled: boolean;
+
+  /**
+   * Callback invoked with the latest quality metrics snapshot on each sample
+   * while quality metrics collection is active (iOS `onCallQualityChange`).
+   * Each snapshot is also emitted as `telnyx.call.qualityMetrics`, so several
+   * listeners can subscribe without replacing this callback.
+   */
+  public onQualityMetrics: ((metrics: CallQualityMetrics) => void) | null = null;
   private readonly pushWhenActive: boolean;
   private readonly pushDeviceToken?: string;
   private readonly sdkIdentity: SDKIdentity;
@@ -279,6 +299,7 @@ export class Call extends EventEmitter<CallEvents> {
     telnyxCallControlId = null,
     callState = 'new',
     debug = false,
+    enableQualityMetrics = false,
     callReportConfig,
     pushWhenActive = false,
     pushDeviceToken,
@@ -298,6 +319,9 @@ export class Call extends EventEmitter<CallEvents> {
     this.telnyxCallControlId = telnyxCallControlId;
     this.peer = null;
     this.debugEnabled = debug;
+    // iOS parity: quality metrics are delivered when debug or
+    // enableQualityMetrics is set, and are off by default.
+    this.qualityMetricsEnabled = debug || enableQualityMetrics;
     this.callReportConfig = callReportConfig ?? DEFAULT_CALL_REPORT_CONFIG;
     this.pushWhenActive = pushWhenActive;
     this.pushDeviceToken = pushDeviceToken;
@@ -461,6 +485,77 @@ export class Call extends EventEmitter<CallEvents> {
    */
   public getDebugStatsId(): string | null {
     return this.reporter?.getDebugStatsId() ?? null;
+  }
+
+  // ── Quality Metrics ───────────────────────────────────────────────────────
+
+  /**
+   * Start periodic call quality metrics collection.
+   *
+   * The collector samples the peer connection's `getStats()` immediately and
+   * then every `intervalMs` (default 200 ms, as on iOS), delivering each
+   * snapshot through `onQualityMetrics` and the `telnyx.call.qualityMetrics`
+   * event.
+   *
+   * It starts automatically when the call becomes active if the client was
+   * created with `debug` or `enableQualityMetrics`; call it manually to collect
+   * metrics otherwise or with a custom interval.
+   *
+   * @param intervalMs Polling interval in milliseconds. Default: 200.
+   */
+  public startQualityMetrics(intervalMs?: number): void {
+    if (this.qualityMetricsCollector) {
+      log.debug('[Call] Quality metrics already started');
+      return;
+    }
+
+    const pc =
+      this.peer && typeof this.peer.getPeerConnection === 'function'
+        ? this.peer.getPeerConnection()
+        : null;
+    if (!pc) {
+      log.warn('[Call] Cannot start quality metrics: no peer connection');
+      return;
+    }
+
+    this.qualityMetricsCollector = new QualityMetricsCollector({
+      peerConnection: pc as any,
+      callId: this.callId,
+      intervalMs,
+    });
+
+    this.qualityMetricsCollector.onMetrics = (metrics) => {
+      this.latestQualityMetrics = metrics;
+      this.onQualityMetrics?.(metrics);
+      this.emit('telnyx.call.qualityMetrics', metrics);
+    };
+
+    this.qualityMetricsCollector.start();
+  }
+
+  /**
+   * Stop call quality metrics collection.
+   */
+  public stopQualityMetrics(): void {
+    if (this.qualityMetricsCollector) {
+      this.qualityMetricsCollector.stop();
+      this.qualityMetricsCollector = null;
+    }
+  }
+
+  /**
+   * Check if quality metrics collection is active.
+   */
+  public isQualityMetricsActive(): boolean {
+    return this.qualityMetricsCollector?.isActive() ?? false;
+  }
+
+  /**
+   * Get the most recently collected quality metrics snapshot, or null if
+   * no metrics have been collected yet.
+   */
+  public getQualityMetrics(): CallQualityMetrics | null {
+    return this.latestQualityMetrics;
   }
 
   public get remoteStream() {
@@ -637,6 +732,7 @@ export class Call extends EventEmitter<CallEvents> {
 
     // Stop debug stats collection before ending the call
     this.stopDebugStats();
+    this.stopQualityMetrics();
 
     this.connection.send(
       createHangupRequest({
@@ -1046,12 +1142,20 @@ export class Call extends EventEmitter<CallEvents> {
     // Start stats collection when call becomes active
     if (state === 'active') {
       this.startCallReportCollector();
+      if (this.qualityMetricsEnabled) {
+        this.startQualityMetrics();
+      }
     }
 
     if (state === 'dropped') {
+      this.stopQualityMetrics();
       this.stopAndPostCallReport('dropped').catch((err) => {
         log.error('[Call] Failed to stop and post call report:', err);
       });
+    }
+
+    if (state === 'ended') {
+      this.stopQualityMetrics();
     }
 
     this.emit('telnyx.call.state', this, state);
@@ -1111,6 +1215,9 @@ export class Call extends EventEmitter<CallEvents> {
     if (this.peer) {
       log.debug('[Call] Disposing of existing peer connection');
       this.signalingHealthMonitor?.cancel('peer-disposed');
+      // The collector is bound to this peer connection; a replacement peer
+      // (e.g. after a reattach) gets its own collector when it becomes active.
+      this.stopQualityMetrics();
       this.peer.close();
       this.peer = null;
       log.debug('[Call] Peer connection disposed successfully');
@@ -1418,6 +1525,7 @@ export class Call extends EventEmitter<CallEvents> {
 
     // Stop debug stats collection before ending the call
     this.stopDebugStats();
+    this.stopQualityMetrics();
 
     this.closePeerAfterCallReport('done');
     this.setState('ended');
