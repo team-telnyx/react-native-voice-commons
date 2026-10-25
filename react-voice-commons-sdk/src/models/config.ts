@@ -1,3 +1,5 @@
+import type { TelnyxIceServer } from '@telnyx/react-native-voice-sdk';
+
 /**
  * Configuration for credential-based authentication
  */
@@ -37,7 +39,7 @@ export interface CredentialConfig {
    * When provided, overrides the Telnyx production defaults.
    * When omitted, the SDK uses Telnyx defaults (STUN → TURN UDP → TURN TCP → TURNS 443).
    */
-  iceServers?: RTCIceServer[];
+  iceServers?: TelnyxIceServer[];
 }
 
 /**
@@ -76,7 +78,7 @@ export interface TokenConfig {
    * When provided, overrides the Telnyx production defaults.
    * When omitted, the SDK uses Telnyx defaults (STUN → TURN UDP → TURN TCP → TURNS 443).
    */
-  iceServers?: RTCIceServer[];
+  iceServers?: TelnyxIceServer[];
 }
 
 /**

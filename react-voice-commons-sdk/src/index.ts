@@ -48,6 +48,7 @@ export {
   createTokenConfig,
 } from './models/config';
 export type { Config, CredentialConfig, TokenConfig, TelnyxEnvironment } from './models/config';
+export type { TelnyxIceServer } from '@telnyx/react-native-voice-sdk';
 
 // Re-export useful types from the underlying SDK
 export type { Call as TelnyxCall } from '@telnyx/react-native-voice-sdk';

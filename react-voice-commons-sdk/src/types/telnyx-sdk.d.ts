@@ -24,6 +24,13 @@ declare module '@telnyx/react-native-voice-sdk' {
     };
   }
 
+  /** A STUN/TURN server for WebRTC peer connections (core `TelnyxIceServer`). */
+  export interface TelnyxIceServer {
+    urls: string;
+    username?: string;
+    credential?: string;
+  }
+
   export interface ClientOptions {
     environment?: 'production' | 'development';
     login?: string;
@@ -44,7 +51,7 @@ declare module '@telnyx/react-native-voice-sdk' {
     callReportLogLevel?: string;
     callReportMaxLogEntries?: number;
     /** Custom ICE servers (STUN/TURN) for WebRTC peer connections */
-    iceServers?: RTCIceServer[];
+    iceServers?: TelnyxIceServer[];
     sdkName?: string;
     sdkVersion?: string;
   }
