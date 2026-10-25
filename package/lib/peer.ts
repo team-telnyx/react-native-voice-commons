@@ -6,7 +6,7 @@ import {
   MediaStream,
 } from 'react-native-webrtc';
 import type { MediaTrackConstraints } from 'react-native-webrtc/lib/typescript/Constraints';
-import type { RTCIceCandidateEvent } from 'react-native-webrtc/lib/typescript/RTCIceCandidateEvent';
+import type RTCIceCandidateEvent from 'react-native-webrtc/lib/typescript/RTCIceCandidateEvent';
 import type { RTCSessionDescriptionInit } from 'react-native-webrtc/lib/typescript/RTCSessionDescription';
 import type RTCTrackEvent from 'react-native-webrtc/lib/typescript/RTCTrackEvent';
 import type { CallOptions } from './call-options';
