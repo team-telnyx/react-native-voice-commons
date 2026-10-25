@@ -2,6 +2,7 @@ import { BehaviorSubject, Observable } from 'rxjs';
 import { distinctUntilChanged } from 'rxjs/operators';
 import * as TelnyxSDK from '@telnyx/react-native-voice-sdk';
 import { REACT_NATIVE_COMMONS_SDK_IDENTITY } from '../sdk-identity';
+import { ICE_SERVERS_STORAGE_KEY, parseStoredIceServers } from '../ice-servers-storage';
 import {
   SIGNALING_ENVIRONMENT_STORAGE_KEY,
   resolveStoredEnvironment,
@@ -258,6 +259,8 @@ export class SessionManager {
         );
         const storedEnvironment = await AsyncStorage.getItem(SIGNALING_ENVIRONMENT_STORAGE_KEY);
         const storedQualityMetrics = await AsyncStorage.getItem(QUALITY_METRICS_STORAGE_KEY);
+        const storedIceServers = await AsyncStorage.getItem(ICE_SERVERS_STORAGE_KEY);
+        const iceServers = parseStoredIceServers(storedIceServers);
         const useTrickleIce = storedUseTrickleIce === 'true';
         const pushWhenActive = storedPushWhenActive === 'true';
         const enableMissedCallNotifications = storedMissedCallNotifications === 'true';
@@ -279,6 +282,7 @@ export class SessionManager {
             enableMissedCallNotifications,
             enableQualityMetrics,
             environment,
+            iceServers,
           });
         }
         // Check if we have token-based authentication data
@@ -292,6 +296,7 @@ export class SessionManager {
             enableMissedCallNotifications,
             enableQualityMetrics,
             environment,
+            iceServers,
           });
         }
 
@@ -512,6 +517,7 @@ export class SessionManager {
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
           callReportMaxLogEntries: config.callReportMaxLogEntries,
+          iceServers: config.iceServers,
           sdkName: REACT_NATIVE_COMMONS_SDK_IDENTITY.name,
           sdkVersion: REACT_NATIVE_COMMONS_SDK_IDENTITY.version,
         };
@@ -536,6 +542,7 @@ export class SessionManager {
           callReportInterval: config.callReportInterval,
           callReportLogLevel: config.callReportLogLevel,
           callReportMaxLogEntries: config.callReportMaxLogEntries,
+          iceServers: config.iceServers,
           sdkName: REACT_NATIVE_COMMONS_SDK_IDENTITY.name,
           sdkVersion: REACT_NATIVE_COMMONS_SDK_IDENTITY.version,
         };

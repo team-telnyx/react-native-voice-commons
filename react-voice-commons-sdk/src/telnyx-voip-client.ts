@@ -17,6 +17,7 @@ import {
 } from './internal/signaling-environment';
 import { CallStateController, type CustomHeaders } from './internal/calls/call-state-controller';
 import { VoicePnBridge } from './internal/voice-pn-bridge';
+import { ICE_SERVERS_STORAGE_KEY, parseStoredIceServers } from './internal/ice-servers-storage';
 
 const USE_TRICKLE_ICE_STORAGE_KEY = '@use_trickle_ice';
 const PUSH_WHEN_ACTIVE_STORAGE_KEY = '@push_when_active';
@@ -413,6 +414,7 @@ export class TelnyxVoipClient {
       );
       const storedEnvironment = await AsyncStorage.getItem(SIGNALING_ENVIRONMENT_STORAGE_KEY);
       const storedQualityMetrics = await AsyncStorage.getItem(QUALITY_METRICS_STORAGE_KEY);
+      const iceServers = parseStoredIceServers(await AsyncStorage.getItem(ICE_SERVERS_STORAGE_KEY));
       const useTrickleIce =
         storedUseTrickleIce === null ? this._options.useTrickleIce : storedUseTrickleIce === 'true';
       const pushWhenActive = storedPushWhenActive === 'true';
@@ -438,6 +440,7 @@ export class TelnyxVoipClient {
           enableMissedCallNotifications,
           enableQualityMetrics,
           environment,
+          iceServers,
         });
 
         if (this._options.debug) {
@@ -462,6 +465,7 @@ export class TelnyxVoipClient {
           enableMissedCallNotifications,
           enableQualityMetrics,
           environment,
+          iceServers,
         });
 
         if (this._options.debug) {
@@ -784,6 +788,12 @@ export class TelnyxVoipClient {
         config.environment ?? this._options.environment ?? 'production'
       );
 
+      if (config.iceServers) {
+        await AsyncStorage.setItem(ICE_SERVERS_STORAGE_KEY, JSON.stringify(config.iceServers));
+      } else {
+        await AsyncStorage.removeItem(ICE_SERVERS_STORAGE_KEY);
+      }
+
       if (config.pushNotificationDeviceToken) {
         await AsyncStorage.setItem('@push_token', config.pushNotificationDeviceToken);
       }
@@ -830,6 +840,12 @@ export class TelnyxVoipClient {
         SIGNALING_ENVIRONMENT_STORAGE_KEY,
         config.environment ?? this._options.environment ?? 'production'
       );
+
+      if (config.iceServers) {
+        await AsyncStorage.setItem(ICE_SERVERS_STORAGE_KEY, JSON.stringify(config.iceServers));
+      } else {
+        await AsyncStorage.removeItem(ICE_SERVERS_STORAGE_KEY);
+      }
 
       if (config.pushNotificationDeviceToken) {
         await AsyncStorage.setItem('@push_token', config.pushNotificationDeviceToken);

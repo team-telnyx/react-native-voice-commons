@@ -1,3 +1,5 @@
+import type { TelnyxIceServer } from '@telnyx/react-native-voice-sdk';
+
 /**
  * Configuration for credential-based authentication
  */
@@ -32,6 +34,12 @@ export interface CredentialConfig {
   callReportLogLevel?: string;
   /** Max log entries per call. Default: 1000 */
   callReportMaxLogEntries?: number;
+  /**
+   * Custom ICE servers (STUN/TURN) for WebRTC peer connections.
+   * When provided, overrides the Telnyx production defaults.
+   * When omitted, the SDK uses Telnyx defaults (STUN → TURN UDP → TURN TCP → TURNS 443).
+   */
+  iceServers?: TelnyxIceServer[];
 }
 
 /**
@@ -65,6 +73,12 @@ export interface TokenConfig {
   callReportLogLevel?: string;
   /** Max log entries per call. Default: 1000 */
   callReportMaxLogEntries?: number;
+  /**
+   * Custom ICE servers (STUN/TURN) for WebRTC peer connections.
+   * When provided, overrides the Telnyx production defaults.
+   * When omitted, the SDK uses Telnyx defaults (STUN → TURN UDP → TURN TCP → TURNS 443).
+   */
+  iceServers?: TelnyxIceServer[];
 }
 
 /**
