@@ -640,7 +640,7 @@ useEffect(() => {
 
 ## Documentation
 
-For complete API documentation and advanced usage patterns, see the [TelnyxVoiceApp Documentation](./variables/TelnyxVoiceApp.md).
+For complete API documentation and advanced usage patterns, see the [TelnyxVoiceApp Documentation](./variables/TelnyxVoiceApp.md). For real-time call quality monitoring — MOS estimation, quality level classification, and WebRTC stats normalization — see [Call Quality Metrics](./call-features/call-quality-metrics.md).
 
 ## License
 

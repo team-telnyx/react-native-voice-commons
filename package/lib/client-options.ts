@@ -1,5 +1,11 @@
 import type { LogLevelNames } from 'loglevel';
+import type { TelnyxEnvironment } from './env';
 export interface ClientOptions {
+  /**
+   * Signaling environment used by the WebSocket connection.
+   * @default 'production'
+   */
+  environment?: TelnyxEnvironment;
   /**
    * The `username` to authenticate with your SIP Connection.
    * `login` and `password` will take precedence over
@@ -62,6 +68,13 @@ export interface ClientOptions {
    */
   debug?: boolean;
   /**
+   * Deliver real-time call quality metrics (MOS, jitter, RTT, audio levels)
+   * through `Call.onQualityMetrics` and the `telnyx.call.qualityMetrics` event
+   * while a call is active. Also enabled by `debug`. Default: false.
+   */
+  enableQualityMetrics?: boolean;
+
+  /**
    * Enable automatic call quality reporting to voice-sdk-proxy.
    * When enabled, the SDK collects WebRTC stats and structured logs during calls
    * and POSTs them to the /call_report endpoint when calls end.
@@ -84,10 +97,9 @@ export interface ClientOptions {
    */
   callReportMaxLogEntries?: number;
   /**
-   * Override the SDK version used in User-Agent strings.
-   * When used as a dependency of a higher-level SDK, the parent SDK
-   * can pass its own version here so the User-Agent reflects the
-   * consumer-facing version rather than the internal package version.
+   * Override the public SDK identity atomically. Wrapper SDKs must provide
+   * both sdkName and sdkVersion; partial overrides are rejected.
    */
+  sdkName?: string;
   sdkVersion?: string;
 }

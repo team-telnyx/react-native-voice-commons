@@ -1,6 +1,7 @@
 import { CallStateController } from '../../src/internal/calls/call-state-controller';
 import { TelnyxCallState } from '../../src/models/call-state';
 import type { Call } from '../../src/models/call';
+import { callKitCoordinator } from '../../src/callkit/callkit-coordinator';
 
 jest.mock('../../src/callkit/callkit-coordinator', () => ({
   callKitCoordinator: {
@@ -8,6 +9,7 @@ jest.mock('../../src/callkit/callkit-coordinator', () => ({
     getCallKitUUID: jest.fn(() => null),
     reportIncomingCall: jest.fn(),
     startOutgoingCall: jest.fn(),
+    handlePendingPushCallRemoteEnded: jest.fn().mockResolvedValue(true),
   },
 }));
 
@@ -75,6 +77,36 @@ describe('CallStateController', () => {
     });
     return controller.currentCalls[controller.currentCalls.length - 1];
   }
+
+  it('forwards pre-INVITE BYE events to the CallKit coordinator', () => {
+    const listeners = new Map<string, (...args: any[]) => void>();
+    const telnyxClient = {
+      on: jest.fn((event: string, listener: (...args: any[]) => void) => {
+        listeners.set(event, listener);
+      }),
+      off: jest.fn(),
+      listenerCount: jest.fn(() => 1),
+    };
+
+    controller.dispose();
+    controller = new CallStateController({ telnyxClient, useTrickleIce: false } as any);
+    controller.initializeClientListeners();
+
+    const reason = {
+      cause: 'ORIGINATOR_CANCEL',
+      causeCode: 487,
+      sipCode: 487,
+      sipReason: 'Request Terminated',
+      sipCallId: 'sip-call-c',
+    };
+
+    listeners.get('telnyx.call.remoteEnded')?.('callkit-b', reason);
+
+    expect(callKitCoordinator.handlePendingPushCallRemoteEnded).toHaveBeenCalledWith(
+      'callkit-b',
+      reason
+    );
+  });
 
   describe('calls$ re-emission on call state change (VSDK-345)', () => {
     it('should re-emit calls$ when a tracked call transitions to CONNECTING', () => {

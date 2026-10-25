@@ -1,6 +1,8 @@
 export { Connection } from './connection';
 export { TelnyxRTC } from './client';
 export { Call, CallState } from './call';
+export type { CallTerminationReason } from './messages/call';
+export type { TelnyxEnvironment } from './env';
 
 // Interfaces
 export * from './client-options';
@@ -31,3 +33,11 @@ export type {
   StatsInterval,
 } from './call-report-models';
 export { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
+
+// Call Quality Metrics
+export { CallQualityLevel, calculateMOS, getQuality } from './quality-metrics';
+export type { CallQualityMetrics, QualityStatsRecord } from './quality-metrics';
+export {
+  QualityMetricsCollector,
+  DEFAULT_QUALITY_METRICS_INTERVAL_MS,
+} from './quality-metrics-collector';

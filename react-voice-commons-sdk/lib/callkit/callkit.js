@@ -1,323 +1,334 @@
-'use strict';
-Object.defineProperty(exports, '__esModule', { value: true });
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 exports.CallKit = exports.CallEndReason = void 0;
-const react_native_1 = require('react-native');
+const react_native_1 = require("react-native");
 // Call end reasons
 var CallEndReason;
 (function (CallEndReason) {
-  CallEndReason[(CallEndReason['Failed'] = 1)] = 'Failed';
-  CallEndReason[(CallEndReason['RemoteEnded'] = 2)] = 'RemoteEnded';
-  CallEndReason[(CallEndReason['Unanswered'] = 3)] = 'Unanswered';
-  CallEndReason[(CallEndReason['AnsweredElsewhere'] = 4)] = 'AnsweredElsewhere';
-  CallEndReason[(CallEndReason['DeclinedElsewhere'] = 5)] = 'DeclinedElsewhere';
+    CallEndReason[CallEndReason["Failed"] = 1] = "Failed";
+    CallEndReason[CallEndReason["RemoteEnded"] = 2] = "RemoteEnded";
+    CallEndReason[CallEndReason["Unanswered"] = 3] = "Unanswered";
+    CallEndReason[CallEndReason["AnsweredElsewhere"] = 4] = "AnsweredElsewhere";
+    CallEndReason[CallEndReason["DeclinedElsewhere"] = 5] = "DeclinedElsewhere";
 })(CallEndReason || (exports.CallEndReason = CallEndReason = {}));
 class CallKitManager {
-  /**
-   * Normalize UUID to lowercase for consistent handling in React Native
-   * iOS CallKit provides UUIDs in uppercase, but we want to use lowercase throughout React Native
-   */
-  normalizeUUID(uuid) {
-    return uuid.toLowerCase();
-  }
-  /**
-   * Denormalize UUID back to uppercase for iOS CallKit bridge calls
-   * iOS CallKit expects UUIDs in uppercase format
-   */
-  denormalizeUUID(uuid) {
-    return uuid.toUpperCase();
-  }
-  /**
-   * Normalize event object by converting callUUID to lowercase
-   */
-  normalizeEvent(event) {
-    return {
-      ...event,
-      callUUID: this.normalizeUUID(event.callUUID),
-    };
-  }
-  constructor() {
-    this.bridge = null;
-    this.eventEmitter = null;
-    this.listeners = new Map();
-    if (react_native_1.Platform.OS === 'ios') {
-      const { CallKitBridge } = react_native_1.NativeModules;
-      if (CallKitBridge) {
-        this.bridge = CallKitBridge;
-        this.eventEmitter = new react_native_1.NativeEventEmitter(CallKitBridge);
-        this.setupEventListeners();
-      } else {
-        console.warn('CallKit: CallKitBridge not available');
-      }
+    /**
+     * Normalize UUID to lowercase for consistent handling in React Native
+     * iOS CallKit provides UUIDs in uppercase, but we want to use lowercase throughout React Native
+     */
+    normalizeUUID(uuid) {
+        return uuid.toLowerCase();
     }
-  }
-  setupEventListeners() {
-    if (!this.eventEmitter) return;
-    // Listen for CallKit actions - normalize UUIDs to lowercase for React Native
-    this.eventEmitter.addListener('CallKitDidReceiveStartCallAction', (event) => {
-      const normalizedEvent = this.normalizeEvent(event);
-      console.log('CallKit: Received start call action', normalizedEvent);
-      this.notifyListeners('startCall', normalizedEvent);
-    });
-    this.eventEmitter.addListener('CallKitDidPerformAnswerCallAction', (event) => {
-      const normalizedEvent = this.normalizeEvent(event);
-      console.log('CallKit: Received answer call action', normalizedEvent);
-      this.notifyListeners('answerCall', normalizedEvent);
-    });
-    this.eventEmitter.addListener('CallKitDidPerformEndCallAction', (event) => {
-      const normalizedEvent = this.normalizeEvent(event);
-      console.log('CallKit: Received end call action', normalizedEvent);
-      this.notifyListeners('endCall', normalizedEvent);
-    });
-    this.eventEmitter.addListener('CallKitDidPerformHeldCallAction', (event) => {
-      const normalizedEvent = this.normalizeEvent(event);
-      console.log('CallKit: Received held call action', normalizedEvent);
-      this.notifyListeners('heldCall', normalizedEvent);
-    });
-    this.eventEmitter.addListener('CallKitDidReceivePush', (event) => {
-      const normalizedEvent = this.normalizeEvent(event);
-      console.log('CallKit: Received push notification event', normalizedEvent);
-      this.notifyListeners('receivePush', normalizedEvent);
-    });
-  }
-  notifyListeners(eventType, event) {
-    const listeners = this.listeners.get(eventType);
-    if (listeners) {
-      for (const listener of listeners) {
-        listener(event);
-      }
+    /**
+     * Denormalize UUID back to uppercase for iOS CallKit bridge calls
+     * iOS CallKit expects UUIDs in uppercase format
+     */
+    denormalizeUUID(uuid) {
+        return uuid.toUpperCase();
     }
-  }
-  // Public API methods
-  async startOutgoingCall(callUUID, handle, displayName) {
-    if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
-      console.warn('CallKit: Not available on this platform');
-      return false;
+    /**
+     * Normalize event object by converting callUUID to lowercase
+     */
+    normalizeEvent(event) {
+        return {
+            ...event,
+            callUUID: this.normalizeUUID(event.callUUID),
+        };
     }
-    try {
-      // Convert to uppercase for iOS CallKit bridge
-      const uppercaseUUID = this.denormalizeUUID(callUUID);
-      console.log('CallKit: Starting outgoing call', {
-        callUUID: uppercaseUUID,
-        handle,
-        displayName,
-      });
-      const result = await this.bridge.startOutgoingCall(uppercaseUUID, handle, displayName);
-      console.log('CallKit: Outgoing call started successfully', result);
-      return result.success;
-    } catch (error) {
-      console.error('CallKit: Failed to start outgoing call', error);
-      return false;
+    constructor() {
+        this.bridge = null;
+        this.eventEmitter = null;
+        this.listeners = new Map();
+        if (react_native_1.Platform.OS === 'ios') {
+            const { CallKitBridge } = react_native_1.NativeModules;
+            if (CallKitBridge) {
+                this.bridge = CallKitBridge;
+                this.eventEmitter = new react_native_1.NativeEventEmitter(CallKitBridge);
+                this.setupEventListeners();
+            }
+            else {
+                console.warn('CallKit: CallKitBridge not available');
+            }
+        }
     }
-  }
-  async reportIncomingCall(callUUID, handle, displayName) {
-    if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
-      console.warn('CallKit: Not available on this platform');
-      return false;
+    setupEventListeners() {
+        if (!this.eventEmitter)
+            return;
+        // Listen for CallKit actions - normalize UUIDs to lowercase for React Native
+        this.eventEmitter.addListener('CallKitDidReceiveStartCallAction', (event) => {
+            const normalizedEvent = this.normalizeEvent(event);
+            console.log('CallKit: Received start call action', normalizedEvent);
+            this.notifyListeners('startCall', normalizedEvent);
+        });
+        this.eventEmitter.addListener('CallKitDidPerformAnswerCallAction', (event) => {
+            const normalizedEvent = this.normalizeEvent(event);
+            console.log('CallKit: Received answer call action', normalizedEvent);
+            this.notifyListeners('answerCall', normalizedEvent);
+        });
+        this.eventEmitter.addListener('CallKitDidPerformEndCallAction', (event) => {
+            const normalizedEvent = this.normalizeEvent(event);
+            console.log('CallKit: Received end call action', normalizedEvent);
+            this.notifyListeners('endCall', normalizedEvent);
+        });
+        this.eventEmitter.addListener('CallKitDidPerformHeldCallAction', (event) => {
+            const normalizedEvent = this.normalizeEvent(event);
+            console.log('CallKit: Received held call action', normalizedEvent);
+            this.notifyListeners('heldCall', normalizedEvent);
+        });
+        this.eventEmitter.addListener('CallKitDidReceivePush', (event) => {
+            const normalizedEvent = this.normalizeEvent(event);
+            console.log('CallKit: Received push notification event', normalizedEvent);
+            this.notifyListeners('receivePush', normalizedEvent);
+        });
     }
-    try {
-      // Convert to uppercase for iOS CallKit bridge
-      const uppercaseUUID = this.denormalizeUUID(callUUID);
-      console.log('CallKit: Reporting incoming call', {
-        callUUID: uppercaseUUID,
-        handle,
-        displayName,
-      });
-      const result = await this.bridge.reportIncomingCall(uppercaseUUID, handle, displayName);
-      console.log('CallKit: Incoming call reported successfully', result);
-      return result.success;
-    } catch (error) {
-      console.error('CallKit: Failed to report incoming call', error);
-      return false;
+    notifyListeners(eventType, event) {
+        const listeners = this.listeners.get(eventType);
+        if (listeners) {
+            for (const listener of listeners) {
+                listener(event);
+            }
+        }
     }
-  }
-  async answerCall(callUUID) {
-    if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
-      console.warn('CallKit: Not available on this platform');
-      return false;
+    // Public API methods
+    async startOutgoingCall(callUUID, handle, displayName) {
+        if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
+            console.warn('CallKit: Not available on this platform');
+            return false;
+        }
+        try {
+            // Convert to uppercase for iOS CallKit bridge
+            const uppercaseUUID = this.denormalizeUUID(callUUID);
+            console.log('CallKit: Starting outgoing call', {
+                callUUID: uppercaseUUID,
+                handle,
+                displayName,
+            });
+            const result = await this.bridge.startOutgoingCall(uppercaseUUID, handle, displayName);
+            console.log('CallKit: Outgoing call started successfully', result);
+            return result.success;
+        }
+        catch (error) {
+            console.error('CallKit: Failed to start outgoing call', error);
+            return false;
+        }
     }
-    try {
-      // Convert to uppercase for iOS CallKit bridge
-      const uppercaseUUID = this.denormalizeUUID(callUUID);
-      console.log('CallKit: Answering call', { callUUID: uppercaseUUID });
-      const result = await this.bridge.answerCall(uppercaseUUID);
-      console.log('CallKit: Call answered successfully', result);
-      return result.success;
-    } catch (error) {
-      console.error('CallKit: Failed to answer call', error);
-      return false;
+    async reportIncomingCall(callUUID, handle, displayName) {
+        if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
+            console.warn('CallKit: Not available on this platform');
+            return false;
+        }
+        try {
+            // Convert to uppercase for iOS CallKit bridge
+            const uppercaseUUID = this.denormalizeUUID(callUUID);
+            console.log('CallKit: Reporting incoming call', {
+                callUUID: uppercaseUUID,
+                handle,
+                displayName,
+            });
+            const result = await this.bridge.reportIncomingCall(uppercaseUUID, handle, displayName);
+            console.log('CallKit: Incoming call reported successfully', result);
+            return result.success;
+        }
+        catch (error) {
+            console.error('CallKit: Failed to report incoming call', error);
+            return false;
+        }
     }
-  }
-  async isCallRegistered(callUUID) {
-    if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
-      return false;
+    async answerCall(callUUID) {
+        if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
+            console.warn('CallKit: Not available on this platform');
+            return false;
+        }
+        try {
+            // Convert to uppercase for iOS CallKit bridge
+            const uppercaseUUID = this.denormalizeUUID(callUUID);
+            console.log('CallKit: Answering call', { callUUID: uppercaseUUID });
+            const result = await this.bridge.answerCall(uppercaseUUID);
+            console.log('CallKit: Call answered successfully', result);
+            return result.success;
+        }
+        catch (error) {
+            console.error('CallKit: Failed to answer call', error);
+            return false;
+        }
     }
-    try {
-      const result = await this.bridge.isCallRegistered(this.denormalizeUUID(callUUID));
-      return result.registered;
-    } catch (error) {
-      console.error('CallKit: Failed to check incoming call registration', {
-        callUUID,
-        error,
-      });
-      return false;
+    async isCallRegistered(callUUID) {
+        if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
+            return false;
+        }
+        try {
+            const result = await this.bridge.isCallRegistered(this.denormalizeUUID(callUUID));
+            return result.registered;
+        }
+        catch (error) {
+            console.error('CallKit: Failed to check incoming call registration', {
+                callUUID,
+                error,
+            });
+            return false;
+        }
     }
-  }
-  async endCall(callUUID) {
-    if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
-      console.warn('CallKit: Not available on this platform');
-      return false;
+    async endCall(callUUID) {
+        if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
+            console.warn('CallKit: Not available on this platform');
+            return false;
+        }
+        try {
+            // Convert to uppercase for iOS CallKit bridge
+            const uppercaseUUID = this.denormalizeUUID(callUUID);
+            console.log('CallKit: Ending call', { callUUID: uppercaseUUID });
+            const result = await this.bridge.endCall(uppercaseUUID);
+            console.log('CallKit: Call ended successfully', result);
+            return result.success;
+        }
+        catch (error) {
+            console.error('CallKit: Failed to end call', error);
+            return false;
+        }
     }
-    try {
-      // Convert to uppercase for iOS CallKit bridge
-      const uppercaseUUID = this.denormalizeUUID(callUUID);
-      console.log('CallKit: Ending call', { callUUID: uppercaseUUID });
-      const result = await this.bridge.endCall(uppercaseUUID);
-      console.log('CallKit: Call ended successfully', result);
-      return result.success;
-    } catch (error) {
-      console.error('CallKit: Failed to end call', error);
-      return false;
+    async completeHeldCallAction(callUUID, success) {
+        if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
+            return false;
+        }
+        try {
+            const uppercaseUUID = this.denormalizeUUID(callUUID);
+            const result = await this.bridge.completeHeldCallAction(uppercaseUUID, success);
+            return result.success;
+        }
+        catch (error) {
+            console.error('CallKit: Failed to complete held call action', error);
+            return false;
+        }
     }
-  }
-  async completeHeldCallAction(callUUID, success) {
-    if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
-      return false;
+    async setCallHeld(callUUID, isOnHold) {
+        if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
+            return false;
+        }
+        try {
+            const result = await this.bridge.setCallHeld(this.denormalizeUUID(callUUID), isOnHold);
+            return result.success;
+        }
+        catch (error) {
+            console.error('CallKit: Failed to change held state', { callUUID, isOnHold, error });
+            return false;
+        }
     }
-    try {
-      const uppercaseUUID = this.denormalizeUUID(callUUID);
-      const result = await this.bridge.completeHeldCallAction(uppercaseUUID, success);
-      return result.success;
-    } catch (error) {
-      console.error('CallKit: Failed to complete held call action', error);
-      return false;
+    async swapCalls(activeCallUUID, heldCallUUID) {
+        if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
+            return false;
+        }
+        try {
+            const result = await this.bridge.swapCalls(this.denormalizeUUID(activeCallUUID), this.denormalizeUUID(heldCallUUID));
+            return result.success;
+        }
+        catch (error) {
+            console.error('CallKit: Failed to swap calls', error);
+            return false;
+        }
     }
-  }
-  async setCallHeld(callUUID, isOnHold) {
-    if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
-      return false;
+    async reportCallConnected(callUUID) {
+        if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
+            return false;
+        }
+        try {
+            // Convert to uppercase for iOS CallKit bridge
+            const uppercaseUUID = this.denormalizeUUID(callUUID);
+            console.log('CallKit: Reporting call connected', { callUUID: uppercaseUUID });
+            const result = await this.bridge.reportCallConnected(uppercaseUUID);
+            console.log('CallKit: Call connected reported successfully', result);
+            return result.success;
+        }
+        catch (error) {
+            console.error('CallKit: Failed to report call connected', error);
+            return false;
+        }
     }
-    try {
-      const result = await this.bridge.setCallHeld(this.denormalizeUUID(callUUID), isOnHold);
-      return result.success;
-    } catch (error) {
-      console.error('CallKit: Failed to change held state', { callUUID, isOnHold, error });
-      return false;
+    async reportCallEnded(callUUID, reason = CallEndReason.RemoteEnded) {
+        if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
+            return false;
+        }
+        try {
+            // Convert to uppercase for iOS CallKit bridge
+            const uppercaseUUID = this.denormalizeUUID(callUUID);
+            console.log('CallKit: Reporting call ended', { callUUID: uppercaseUUID, reason });
+            const result = await this.bridge.reportCallEnded(uppercaseUUID, reason);
+            console.log('CallKit: Call ended reported successfully', result);
+            return result.success;
+        }
+        catch (error) {
+            console.error('CallKit: Failed to report call ended', error);
+            return false;
+        }
     }
-  }
-  async swapCalls(activeCallUUID, heldCallUUID) {
-    if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
-      return false;
+    async updateCall(callUUID, displayName, handle) {
+        if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
+            return false;
+        }
+        try {
+            // Convert to uppercase for iOS CallKit bridge
+            const uppercaseUUID = this.denormalizeUUID(callUUID);
+            console.log('CallKit: Updating call', { callUUID: uppercaseUUID, displayName, handle });
+            const result = await this.bridge.updateCall(uppercaseUUID, displayName, handle);
+            console.log('CallKit: Call updated successfully', result);
+            return result.success;
+        }
+        catch (error) {
+            console.error('CallKit: Failed to update call', error);
+            return false;
+        }
     }
-    try {
-      const result = await this.bridge.swapCalls(
-        this.denormalizeUUID(activeCallUUID),
-        this.denormalizeUUID(heldCallUUID)
-      );
-      return result.success;
-    } catch (error) {
-      console.error('CallKit: Failed to swap calls', error);
-      return false;
+    async getActiveCalls() {
+        if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
+            return [];
+        }
+        try {
+            const calls = await this.bridge.getActiveCalls();
+            console.log('CallKit: Active calls retrieved', calls);
+            return calls;
+        }
+        catch (error) {
+            console.error('CallKit: Failed to get active calls', error);
+            return [];
+        }
     }
-  }
-  async reportCallConnected(callUUID) {
-    if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
-      return false;
+    // Event listener management
+    onStartCall(listener) {
+        return this.addListener('startCall', listener);
     }
-    try {
-      // Convert to uppercase for iOS CallKit bridge
-      const uppercaseUUID = this.denormalizeUUID(callUUID);
-      console.log('CallKit: Reporting call connected', { callUUID: uppercaseUUID });
-      const result = await this.bridge.reportCallConnected(uppercaseUUID);
-      console.log('CallKit: Call connected reported successfully', result);
-      return result.success;
-    } catch (error) {
-      console.error('CallKit: Failed to report call connected', error);
-      return false;
+    onAnswerCall(listener) {
+        return this.addListener('answerCall', listener);
     }
-  }
-  async reportCallEnded(callUUID, reason = CallEndReason.RemoteEnded) {
-    if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
-      return false;
+    onEndCall(listener) {
+        return this.addListener('endCall', listener);
     }
-    try {
-      // Convert to uppercase for iOS CallKit bridge
-      const uppercaseUUID = this.denormalizeUUID(callUUID);
-      console.log('CallKit: Reporting call ended', { callUUID: uppercaseUUID, reason });
-      const result = await this.bridge.reportCallEnded(uppercaseUUID, reason);
-      console.log('CallKit: Call ended reported successfully', result);
-      return result.success;
-    } catch (error) {
-      console.error('CallKit: Failed to report call ended', error);
-      return false;
+    onHeldCall(listener) {
+        return this.addListener('heldCall', listener);
     }
-  }
-  async updateCall(callUUID, displayName, handle) {
-    if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
-      return false;
+    onReceivePush(listener) {
+        return this.addListener('receivePush', listener);
     }
-    try {
-      // Convert to uppercase for iOS CallKit bridge
-      const uppercaseUUID = this.denormalizeUUID(callUUID);
-      console.log('CallKit: Updating call', { callUUID: uppercaseUUID, displayName, handle });
-      const result = await this.bridge.updateCall(uppercaseUUID, displayName, handle);
-      console.log('CallKit: Call updated successfully', result);
-      return result.success;
-    } catch (error) {
-      console.error('CallKit: Failed to update call', error);
-      return false;
+    addListener(eventType, listener) {
+        const listeners = this.listeners.get(eventType) ?? new Set();
+        listeners.add(listener);
+        this.listeners.set(eventType, listeners);
+        return () => {
+            listeners.delete(listener);
+            if (listeners.size === 0) {
+                this.listeners.delete(eventType);
+            }
+        };
     }
-  }
-  async getActiveCalls() {
-    if (!this.bridge || react_native_1.Platform.OS !== 'ios') {
-      return [];
+    // Utility methods
+    generateCallUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = (Math.random() * 16) | 0;
+            const v = c === 'x' ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+        });
     }
-    try {
-      const calls = await this.bridge.getActiveCalls();
-      console.log('CallKit: Active calls retrieved', calls);
-      return calls;
-    } catch (error) {
-      console.error('CallKit: Failed to get active calls', error);
-      return [];
+    isAvailable() {
+        return react_native_1.Platform.OS === 'ios' && this.bridge !== null;
     }
-  }
-  // Event listener management
-  onStartCall(listener) {
-    return this.addListener('startCall', listener);
-  }
-  onAnswerCall(listener) {
-    return this.addListener('answerCall', listener);
-  }
-  onEndCall(listener) {
-    return this.addListener('endCall', listener);
-  }
-  onHeldCall(listener) {
-    return this.addListener('heldCall', listener);
-  }
-  onReceivePush(listener) {
-    return this.addListener('receivePush', listener);
-  }
-  addListener(eventType, listener) {
-    const listeners = this.listeners.get(eventType) ?? new Set();
-    listeners.add(listener);
-    this.listeners.set(eventType, listeners);
-    return () => {
-      listeners.delete(listener);
-      if (listeners.size === 0) {
-        this.listeners.delete(eventType);
-      }
-    };
-  }
-  // Utility methods
-  generateCallUUID() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-      const r = (Math.random() * 16) | 0;
-      const v = c === 'x' ? r : (r & 0x3) | 0x8;
-      return v.toString(16);
-    });
-  }
-  isAvailable() {
-    return react_native_1.Platform.OS === 'ios' && this.bridge !== null;
-  }
 }
 // Export singleton instance
 exports.CallKit = new CallKitManager();

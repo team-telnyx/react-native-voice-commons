@@ -5,24 +5,30 @@ import log from 'loglevel';
 import uuid from 'uuid-random';
 import { Platform } from 'react-native';
 import { Call } from './call';
+import type { CallRecoveryHooks } from './call';
+import { DEFAULT_SIGNALING_HEALTH_MONITOR_CONFIG } from './signaling-health-monitor';
+import type { CandidateEvidence } from './signaling-health-monitor';
 import type { CallOptions } from './call-options';
 import type { ClientOptions } from './client-options';
 import type { CallReportConfig } from './call-report-models';
 import { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
 import { Connection } from './connection';
-import { setSDKVersion } from './env';
+import { DEFAULT_SDK_IDENTITY, type SDKIdentity } from './env';
 import { KeepAliveHandler } from './keep-alive-handler';
 import { eventBus } from './legacy-event-bus';
 import { LoginHandler } from './login-handler';
 import type {
   InviteEvent,
   AnswerEvent,
+  ByeEvent,
+  CallTerminationReason,
   CandidateEvent,
   EndOfCandidatesEvent,
 } from './messages/call';
 import {
   isInviteEvent,
   isAnswerEvent,
+  isByeEvent,
   isCandidateEvent,
   isEndOfCandidatesEvent,
   getCallIdFromTrickleParams,
@@ -43,6 +49,7 @@ type TelnyxRTCEvents = {
   'telnyx.call.reattached': (call: Call, msg: AttachEvent) => void;
   'telnyx.media.received': (msg: MediaEvent) => void;
   'telnyx.call.answered': (call: Call, msg: AnswerEvent) => void;
+  'telnyx.call.remoteEnded': (callId: string, reason: CallTerminationReason) => void;
   'telnyx.call.stateChanged': (call: Call, state: string) => void;
   'telnyx.call.removed': (callId: string) => void;
 };
@@ -54,6 +61,7 @@ type PendingTrickleEvent =
 export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   public options: ClientOptions;
   public sessionId: string | null;
+  private readonly sdkIdentity: SDKIdentity;
 
   /**
    * Dictionary of all active calls tracked by their UUIDs.
@@ -96,6 +104,18 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private reconnectionTimeoutHandle: any = null;
   private reconnectionSessionId: string | null = null; // Store sessionId during reconnection
   private connectionGeneration: number = 0;
+
+  // Active-call ICE restart recovery (VSDK-679)
+  // True while a recovery fallback owns the reconnect flow.
+  private recoveryReattachActive: boolean = false;
+  // Invalidates any pending recovery fallback when the consumer explicitly disconnects.
+  private recoveryReattachGeneration: number = 0;
+  private explicitDisconnectRequested: boolean = false;
+  // One-shot relay-only override captured from the recovering call's stats.
+  private recoveryCandidateEvidenceByCallId: Map<string, CandidateEvidence> = new Map();
+  private activeCallHealthCheckHandle: ReturnType<typeof setInterval> | null = null;
+  private static readonly ACTIVE_CALL_HEALTH_CHECK_MS =
+    DEFAULT_SIGNALING_HEALTH_MONITOR_CONFIG.signalingHealthCheckIntervalMs;
   private static readonly RECONNECT_DELAY = 3000; // 3 seconds
   private static readonly RECONNECT_TIMEOUT = 60000; // 30 seconds
 
@@ -189,9 +209,14 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     super();
     this.options = opts;
 
-    if (opts.sdkVersion) {
-      setSDKVersion(opts.sdkVersion);
+    if (Boolean(opts.sdkName) !== Boolean(opts.sdkVersion)) {
+      throw new Error('[TelnyxRTC] sdkName and sdkVersion must be provided together');
     }
+    this.sdkIdentity = Object.freeze(
+      opts.sdkName && opts.sdkVersion
+        ? { name: opts.sdkName, version: opts.sdkVersion }
+        : { ...DEFAULT_SDK_IDENTITY }
+    );
 
     this.connection = null;
     this.sessionId = null;
@@ -294,8 +319,45 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     call.on('telnyx.call.state', stateListener);
 
     this.drainPendingTrickleEvents(callId);
+    this.ensureActiveCallHealthCheckTimer();
 
     log.debug(`[TelnyxRTC] Total calls tracked: ${this.calls.size}`);
+  }
+
+  private ensureActiveCallHealthCheckTimer(): void {
+    if (this.activeCallHealthCheckHandle || !this.hasActiveCalls) {
+      return;
+    }
+    this.activeCallHealthCheckHandle = setInterval(() => {
+      if (!this.hasActiveCalls) {
+        this.stopActiveCallHealthCheckTimer();
+        return;
+      }
+      if (this.reconnecting || this.recoveryReattachActive) {
+        return;
+      }
+      if (!this.connection) {
+        // Explicit disconnect (or post-recovery-failure teardown): recovery
+        // must not restart a session the consumer closed, so stop the
+        // monitor; the next addCall after a fresh connect re-arms it.
+        this.stopActiveCallHealthCheckTimer();
+        return;
+      }
+      for (const call of this.calls.values()) {
+        if (typeof call.checkSignalingHealth === 'function') {
+          call.checkSignalingHealth();
+        }
+      }
+    }, TelnyxRTC.ACTIVE_CALL_HEALTH_CHECK_MS);
+    (this.activeCallHealthCheckHandle as any)?.unref?.();
+  }
+
+  private stopActiveCallHealthCheckTimer(): void {
+    if (!this.activeCallHealthCheckHandle) {
+      return;
+    }
+    clearInterval(this.activeCallHealthCheckHandle);
+    this.activeCallHealthCheckHandle = null;
   }
 
   private updateTrackedCallId(previousCallId: string, call: Call): void {
@@ -385,7 +447,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
       log.debug(`[TelnyxRTC] Removing call from tracking: ${callId}`);
       this.calls.delete(callId);
+      this.recoveryCandidateEvidenceByCallId.delete(callId);
       this.emit('telnyx.call.removed', callId);
+      if (!this.hasActiveCalls) {
+        this.stopActiveCallHealthCheckTimer();
+      }
       log.debug(`[TelnyxRTC] Total calls tracked: ${this.calls.size}`);
     }
   }
@@ -433,9 +499,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       callId: null,
       options,
       debug: this.options.debug,
+      enableQualityMetrics: this.options.enableQualityMetrics,
       callReportConfig: this.getCallReportConfig(),
       pushWhenActive: this.options.pushWhenActive,
       pushDeviceToken: this.options.pushNotificationDeviceToken,
+      sdkIdentity: this.sdkIdentity,
+      recoveryHooks: this.buildRecoveryHooks(),
     });
 
     // Add to calls tracking (matches iOS SDK behavior)
@@ -707,6 +776,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
 
     const connectionGeneration = (this.connectionGeneration += 1);
+    this.explicitDisconnectRequested = false;
     log.debug('[TelnyxRTC] Starting connection process...');
 
     // Store login configuration for potential reconnection
@@ -740,7 +810,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         '[TelnyxRTC] RELEASE DEBUG - Creating connection with push notification voice_sdk_id:',
         pushVoiceSDKId
       );
-      this.connection = new Connection(pushVoiceSDKId);
+      this.connection = new Connection(pushVoiceSDKId, this.options.environment);
     } else {
       log.debug('[TelnyxRTC] Creating standard connection');
       console.log(
@@ -749,7 +819,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         'pushVoiceSDKId:',
         pushVoiceSDKId
       );
-      this.connection = new Connection();
+      this.connection = new Connection(undefined, this.options.environment);
     }
 
     // Store reference to this client in the connection for CallKit UUID access
@@ -848,7 +918,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     this.throwIfConnectCanceled(connectionGeneration);
 
-    this.loginHandler = new LoginHandler(this.connection);
+    this.loginHandler = new LoginHandler(this.connection, this.sdkIdentity);
     this.keepAliveHandler = new KeepAliveHandler(this.connection);
     this.keepAliveHandler.start();
 
@@ -917,6 +987,17 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    */
   public disconnect(fromReconnection: boolean = false) {
     this.connectionGeneration += 1;
+
+    if (!fromReconnection) {
+      this.stopActiveCallHealthCheckTimer();
+      for (const call of this.calls.values()) {
+        call.cancelRecovery('client-disconnect');
+      }
+      this.recoveryReattachGeneration += 1;
+      this.explicitDisconnectRequested = true;
+      this.recoveryReattachActive = false;
+      this.reconnecting = false;
+    }
 
     this.cancelReconnectionTimer();
 
@@ -1003,6 +1084,20 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private onSocketMessage = (msg: unknown) => {
     log.debug('[TelnyxRTC] Processing socket message:', msg);
 
+    if (isByeEvent(msg)) {
+      const reason = this.getCallTerminationReason(msg);
+      const targetCall = this.getCall(msg.params.callID);
+      if (targetCall) {
+        // Match the native SDKs' client-level remote-ended callback. The Call
+        // object will still consume this BYE and transition to `ended`.
+        this.emit('telnyx.call.remoteEnded', this.getCallKitIdentity(targetCall), reason);
+      } else {
+        // A push can wake the app after the caller has already hung up. In
+        // that race no Call object exists to consume the BYE.
+        return this.handleRemoteCallEndedWithoutCall(msg, reason);
+      }
+    }
+
     if (isInviteEvent(msg)) {
       log.debug('[TelnyxRTC] Detected invite event, processing...');
 
@@ -1058,6 +1153,76 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     }
 
     return;
+  };
+
+  private getCallTerminationReason = (msg: ByeEvent): CallTerminationReason => ({
+    cause: msg.params.cause,
+    causeCode: msg.params.causeCode,
+    sipCode: msg.params.sipCode,
+    sipReason: msg.params.sipReason,
+    sipCallId: msg.params.sip_call_id,
+  });
+
+  private handleRemoteCallEndedWithoutCall = (
+    msg: ByeEvent,
+    reason: CallTerminationReason
+  ) => {
+    const callKitUUID = this.pushNotificationCallKitUUID;
+    const pushVoiceSDKId = (this as any)._pushVoiceSDKId;
+
+    // Unknown BYEs can belong to calls from an earlier socket session. Only
+    // bridge the event while an explicit PushKit call is awaiting its INVITE.
+    if (!this.isCallFromPush || !callKitUUID) {
+      log.debug('[TelnyxRTC] Ignoring BYE without a matching pre-INVITE push context', {
+        callID: msg.params.callID,
+      });
+      return;
+    }
+
+    if (
+      typeof pushVoiceSDKId === 'string' &&
+      typeof msg.voice_sdk_id === 'string' &&
+      this.normalizeCallIdentity(pushVoiceSDKId) !==
+        this.normalizeCallIdentity(msg.voice_sdk_id)
+    ) {
+      log.debug('[TelnyxRTC] Ignoring pre-INVITE BYE from another push session', {
+        callID: msg.params.callID,
+      });
+      return;
+    }
+
+    log.debug('[TelnyxRTC] Push call ended before INVITE arrived', {
+      callID: msg.params.callID,
+      callKitUUID,
+      cause: msg.params.cause,
+      causeCode: msg.params.causeCode,
+    });
+
+    if (this.pendingInvite?.params.callID === msg.params.callID) {
+      this.pendingInvite = null;
+    }
+    this.pendingMediaEvents.delete(msg.params.callID);
+    this.pendingTrickleEvents.delete(msg.params.callID);
+
+    const actionKey = this.normalizeCallIdentity(callKitUUID);
+    this.pendingAnswerActions.delete(actionKey);
+    this.pendingEndActions.delete(actionKey);
+    this.pendingAnswerActions.delete(TelnyxRTC.LEGACY_PENDING_ACTION_KEY);
+    this.pendingEndActions.delete(TelnyxRTC.LEGACY_PENDING_ACTION_KEY);
+
+    // Native iOS exposes this as onRemoteCallEnded and Android emits a normal
+    // BYE terminal event. Preserve that general contract even though this
+    // particular path has no Call object yet. Once an INVITE has created a
+    // Call, commons can also run its existing state-listener teardown; both
+    // consumers deliberately keep their cleanup idempotent.
+    this.emit('telnyx.call.remoteEnded', callKitUUID, reason);
+
+    this.isCallFromPush = false;
+    this.pushNotificationPayload = null;
+    this.pushNotificationCallKitUUID = null;
+    this.clearPushState().catch((error) => {
+      log.warn('[TelnyxRTC] Failed to clear push state after pre-INVITE BYE:', error);
+    });
   };
 
   private handleCallInvite = async (msg: InviteEvent) => {
@@ -1129,9 +1294,12 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         },
         inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
         debug: this.options.debug,
+        enableQualityMetrics: this.options.enableQualityMetrics,
         callReportConfig: this.getCallReportConfig(),
         pushWhenActive: this.options.pushWhenActive,
         pushDeviceToken: this.options.pushNotificationDeviceToken,
+        sdkIdentity: this.sdkIdentity,
+        recoveryHooks: this.buildRecoveryHooks(),
       });
     } catch (error) {
       log.error('[TelnyxRTC] Failed to create inbound call:', error);
@@ -1276,27 +1444,40 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         destinationNumber: msg.params.caller_id_number,
         peerConnectionOptions: {
           useTrickleIce: this.options.useTrickleIce,
+          // One-shot relay-only override (VSDK-679): when the pre-failure
+          // candidate evidence explicitly reports a VPN, force the replacement
+          // call's media through a TURN relay once, then clear the evidence so
+          // normal reattaches are not affected.
+          ...(this.consumeRelayOverride(msg.params.callID) ? { iceTransportPolicy: 'relay' as const } : {}),
         },
       },
       inviteCustomHeaders: msg.params.dialogParams?.custom_headers || null,
       initialState: 'connecting', // Set initial state to connecting
       debug: this.options.debug,
+      enableQualityMetrics: this.options.enableQualityMetrics,
       callReportConfig: this.getCallReportConfig(),
       pushWhenActive: this.options.pushWhenActive,
       pushDeviceToken: this.options.pushNotificationDeviceToken,
+      sdkIdentity: this.sdkIdentity,
+      recoveryHooks: this.buildRecoveryHooks(),
     });
 
     // Add to calls tracking (matches iOS SDK behavior)
     this.addCall(attachedCall);
 
-    await attachedCall
-      .answerAttach()
-      .then(() => {
-        log.debug('[TelnyxRTC] AnswerAttach completed successfully');
-      })
-      .catch((error: Error) => {
-        log.error('[TelnyxRTC] Failed to execute answerAttach:', error);
-      });
+    try {
+      await attachedCall.answerAttach();
+      log.debug('[TelnyxRTC] AnswerAttach completed successfully');
+    } catch (error) {
+      log.error('[TelnyxRTC] Failed to execute answerAttach:', error);
+      attachedCall.disposePeer();
+      this.removeCall(attachedCall.callId);
+      this.emit(
+        'telnyx.client.error',
+        error instanceof Error ? error : new Error(String(error))
+      );
+      return;
+    }
 
     log.debug('[TelnyxRTC] Emitting telnyx.call.reattached event for reattached call');
     log.debug(
@@ -1592,6 +1773,178 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     } catch (error) {
       log.error('[TelnyxRTC] Reconnection attempt failed:', error);
     }
+  }
+
+  // --- Active-call ICE restart recovery (VSDK-679) ---
+
+  /**
+   * Recovery hooks injected into every call created by this client.
+   * They let the per-call recovery coordinator see client reconnect state,
+   * request the one reconnect/register/reattach fallback, and hand over the
+   * one-shot relay override captured from the recovering call's stats.
+   */
+  private buildRecoveryHooks(): CallRecoveryHooks {
+    return {
+      isClientReconnecting: () => this.reconnecting || this.recoveryReattachActive,
+      performReattachFallback: (callId: string) =>
+        this.performReattachFallbackForRecovery(callId),
+      captureCandidateEvidence: (evidence: CandidateEvidence) => {
+        if (evidence.callId) {
+          this.recoveryCandidateEvidenceByCallId.set(evidence.callId, evidence);
+        }
+      },
+    };
+  }
+
+  /**
+   * Consume the one-shot relay override captured during recovery. Returns
+   * true only when the pre-failure candidate evidence explicitly reports a
+   * VPN network; without evidence recovery fails closed (no override).
+   */
+  private consumeRelayOverride(callId: string): boolean {
+    const evidence = this.recoveryCandidateEvidenceByCallId.get(callId);
+    this.recoveryCandidateEvidenceByCallId.delete(callId);
+
+    if (evidence?.localNetworkType === 'vpn' && evidence.localCandidateType !== 'relay') {
+      log.debug(
+        '[TelnyxRTC] Applying one-shot relay-only override to reattached call (VPN evidence)'
+      );
+      return true;
+    }
+    return false;
+  }
+
+  private failRecoveryReattach(callId: string, recoveringCall?: Call): void {
+    const call = recoveringCall ?? this.calls.get(callId);
+    if (!call) {
+      return;
+    }
+    log.warn(`[TelnyxRTC] Recovery fallback exhausted for call ${callId}`);
+    call.setDropped();
+    if (this.calls.get(callId) === call) {
+      this.removeCall(callId);
+    }
+    this.emit('telnyx.client.error', new Error(`Recovery reattach failed for call ${callId}`));
+  }
+
+  /**
+   * Client-owned fallback for a failed ICE restart recovery: one
+   * reconnect/register/reattach cycle, mirroring onNetworkUnavailable's
+   * teardown. Resolves `true` only when the backend attach for the
+   * recovering call (`callId`) was received within the reconnection window
+   * (replacement call initiated); an attach for any other call is ignored.
+   */
+  private performReattachFallbackForRecovery(callId: string): Promise<boolean> {
+    if (this.recoveryReattachActive || this.reconnecting || this.explicitDisconnectRequested) {
+      log.debug('[TelnyxRTC] Recovery fallback skipped: a reconnect flow is already running or disconnected');
+      return Promise.resolve(false);
+    }
+
+    const recoveryGeneration = this.recoveryReattachGeneration;
+    // Keep the original Call as the reporting owner. A successful ATTACH
+    // replaces the entry in `calls`, while disposePeer() deliberately cancels
+    // this Call's recovery monitor before the client-owned attempt settles.
+    const recoveringCall = this.calls.get(callId);
+    this.recoveryReattachActive = true;
+    // Reuse the existing reconnect-flow guard semantics: keeps push flags and
+    // listeners intact while the teardown runs, and signals reconnecting to
+    // any other call's recovery coordinator for the duration of the window.
+    this.reconnecting = true;
+
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const isCurrent = () =>
+        !this.explicitDisconnectRequested &&
+        recoveryGeneration === this.recoveryReattachGeneration;
+      // Only the recovering call's replacement attach settles the fallback:
+      // in a multi-call session the first `telnyx.call.reattached` event may
+      // belong to another call, and settling on it would report recovery for
+      // a call that never received a replacement attach.
+      const onReattach = (attachedCall: Call) => {
+        if (!isCurrent()) {
+          log.debug('[TelnyxRTC] Recovery fallback: ignoring stale reattach after cancellation');
+          settle(false, { silent: true });
+          return;
+        }
+        if (attachedCall?.callId !== callId) {
+          log.debug(
+            `[TelnyxRTC] Recovery fallback: ignoring reattach for call ${attachedCall?.callId}, waiting for ${callId}`
+          );
+          return;
+        }
+        settle(true);
+      };
+      const timer = setTimeout(() => {
+        log.debug('[TelnyxRTC] Recovery fallback: reattach window expired');
+        settle(false, { silent: !isCurrent() });
+      }, TelnyxRTC.RECONNECT_TIMEOUT);
+      const settle = (value: boolean, options: { silent?: boolean } = {}) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        this.removeListener('telnyx.call.reattached', onReattach);
+        this.reconnecting = false;
+        this.recoveryReattachActive = false;
+        if (!options.silent) {
+          recoveringCall?.reportRecoveryReattachOutcome(value);
+        }
+        if (!value && !options.silent) {
+          this.failRecoveryReattach(callId, recoveringCall);
+        }
+        resolve(value);
+      };
+      this.addListener('telnyx.call.reattached', onReattach);
+
+      void (async () => {
+        log.debug('[TelnyxRTC] Recovery fallback: running one reconnect/register/reattach cycle');
+        try {
+          if (!isCurrent()) {
+            log.debug('[TelnyxRTC] Recovery fallback: cancelled before reconnect teardown');
+            settle(false, { silent: true });
+            return;
+          }
+          await this.disconnect(true);
+          // Mirror onNetworkUnavailable's peer teardown before the reconnect:
+          // the attach creates replacement Call objects keyed by the same call
+          // ids, so the old peers (with live microphone tracks) and their
+          // per-call state listeners must be disposed first. Disposing the peer
+          // also cancels the (now obsolete) per-call recovery coordinators;
+          // recovering calls are replaced by the attach itself. Without this,
+          // a stale old-call listener could remove the replacement call from
+          // tracking when a consumer hangs up via the old Call reference.
+          for (const [trackedCallId, call] of Array.from(this.calls.entries())) {
+            const stateListener = this.callStateListeners.get(trackedCallId);
+            if (stateListener) {
+              call.off('telnyx.call.state', stateListener);
+              this.callStateListeners.delete(trackedCallId);
+            }
+            call.disposePeer();
+          }
+          if (!isCurrent()) {
+            log.debug('[TelnyxRTC] Recovery fallback: cancelled before reconnect');
+            settle(false, { silent: true });
+            return;
+          }
+          await this.connect();
+          if (!isCurrent()) {
+            log.debug('[TelnyxRTC] Recovery fallback: cancelled after reconnect');
+            settle(false, { silent: true });
+            return;
+          }
+          log.debug('[TelnyxRTC] Recovery fallback: reconnected, waiting for backend attach');
+        } catch (error) {
+          if (!isCurrent()) {
+            log.debug('[TelnyxRTC] Recovery fallback: cancelled after async error');
+            settle(false, { silent: true });
+            return;
+          }
+          log.error('[TelnyxRTC] Recovery fallback: reconnect failed', error);
+          settle(false);
+        }
+      })();
+    });
   }
 
   /**

@@ -1,0 +1,36 @@
+# Blocks merging a release PR until each released package's package.json version and
+# CHANGELOG.md section match the version in the release branch name, for example
+# release/voice-sdk-v1.2.0+commons-sdk-v1.1.2. Make this a required check on main.
+name: release-pr-check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Release files match versions
+    if: startsWith(github.head_ref, 'release/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Check package.json and CHANGELOG.md
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          releases=$(scripts/release/release_package.sh parse-branch "$BRANCH")
+          if [[ -z "$releases" ]]; then
+            echo "$BRANCH does not name a package release; nothing to check"
+            exit 0
+          fi
+          while read -r pkg version; do
+            scripts/release/release_package.sh check "$pkg" "$version"
+            echo "$pkg $version: package.json and CHANGELOG.md are ready"
+          done <<< "$releases"

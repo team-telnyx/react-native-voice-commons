@@ -328,3 +328,4 @@ Note that we use `record.detectedAt` (our own `Date` object) for the timestamp d
 - [Call States](../enumerations/TelnyxCallState.md) — full list of call states and `CallStateHelpers`
 - [DTMF](./dtmf.md) — sending DTMF tones during an active call
 - [Trickle ICE](./trickle-ice.md) — optimizing WebRTC connection setup with Trickle ICE
+- [Call Quality Metrics](./call-quality-metrics.md) — monitoring real-time call quality via WebRTC stats

@@ -7,12 +7,12 @@ import { type CustomHeaders } from './internal/calls/call-state-controller';
  * Configuration options for TelnyxVoipClient
  */
 export interface TelnyxVoipClientOptions {
-  /** Enable automatic app state management (background/foreground behavior) - default: true */
-  enableAppStateManagement?: boolean;
-  /** Enable debug logging */
-  debug?: boolean;
-  /** Enable Trickle ICE for calls created by this client */
-  useTrickleIce?: boolean;
+    /** Enable automatic app state management (background/foreground behavior) - default: true */
+    enableAppStateManagement?: boolean;
+    /** Enable debug logging */
+    debug?: boolean;
+    /** Enable Trickle ICE for calls created by this client */
+    useTrickleIce?: boolean;
 }
 /**
  * The main public interface for the react-voice-commons module.
@@ -26,244 +26,236 @@ export interface TelnyxVoipClientOptions {
  * into their chosen state management solution naturally.
  */
 export declare class TelnyxVoipClient {
-  private readonly _sessionManager;
-  private readonly _callStateController;
-  private readonly _options;
-  private readonly _pendingCallKitAnswers;
-  private _disposed;
-  private _disposePromise?;
-  /**
-   * Check if the app was launched from a push notification.
-   *
-   * Use this to avoid double-login on cold start. When true, the SDK will
-   * handle login internally via the push notification flow, so you should
-   * skip your normal auto-login.
-   *
-   * @returns true if there is pending push notification data indicating a push-launched app
-   */
-  static isLaunchedFromPushNotification(): Promise<boolean>;
-  /**
-   * Creates a new TelnyxVoipClient instance.
-   *
-   * @param options Configuration options for the client
-   */
-  constructor(options?: TelnyxVoipClientOptions);
-  /**
-   * Stream of connection state changes.
-   *
-   * Emits the current status of the connection to the Telnyx backend.
-   * Values include connecting, connected, disconnected, and error states.
-   * Listen to this to show connection indicators in your UI.
-   */
-  get connectionState$(): Observable<TelnyxConnectionState>;
-  /**
-   * Stream of all current calls.
-   *
-   * Emits a list of all current Call objects. Use this for applications
-   * that need to support multiple simultaneous calls (e.g., call waiting,
-   * conference calls).
-   */
-  get calls$(): Observable<Call[]>;
-  /**
-   * Stream of the currently active call.
-   *
-   * A convenience stream that emits the currently active Call object.
-   * It emits null when no call is in progress. Ideal for applications
-   * that only handle a single call at a time.
-   */
-  get activeCall$(): Observable<Call | null>;
-  /**
-   * Current connection state (synchronous access).
-   */
-  get currentConnectionState(): TelnyxConnectionState;
-  /**
-   * Current list of calls (synchronous access).
-   */
-  get currentCalls(): Call[];
-  /**
-   * Current active call (synchronous access).
-   */
-  get currentActiveCall(): Call | null;
-  /**
-   * Check if there are any active calls (not in ENDED or FAILED state).
-   * Matches TelnyxRTC `hasActiveCalls` property for multi-call support.
-   */
-  get hasActiveCalls(): boolean;
-  /**
-   * Access any active call tracked by the client.
-   * A call will be accessible until it has ended (transitioned to the ENDED state).
-   * This matches the TelnyxRTC `getCall(callId)` method for multi-call support.
-   *
-   * @param callId The unique identifier of a call.
-   * @returns The Call object that matches the requested callId, or null if not found.
-   * @example
-   * ```typescript
-   * const call = voipClient.getCall('some-call-uuid');
-   * if (call) {
-   *   console.log('Call state:', call.currentState);
-   * }
-   * ```
-   */
-  getCall(callId: string): Call | null;
-  /**
-   * Explicitly set the active call for multi-call scenarios.
-   * @param callId The ID of the call to mark as active
-   */
-  setActiveCall(callId: string): void;
-  /**
-   * Clear the explicitly selected active call and return to default selection.
-   */
-  clearActiveCall(): void;
-  /**
-   * Swap the current active call with a held call.
-   * On iOS this is coordinated through CallKit so native and SDK state stay aligned.
-   *
-   * @param targetCallId ID of the held call to make active
-   */
-  swapCalls(targetCallId: string): Promise<void>;
-  /**
-   * Current session ID (UUID) for this connection.
-   */
-  get sessionId(): string;
-  /**
-   * Configuration options for this client instance.
-   */
-  get options(): Required<TelnyxVoipClientOptions>;
-  /**
-   * Connects to the Telnyx platform using credential authentication.
-   *
-   * @param config The credential configuration containing SIP username and password
-   * @returns A Promise that completes when the connection attempt is initiated
-   *
-   * Listen to connectionState$ to monitor the actual connection status.
-   * Credentials are automatically stored for future reconnection.
-   */
-  login(config: CredentialConfig): Promise<void>;
-  /**
-   * Connects to the Telnyx platform using token authentication.
-   *
-   * @param config The token configuration containing the authentication token
-   * @returns A Promise that completes when the connection attempt is initiated
-   *
-   * Listen to connectionState$ to monitor the actual connection status.
-   * Token is automatically stored for future reconnection.
-   */
-  loginWithToken(config: TokenConfig): Promise<void>;
-  /**
-   * Disconnects from the Telnyx platform.
-   *
-   * This method terminates the connection, ends any active calls, and
-   * cleans up all related resources.
-   */
-  logout(): Promise<void>;
-  /**
-   * Attempts to reconnect using previously stored configuration.
-   *
-   * This method is used for auto-reconnection scenarios where the app
-   * comes back to the foreground and needs to restore the connection.
-   *
-   * @returns Whether reconnection was successful.
-   */
-  loginFromStoredConfig(): Promise<boolean>;
-  /**
-   * Initiates a new outgoing call.
-   *
-   * @param destination The destination number or SIP URI to call
-   * @param callerName Optional caller name to display
-   * @param callerNumber Optional caller ID number
-   * @param customHeaders Optional custom headers to include with the call
-   * @returns A Promise that completes with the Call object once the invitation has been sent
-   *
-   * The call's state can be monitored through the returned Call object's streams.
-   */
-  newCall(
-    destination: string,
-    callerName?: string,
-    callerNumber?: string,
-    customHeaders?: CustomHeaders
-  ): Promise<Call>;
-  /**
-   * Handle push notification payload.
-   *
-   * This is the unified entry point for all push notifications. It intelligently
-   * determines whether to show a new incoming call UI or to process an already
-   * actioned (accepted/declined) call upon app launch.
-   *
-   * @param payload The push notification payload
-   */
-  handlePushNotification(payload: Record<string, any>): Promise<void>;
-  /**
-   * Disables push notifications for the current session.
-   *
-   * This method sends a request to the Telnyx backend to disable push
-   * notifications for the current registered device/session.
-   */
-  disablePushNotifications(): void;
-  /**
-   * Set a call to connecting state (used for push notification calls when answered via CallKit)
-   * @param callId The ID of the call to set to connecting state
-   * @internal
-   */
-  setCallConnecting(callId: string): void;
-  /**
-   * Find a call by its underlying Telnyx call object
-   * @param telnyxCall The Telnyx call object to find
-   * @internal
-   */
-  findCallByTelnyxCall(telnyxCall: any): Call | null;
-  /**
-   * Queue an answer action for when the call invite arrives (for CallKit integration)
-   * This should be called when the user answers from CallKit before the socket connection is established
-   * @param customHeaders Optional custom headers to include with the answer
-   */
-  queueAnswerFromCallKit(
-    callKitUUIDOrHeaders?: string | Record<string, string>,
-    customHeaders?: Record<string, string>
-  ): void;
-  /**
-   * Queue an end action for when the call invite arrives (for CallKit integration)
-   * This should be called when the user ends from CallKit before the socket connection is established
-   */
-  queueEndFromCallKit(callKitUUID?: string): void;
-  /**
-   * Associate the next push-delivered INVITE with its app-facing CallKit UUID.
-   * The underlying signaling call ID remains unchanged.
-   * @internal
-   */
-  setPushNotificationCallKitUUID(callKitUUID: string | null): void;
-  /**
-   * Dispose of the client and clean up all resources.
-   *
-   * After calling this method, the client instance should not be used anymore.
-   * This is particularly important for background clients that should be
-   * disposed after handling push notifications.
-   */
-  dispose(): Promise<void>;
-  /**
-   * Forward answers captured during cold start as soon as SessionManager has
-   * created the TelnyxRTC instance. SessionManager invokes its ready callback
-   * before connect(), so the UUID-keyed action is present when the INVITE
-   * arrives.
-   */
-  private _flushPendingCallKitAnswers;
-  /**
-   * Prefer an explicitly supplied token, otherwise hydrate it from PushKit's
-   * native storage. PushKit registration starts in AppDelegate before React
-   * mounts, so this removes the race between the JS token event and login.
-   */
-  private _withNativeVoipPushToken;
-  /**
-   * Store credential configuration for automatic reconnection
-   */
-  private _storeCredentials;
-  /**
-   * Store token configuration for automatic reconnection
-   */
-  private _storeToken;
-  /**
-   * Throw an error if the client has been disposed
-   */
-  private _throwIfDisposed;
+    private readonly _sessionManager;
+    private readonly _callStateController;
+    private readonly _options;
+    private readonly _pendingCallKitAnswers;
+    private _disposed;
+    private _disposePromise?;
+    /**
+     * Check if the app was launched from a push notification.
+     *
+     * Use this to avoid double-login on cold start. When true, the SDK will
+     * handle login internally via the push notification flow, so you should
+     * skip your normal auto-login.
+     *
+     * @returns true if there is pending push notification data indicating a push-launched app
+     */
+    static isLaunchedFromPushNotification(): Promise<boolean>;
+    /**
+     * Creates a new TelnyxVoipClient instance.
+     *
+     * @param options Configuration options for the client
+     */
+    constructor(options?: TelnyxVoipClientOptions);
+    /**
+     * Stream of connection state changes.
+     *
+     * Emits the current status of the connection to the Telnyx backend.
+     * Values include connecting, connected, disconnected, and error states.
+     * Listen to this to show connection indicators in your UI.
+     */
+    get connectionState$(): Observable<TelnyxConnectionState>;
+    /**
+     * Stream of all current calls.
+     *
+     * Emits a list of all current Call objects. Use this for applications
+     * that need to support multiple simultaneous calls (e.g., call waiting,
+     * conference calls).
+     */
+    get calls$(): Observable<Call[]>;
+    /**
+     * Stream of the currently active call.
+     *
+     * A convenience stream that emits the currently active Call object.
+     * It emits null when no call is in progress. Ideal for applications
+     * that only handle a single call at a time.
+     */
+    get activeCall$(): Observable<Call | null>;
+    /**
+     * Current connection state (synchronous access).
+     */
+    get currentConnectionState(): TelnyxConnectionState;
+    /**
+     * Current list of calls (synchronous access).
+     */
+    get currentCalls(): Call[];
+    /**
+     * Current active call (synchronous access).
+     */
+    get currentActiveCall(): Call | null;
+    /**
+     * Check if there are any active calls (not in ENDED or FAILED state).
+     * Matches TelnyxRTC `hasActiveCalls` property for multi-call support.
+     */
+    get hasActiveCalls(): boolean;
+    /**
+     * Access any active call tracked by the client.
+     * A call will be accessible until it has ended (transitioned to the ENDED state).
+     * This matches the TelnyxRTC `getCall(callId)` method for multi-call support.
+     *
+     * @param callId The unique identifier of a call.
+     * @returns The Call object that matches the requested callId, or null if not found.
+     * @example
+     * ```typescript
+     * const call = voipClient.getCall('some-call-uuid');
+     * if (call) {
+     *   console.log('Call state:', call.currentState);
+     * }
+     * ```
+     */
+    getCall(callId: string): Call | null;
+    /**
+     * Explicitly set the active call for multi-call scenarios.
+     * @param callId The ID of the call to mark as active
+     */
+    setActiveCall(callId: string): void;
+    /**
+     * Clear the explicitly selected active call and return to default selection.
+     */
+    clearActiveCall(): void;
+    /**
+     * Swap the current active call with a held call.
+     * On iOS this is coordinated through CallKit so native and SDK state stay aligned.
+     *
+     * @param targetCallId ID of the held call to make active
+     */
+    swapCalls(targetCallId: string): Promise<void>;
+    /**
+     * Current session ID (UUID) for this connection.
+     */
+    get sessionId(): string;
+    /**
+     * Configuration options for this client instance.
+     */
+    get options(): Required<TelnyxVoipClientOptions>;
+    /**
+     * Connects to the Telnyx platform using credential authentication.
+     *
+     * @param config The credential configuration containing SIP username and password
+     * @returns A Promise that completes when the connection attempt is initiated
+     *
+     * Listen to connectionState$ to monitor the actual connection status.
+     * Credentials are automatically stored for future reconnection.
+     */
+    login(config: CredentialConfig): Promise<void>;
+    /**
+     * Connects to the Telnyx platform using token authentication.
+     *
+     * @param config The token configuration containing the authentication token
+     * @returns A Promise that completes when the connection attempt is initiated
+     *
+     * Listen to connectionState$ to monitor the actual connection status.
+     * Token is automatically stored for future reconnection.
+     */
+    loginWithToken(config: TokenConfig): Promise<void>;
+    /**
+     * Disconnects from the Telnyx platform.
+     *
+     * This method terminates the connection, ends any active calls, and
+     * cleans up all related resources.
+     */
+    logout(): Promise<void>;
+    /**
+     * Attempts to reconnect using previously stored configuration.
+     *
+     * This method is used for auto-reconnection scenarios where the app
+     * comes back to the foreground and needs to restore the connection.
+     *
+     * @returns Whether reconnection was successful.
+     */
+    loginFromStoredConfig(): Promise<boolean>;
+    /**
+     * Initiates a new outgoing call.
+     *
+     * @param destination The destination number or SIP URI to call
+     * @param callerName Optional caller name to display
+     * @param callerNumber Optional caller ID number
+     * @param customHeaders Optional custom headers to include with the call
+     * @returns A Promise that completes with the Call object once the invitation has been sent
+     *
+     * The call's state can be monitored through the returned Call object's streams.
+     */
+    newCall(destination: string, callerName?: string, callerNumber?: string, customHeaders?: CustomHeaders): Promise<Call>;
+    /**
+     * Handle push notification payload.
+     *
+     * This is the unified entry point for all push notifications. It intelligently
+     * determines whether to show a new incoming call UI or to process an already
+     * actioned (accepted/declined) call upon app launch.
+     *
+     * @param payload The push notification payload
+     */
+    handlePushNotification(payload: Record<string, any>): Promise<void>;
+    /**
+     * Disables push notifications for the current session.
+     *
+     * This method sends a request to the Telnyx backend to disable push
+     * notifications for the current registered device/session.
+     */
+    disablePushNotifications(): void;
+    /**
+     * Set a call to connecting state (used for push notification calls when answered via CallKit)
+     * @param callId The ID of the call to set to connecting state
+     * @internal
+     */
+    setCallConnecting(callId: string): void;
+    /**
+     * Find a call by its underlying Telnyx call object
+     * @param telnyxCall The Telnyx call object to find
+     * @internal
+     */
+    findCallByTelnyxCall(telnyxCall: any): Call | null;
+    /**
+     * Queue an answer action for when the call invite arrives (for CallKit integration)
+     * This should be called when the user answers from CallKit before the socket connection is established
+     * @param customHeaders Optional custom headers to include with the answer
+     */
+    queueAnswerFromCallKit(callKitUUIDOrHeaders?: string | Record<string, string>, customHeaders?: Record<string, string>): void;
+    /**
+     * Queue an end action for when the call invite arrives (for CallKit integration)
+     * This should be called when the user ends from CallKit before the socket connection is established
+     */
+    queueEndFromCallKit(callKitUUID?: string): void;
+    /**
+     * Associate the next push-delivered INVITE with its app-facing CallKit UUID.
+     * The underlying signaling call ID remains unchanged.
+     * @internal
+     */
+    setPushNotificationCallKitUUID(callKitUUID: string | null): void;
+    /**
+     * Dispose of the client and clean up all resources.
+     *
+     * After calling this method, the client instance should not be used anymore.
+     * This is particularly important for background clients that should be
+     * disposed after handling push notifications.
+     */
+    dispose(): Promise<void>;
+    /**
+     * Forward answers captured during cold start as soon as SessionManager has
+     * created the TelnyxRTC instance. SessionManager invokes its ready callback
+     * before connect(), so the UUID-keyed action is present when the INVITE
+     * arrives.
+     */
+    private _flushPendingCallKitAnswers;
+    /**
+     * Prefer an explicitly supplied token, otherwise hydrate it from PushKit's
+     * native storage. PushKit registration starts in AppDelegate before React
+     * mounts, so this removes the race between the JS token event and login.
+     */
+    private _withNativeVoipPushToken;
+    /**
+     * Store credential configuration for automatic reconnection
+     */
+    private _storeCredentials;
+    /**
+     * Store token configuration for automatic reconnection
+     */
+    private _storeToken;
+    /**
+     * Throw an error if the client has been disposed
+     */
+    private _throwIfDisposed;
 }
 /**
  * Create or retrieve the shared TelnyxVoipClient instance.
@@ -286,6 +278,4 @@ export declare function destroyTelnyxVoipClient(): Promise<void>;
  * Unlike `createTelnyxVoipClient`, this always creates a new instance because
  * background isolates need their own independent client.
  */
-export declare function createBackgroundTelnyxVoipClient(
-  options?: TelnyxVoipClientOptions
-): TelnyxVoipClient;
+export declare function createBackgroundTelnyxVoipClient(options?: TelnyxVoipClientOptions): TelnyxVoipClient;
