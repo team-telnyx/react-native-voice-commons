@@ -48,7 +48,6 @@
     "eventemitter3": "^5.0.1",
     "loglevel": "^1.9.2",
     "react-native-webrtc": "^124.0.5",
-    "react-native-websocket-self-signed": "^0.4.0",
     "uuid-random": "^1.3.2"
   },
   "devDependencies": {
