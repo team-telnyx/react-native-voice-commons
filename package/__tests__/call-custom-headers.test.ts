@@ -84,7 +84,7 @@ describe('Call Custom Headers', () => {
           sessionId: 'test-session-id',
           customHeaders: undefined,
         },
-        { name: 'webrtc-react-native', version: '1.1.1' }
+        { name: 'webrtc-react-native', version: '1.1.0' }
       );
     });
 
@@ -111,7 +111,7 @@ describe('Call Custom Headers', () => {
           sessionId: 'test-session-id',
           customHeaders,
         },
-        { name: 'webrtc-react-native', version: '1.1.1' }
+        { name: 'webrtc-react-native', version: '1.1.0' }
       );
     });
 
@@ -138,7 +138,7 @@ describe('Call Custom Headers', () => {
           pushWhenActive: true,
           pushDeviceToken: 'push-token',
         }),
-        { name: 'webrtc-react-native', version: '1.1.1' }
+        { name: 'webrtc-react-native', version: '1.1.0' }
       );
     });
 
