@@ -181,14 +181,18 @@ describe('createSignalingSocket (platform-default TLS validation)', () => {
     expect(messaged).not.toHaveBeenCalled();
   });
 
-  it('does not open a second native instance while a connection is in flight', async () => {
+  it('shares the pending result without opening a second native instance', async () => {
     const { createSignalingSocket } = require('../lib/signaling-socket');
     const socket = createSignalingSocket(WS_URL);
 
-    void socket.connect();
-    await socket.connect(); // deduped: resolves without a new instance
+    const first = socket.connect();
+    const second = socket.connect();
 
+    expect(second).toBe(first);
     expect(FakeWebSocket.instances).toHaveLength(1);
+
+    FakeWebSocket.instances[0].simulateOpen();
+    await expect(second).resolves.toBeUndefined();
   });
 
   it('creates a fresh native instance on reconnect and re-dispatches listeners', async () => {

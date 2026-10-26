@@ -87,6 +87,7 @@ export const createSignalingSocket = (wsUrl: string): SignalingSocket =>
 class DefaultValidatingSocket implements SignalingSocket {
   private readonly url: string;
   private socket: NativeWebSocket | null = null;
+  private connectPromise: Promise<void> | null = null;
   private ready = false;
 
   private openListeners: Array<() => void> = [];
@@ -115,11 +116,14 @@ class DefaultValidatingSocket implements SignalingSocket {
   }
 
   public connect(): Promise<void> {
-    // Reuse the live instance when a connection is already established or in
-    // flight; otherwise create a fresh native socket (a closed WebSocket
-    // cannot be re-opened, so reconnects need a new instance).
-    if (this.socket && (this.ready || this.socket.readyState === CONNECTING)) {
+    // Reuse the live instance when a connection is already established. When
+    // a handshake is in flight, return that exact promise so every caller
+    // observes the eventual open or TLS failure instead of resolving early.
+    if (this.socket && this.ready) {
       return Promise.resolve();
+    }
+    if (this.connectPromise) {
+      return this.connectPromise;
     }
 
     // Resolve the global object through the guarded helper: a bare
@@ -146,11 +150,14 @@ class DefaultValidatingSocket implements SignalingSocket {
     );
     this.socket = socket;
 
-    return new Promise<void>((resolve, reject) => {
+    const connectPromise = new Promise<void>((resolve, reject) => {
       let settled = false;
       const settle = (action: () => void) => {
         if (!settled) {
           settled = true;
+          if (this.connectPromise === connectPromise) {
+            this.connectPromise = null;
+          }
           action();
         }
       };
@@ -188,6 +195,8 @@ class DefaultValidatingSocket implements SignalingSocket {
         settle(() => reject(new Error('Connection closed')));
       };
     });
+    this.connectPromise = connectPromise;
+    return connectPromise;
   }
 
   public send(message: string): void {
