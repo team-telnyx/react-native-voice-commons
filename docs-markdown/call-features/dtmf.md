@@ -90,5 +90,6 @@ DTMF is handled entirely by the underlying `@telnyx/react-native-voice-sdk` and 
 
 ## See Also
 
+- [iOS Missed Call Notifications](./ios-missed-call-notifications.md) — iOS-specific missed call handling with CallKit
 - [Call Quality Metrics](./call-quality-metrics.md) — Monitor real-time call quality via WebRTC stats.
 - [Trickle ICE](./trickle-ice.md) — optimizing WebRTC connection setup with Trickle ICE
