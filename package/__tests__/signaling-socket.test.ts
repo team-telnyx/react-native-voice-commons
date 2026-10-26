@@ -261,3 +261,59 @@ describe('runtime global object resolution (VSDK-909: globalThis not required)',
     expect(source).toContain('typeof global ===');
   });
 });
+
+describe('iOS URLSession signaling transport', () => {
+  it('uses the native module for open, messages, send, and close', async () => {
+    const reactNative = require('react-native');
+    const listeners: Record<string, (event: Record<string, unknown>) => void> = {};
+    let resolveConnect!: () => void;
+    const nativeModule = {
+      connect: jest.fn(() => new Promise<void>((resolve) => (resolveConnect = resolve))),
+      send: jest.fn(),
+      close: jest.fn(),
+    };
+
+    reactNative.Platform.OS = 'ios';
+    reactNative.NativeModules.TelnyxSignalingSocket = nativeModule;
+    reactNative.NativeEventEmitter = jest.fn(() => ({
+      addListener: jest.fn((name, callback) => {
+        listeners[name] = callback;
+        return { remove: jest.fn() };
+      }),
+    }));
+
+    const { createSignalingSocket } = require('../lib/signaling-socket');
+    const socket = createSignalingSocket(WS_URL);
+    const opened = jest.fn();
+    const messages: string[] = [];
+    socket.onOpen(opened);
+    socket.onMessage((message) => messages.push(message));
+
+    const pending = socket.connect();
+    const socketId = nativeModule.connect.mock.calls[0][0];
+    expect(nativeModule.connect).toHaveBeenCalledWith(socketId, WS_URL);
+    resolveConnect();
+    await pending;
+    expect(opened).toHaveBeenCalledTimes(1);
+
+    listeners.TelnyxSocketMessage({ socketId, message: 'hello' });
+    expect(messages).toEqual(['hello']);
+    socket.send('outbound');
+    expect(nativeModule.send).toHaveBeenCalledWith(socketId, 'outbound');
+    socket.close();
+    expect(nativeModule.close).toHaveBeenCalledWith(socketId);
+
+    reactNative.Platform.OS = 'android';
+    delete reactNative.NativeModules.TelnyxSignalingSocket;
+  });
+
+  it('does not override the system TLS authentication challenge', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', 'ios', 'TelnyxSignalingSocket.swift'),
+      'utf8'
+    );
+
+    expect(source).not.toContain('didReceive challenge');
+    expect(source).not.toContain('.useCredential');
+  });
+});

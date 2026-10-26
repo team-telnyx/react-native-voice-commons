@@ -41,8 +41,31 @@ type NativeWebSocket = {
   close(): void;
 };
 
+type Subscription = { remove(): void };
+type IOSSocketModule = {
+  connect(id: number, url: string): Promise<void>;
+  send(id: number, message: string): void;
+  close(id: number): void;
+};
+type ReactNativeRuntime = {
+  Platform?: { OS?: string };
+  NativeModules?: { TelnyxSignalingSocket?: IOSSocketModule };
+  NativeEventEmitter?: new (module: IOSSocketModule) => {
+    addListener(
+      name: string,
+      callback: (event: { socketId?: number; message?: string }) => void
+    ): Subscription;
+  };
+};
+
+declare const require: (name: string) => unknown;
+
+let nextSocketId = 1;
+
 const CONNECTING = 0;
 const OPEN = 1;
+const CLOSING = 2;
+const CLOSED = 3;
 
 /**
  * Creates the signaling transport for `wsUrl` backed by the React Native
@@ -80,6 +103,80 @@ export const getGlobalObject = (): Record<string, unknown> | undefined => {
   }
   return undefined;
 };
+
+const createPlatformSocket = (url: string): NativeWebSocket | undefined => {
+  try {
+    const runtime = require('react-native') as ReactNativeRuntime;
+    const module = runtime.NativeModules?.TelnyxSignalingSocket;
+    if (runtime.Platform?.OS === 'ios' && module && runtime.NativeEventEmitter) {
+      return new IOSURLSessionSocket(url, module, new runtime.NativeEventEmitter(module));
+    }
+  } catch {
+    // Non-React-Native runtimes use the global WebSocket fallback below.
+  }
+
+  const WebSocketImpl = getGlobalObject()?.WebSocket;
+  return typeof WebSocketImpl === 'function'
+    ? new (WebSocketImpl as new (url: string) => NativeWebSocket)(url)
+    : undefined;
+};
+
+/** iOS adapter using URLSession's current TLS stack and default trust policy. */
+class IOSURLSessionSocket implements NativeWebSocket {
+  public onopen: ((event: unknown) => void) | null = null;
+  public onmessage: ((event: { data?: unknown }) => void) | null = null;
+  public onerror: ((event: { message?: unknown }) => void) | null = null;
+  public onclose: ((event: unknown) => void) | null = null;
+  public readyState = CONNECTING;
+
+  private readonly id = nextSocketId++;
+  private readonly subscriptions: Subscription[];
+
+  constructor(
+    url: string,
+    private readonly module: IOSSocketModule,
+    emitter: {
+      addListener(
+        name: string,
+        callback: (event: { socketId?: number; message?: string }) => void
+      ): Subscription;
+    }
+  ) {
+    const listen = (name: string, callback: (event: { message?: string }) => void) =>
+      emitter.addListener(name, (event) => {
+        if (event.socketId === this.id) callback(event);
+      });
+
+    this.subscriptions = [
+      listen('TelnyxSocketMessage', (event) => this.onmessage?.({ data: event.message })),
+      listen('TelnyxSocketError', (event) => this.onerror?.({ message: event.message })),
+      listen('TelnyxSocketClose', () => {
+        this.readyState = CLOSED;
+        this.onclose?.({});
+        this.subscriptions.forEach((subscription) => subscription.remove());
+      }),
+    ];
+
+    module
+      .connect(this.id, url)
+      .then(() => {
+        this.readyState = OPEN;
+        this.onopen?.({});
+      })
+      .catch((error: { message?: string }) => this.onerror?.({ message: error?.message }));
+  }
+
+  public send(message: string): void {
+    this.module.send(this.id, message);
+  }
+
+  public close(): void {
+    if (this.readyState < CLOSING) {
+      this.readyState = CLOSING;
+      this.module.close(this.id);
+    }
+  }
+}
 
 export const createSignalingSocket = (wsUrl: string): SignalingSocket =>
   new DefaultValidatingSocket(wsUrl);
@@ -126,13 +223,8 @@ class DefaultValidatingSocket implements SignalingSocket {
       return this.connectPromise;
     }
 
-    // Resolve the global object through the guarded helper: a bare
-    // `globalThis` identifier evaluation can throw a synchronous
-    // ReferenceError on older React Native runtimes (see getGlobalObject).
-    const globalObject = getGlobalObject();
-    const WebSocketImpl =
-      globalObject === undefined ? undefined : globalObject.WebSocket;
-    if (typeof WebSocketImpl !== 'function') {
+    const socket = createPlatformSocket(this.url);
+    if (!socket) {
       return Promise.reject(
         new Error(
           '[Connection]: React Native global WebSocket is not available; ' +
@@ -142,12 +234,6 @@ class DefaultValidatingSocket implements SignalingSocket {
     }
 
     this.ready = false;
-    // Constructed with the URL only — no custom protocols, trust manager, or
-    // hostname verifier: TLS certificate and hostname validation follow the
-    // platform defaults (VSDK-909).
-    const socket = new (WebSocketImpl as new (url: string) => NativeWebSocket)(
-      this.url
-    );
     this.socket = socket;
 
     const connectPromise = new Promise<void>((resolve, reject) => {
@@ -175,10 +261,7 @@ class DefaultValidatingSocket implements SignalingSocket {
       };
 
       socket.onerror = (event) => {
-        const error =
-          typeof event?.message === 'string'
-            ? event.message
-            : 'WebSocket error';
+        const error = typeof event?.message === 'string' ? event.message : 'WebSocket error';
         this.errorListeners.forEach((listener) => listener(error));
         // A TLS handshake failure (untrusted certificate, wrong hostname)
         // surfaces as onerror/onclose without onopen ever firing — reject so
@@ -201,9 +284,7 @@ class DefaultValidatingSocket implements SignalingSocket {
 
   public send(message: string): void {
     if (!this.socket || this.socket.readyState !== OPEN || !this.ready) {
-      throw new Error(
-        '[Connection]: Cannot send — signaling socket is not connected.'
-      );
+      throw new Error('[Connection]: Cannot send — signaling socket is not connected.');
     }
     this.socket.send(message);
   }
