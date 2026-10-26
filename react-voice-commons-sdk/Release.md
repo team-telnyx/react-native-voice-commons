@@ -191,7 +191,7 @@ function MyApp() {
 ### Core Dependencies
 
 - **`@telnyx/react-native-voice-sdk`** (^0.2.0) - Enhanced core SDK with network reconnection
-- **React Native WebRTC** (^124.0.5) - WebRTC call functionality
+- **React Native WebRTC** (^155.0.1) - WebRTC M155 call functionality (iOS 14+)
 - **React Native VoIP Push Notification** (^3.3.3) - iOS CallKit integration
 - **NetInfo** - Network state monitoring for seamless transitions
 - **AsyncStorage** - Push notification state persistence
