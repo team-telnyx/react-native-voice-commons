@@ -4,6 +4,7 @@
 
 ### Dependencies
 
+- Require `react-native-webrtc ^155.0.1` (WebRTC M155), matching the Voice SDK's media dependency. Applications must target iOS 14 or newer; the Android minimum remains API 24.
 - Require `@telnyx/react-native-voice-sdk ^1.1.0` when publishing. This
   includes the primitive SDK support required by Commons, such as
   `pushWhenActive`, while staying within the compatible 1.x line.

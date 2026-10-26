@@ -9,7 +9,7 @@ Pod::Spec.new do |s|
   s.description    = package['description']
   s.homepage       = package['homepage']
   s.license        = package['license']
-  s.platforms      = { :ios => '13.0' }
+  s.platforms      = { :ios => '14.0' }
   s.swift_version  = '5.4'
   s.author         = package['author']
   s.source         = { :git => package['repository']['url'], :tag => "#{s.version}" }
@@ -22,7 +22,7 @@ Pod::Spec.new do |s|
   s.dependency 'React-Core'
   
   # WebRTC Framework dependency
-  s.dependency 'JitsiWebRTC', '~> 124.0.0'
+  s.dependency 'JitsiWebRTC', '~> 155.0.0'
 
   # iOS Frameworks
   s.frameworks = 'CallKit', 'PushKit', 'AVFoundation'

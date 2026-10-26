@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Dependencies
+
+- Upgrade `react-native-webrtc` from the WebRTC M124 line to `^155.0.1` (M155). This aligns the React Native SDK with the current upstream WebRTC milestone and raises the effective minimum iOS deployment target to iOS 14; Android continues to require API 24 or newer.
+
 ### Security
 
 - **Signaling WebSocket connections now use the platform's default TLS certificate and hostname validation.** The transport that unconditionally bypassed certificate checks (`react-native-websocket-self-signed`) was removed: signaling now goes through the React Native built-in `WebSocket`, which validates certificates per platform defaults (OkHttp trust manager and hostname verifier on Android; default `URLSession` trust handling on iOS). This closes a network-interception path on the signaling connection.
