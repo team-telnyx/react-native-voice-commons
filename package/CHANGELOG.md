@@ -12,6 +12,18 @@
 - Add opt-in `pushWhenActive` parity with the native iOS SDK. Login sends `push_when_active` and `pn_late_fanout`, and answers include `answered_device_token` when a non-empty PushKit token is configured.
 - `call.hangup()` now chooses the BYE cause from the call state instead of always sending `USER_BUSY`/17: established calls (`active`, `held`) end with `NORMAL_CLEARING`/16 — a normal clear for the carrier — while pre-answer declines (`new`, `ringing`, `connecting`) keep `USER_BUSY`/17, which tells the platform the call was rejected and stops TeXML INVITE retries. Previously every app-ended hangup of an answered call propagated `Q.850;cause=17` in the carrier-facing BYE, so carriers played a busy/unavailable announcement to the PSTN party after a normal call end (parity with the JS SDK's `state < Active` mapping).
 
+## [1.0.0](https://www.npmjs.com/package/@telnyx/react-native-voice-sdk/v/1.0.0) (2026-06-14)
+
+### Enhancement
+
+- Add opt-in Trickle ICE support for faster call setup. It is disabled by default, preserving the previous complete-ICE-gathering behavior. The internal `sdp-utils.ts` module adds the Trickle ICE capability to SDP and removes candidates that are sent separately over signaling.
+- Add opt-in native missed-call push notifications through `enableMissedCallNotifications`; it is disabled by default.
+- Expand call-quality reports with ICE candidate-pair, transport, local audio, and interval data to align the report payload with the JavaScript SDK.
+
+### Compatibility
+
+- No intentional breaking API or default-behavior change from `0.4.5`. Both new call-setup and missed-call-push behavior require explicit opt-in.
+
 ## [0.4.5](https://github.com/team-telnyx/react-native-voice-commons/releases/tag/voice-sdk-v0.4.5) (2026-04-30)
 
 ### Bug Fixing
