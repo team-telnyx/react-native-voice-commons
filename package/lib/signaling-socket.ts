@@ -150,31 +150,46 @@ class IOSURLSessionSocket implements NativeWebSocket {
     this.subscriptions = [
       listen('TelnyxSocketMessage', (event) => this.onmessage?.({ data: event.message })),
       listen('TelnyxSocketError', (event) => this.onerror?.({ message: event.message })),
-      listen('TelnyxSocketClose', () => {
-        this.readyState = CLOSED;
-        this.onclose?.({});
-        this.subscriptions.forEach((subscription) => subscription.remove());
-      }),
+      listen('TelnyxSocketClose', () => this.finishClose()),
     ];
 
     module
       .connect(this.id, url)
       .then(() => {
+        if (this.readyState !== CONNECTING) return;
         this.readyState = OPEN;
         this.onopen?.({});
       })
-      .catch((error: { message?: string }) => this.onerror?.({ message: error?.message }));
+      .catch((error: { message?: string }) => {
+        if (this.readyState === CONNECTING) {
+          this.onerror?.({ message: error?.message });
+        }
+      });
   }
 
   public send(message: string): void {
+    if (this.readyState !== OPEN) {
+      throw new Error('[Connection]: Cannot send — signaling socket is not connected.');
+    }
     this.module.send(this.id, message);
   }
 
   public close(): void {
     if (this.readyState < CLOSING) {
       this.readyState = CLOSING;
-      this.module.close(this.id);
+      try {
+        this.module.close(this.id);
+      } finally {
+        this.finishClose();
+      }
     }
+  }
+
+  private finishClose(): void {
+    if (this.readyState === CLOSED) return;
+    this.readyState = CLOSED;
+    this.onclose?.({});
+    this.subscriptions.forEach((subscription) => subscription.remove());
   }
 }
 
