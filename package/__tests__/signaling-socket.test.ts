@@ -261,3 +261,130 @@ describe('runtime global object resolution (VSDK-909: globalThis not required)',
     expect(source).toContain('typeof global ===');
   });
 });
+
+describe('iOS URLSession signaling transport', () => {
+  const reactNative = require('react-native');
+  let listeners: Record<string, (event: Record<string, unknown>) => void>;
+  let subscriptionRemovers: jest.Mock[];
+  let resolveConnect: () => void;
+  let rejectConnect: (error: Error) => void;
+  let nativeModule: {
+    connect: jest.Mock;
+    send: jest.Mock;
+    close: jest.Mock;
+  };
+
+  beforeEach(() => {
+    listeners = {};
+    subscriptionRemovers = [];
+    nativeModule = {
+      connect: jest.fn(
+        () =>
+          new Promise<void>((resolve, reject) => {
+            resolveConnect = resolve;
+            rejectConnect = reject;
+          })
+      ),
+      send: jest.fn(),
+      close: jest.fn(),
+    };
+    reactNative.Platform.OS = 'ios';
+    reactNative.NativeModules.TelnyxSignalingSocket = nativeModule;
+    reactNative.NativeEventEmitter = jest.fn(() => ({
+      addListener: jest.fn((name, callback) => {
+        listeners[name] = callback;
+        const remove = jest.fn();
+        subscriptionRemovers.push(remove);
+        return { remove };
+      }),
+    }));
+  });
+
+  afterEach(() => {
+    reactNative.Platform.OS = 'android';
+    delete reactNative.NativeModules.TelnyxSignalingSocket;
+  });
+
+  it('uses the native module for open, messages, send, and close', async () => {
+    const { createSignalingSocket } = require('../lib/signaling-socket');
+    const socket = createSignalingSocket(WS_URL);
+    const opened = jest.fn();
+    const messages: string[] = [];
+    socket.onOpen(opened);
+    socket.onMessage((message) => messages.push(message));
+
+    const pending = socket.connect();
+    const socketId = nativeModule.connect.mock.calls[0][0];
+    expect(nativeModule.connect).toHaveBeenCalledWith(socketId, WS_URL);
+    resolveConnect();
+    await pending;
+    expect(opened).toHaveBeenCalledTimes(1);
+
+    listeners.TelnyxSocketMessage({ socketId, message: 'hello' });
+    expect(messages).toEqual(['hello']);
+    socket.send('outbound');
+    expect(nativeModule.send).toHaveBeenCalledWith(socketId, 'outbound');
+    socket.close();
+    expect(nativeModule.close).toHaveBeenCalledWith(socketId);
+    subscriptionRemovers.forEach((remove) => expect(remove).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not reopen when close follows native resolution before its continuation', async () => {
+    const { createSignalingSocket } = require('../lib/signaling-socket');
+    const socket = createSignalingSocket(WS_URL);
+    const opened = jest.fn();
+    socket.onOpen(opened);
+
+    const pending = socket.connect();
+    resolveConnect();
+    socket.close();
+
+    await expect(pending).rejects.toThrow('Connection closed');
+    expect(opened).not.toHaveBeenCalled();
+    expect(() => socket.send('late')).toThrow(/not connected/i);
+    expect(nativeModule.send).not.toHaveBeenCalled();
+    subscriptionRemovers.forEach((remove) => expect(remove).toHaveBeenCalledTimes(1));
+  });
+
+  it('ignores late native success after a native close event', async () => {
+    const { createSignalingSocket } = require('../lib/signaling-socket');
+    const socket = createSignalingSocket(WS_URL);
+    const opened = jest.fn();
+    socket.onOpen(opened);
+
+    const pending = socket.connect();
+    const socketId = nativeModule.connect.mock.calls[0][0];
+    listeners.TelnyxSocketClose({ socketId });
+    resolveConnect();
+
+    await expect(pending).rejects.toThrow('Connection closed');
+    expect(opened).not.toHaveBeenCalled();
+    expect(() => socket.send('late')).toThrow(/not connected/i);
+    expect(nativeModule.send).not.toHaveBeenCalled();
+    subscriptionRemovers.forEach((remove) => expect(remove).toHaveBeenCalledTimes(1));
+  });
+
+  it('ignores a native handshake rejection after local close', async () => {
+    const { createSignalingSocket } = require('../lib/signaling-socket');
+    const socket = createSignalingSocket(WS_URL);
+    const errored = jest.fn();
+    socket.onError(errored);
+
+    const pending = socket.connect();
+    socket.close();
+    rejectConnect(new Error('late TLS failure'));
+
+    await expect(pending).rejects.toThrow('Connection closed');
+    expect(errored).not.toHaveBeenCalled();
+  });
+
+  it('does not override the system TLS authentication challenge', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', 'ios', 'TelnyxSignalingSocket.swift'),
+      'utf8'
+    );
+
+    expect(source).not.toContain('didReceive challenge');
+    expect(source).not.toContain('.useCredential');
+  });
+});

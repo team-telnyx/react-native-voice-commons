@@ -8,10 +8,11 @@
 
 ### Security
 
-- **Signaling WebSocket connections now use the platform's default TLS certificate and hostname validation.** The transport that unconditionally bypassed certificate checks (`react-native-websocket-self-signed`) was removed: signaling now goes through the React Native built-in `WebSocket`, which validates certificates per platform defaults (OkHttp trust manager and hostname verifier on Android; default `URLSession` trust handling on iOS). This closes a network-interception path on the signaling connection.
+- **Signaling WebSocket connections now use the platform's default TLS certificate and hostname validation.** The transport that unconditionally bypassed certificate checks (`react-native-websocket-self-signed`) was removed. Android uses React Native's OkHttp-backed WebSocket; iOS uses `URLSessionWebSocketTask` with default trust handling, avoiding SocketRocket's legacy TLS configuration without weakening certificate checks.
 
 ### Bug Fixing
 
+- Fix iOS signaling failures reported as `OSStatus error -9837` by using the current system WebSocket implementation.
 - Accept the gateway's canonical `holdState: "active"` unhold response so repeated hold/resume cycles do not leave the call stuck in `HELD`.
 - Add opt-in `pushWhenActive` parity with the native iOS SDK. Login sends `push_when_active` and `pn_late_fanout`, and answers include `answered_device_token` when a non-empty PushKit token is configured.
 - `call.hangup()` now chooses the BYE cause from the call state instead of always sending `USER_BUSY`/17: established calls (`active`, `held`) end with `NORMAL_CLEARING`/16 — a normal clear for the carrier — while pre-answer declines (`new`, `ringing`, `connecting`) keep `USER_BUSY`/17, which tells the platform the call was rejected and stops TeXML INVITE retries. Previously every app-ended hangup of an answered call propagated `Q.850;cause=17` in the carrier-facing BYE, so carriers played a busy/unavailable announcement to the PSTN party after a normal call end (parity with the JS SDK's `state < Active` mapping).

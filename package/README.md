@@ -18,6 +18,8 @@ A comprehensive React Native SDK for Telnyx WebRTC voice calling.
 npm install @telnyx/react-native-voice-sdk
 ```
 
+On iOS, run `pod install` and rebuild the native app after installing or upgrading the SDK.
+
 ## Quick Start
 
 ```typescript
