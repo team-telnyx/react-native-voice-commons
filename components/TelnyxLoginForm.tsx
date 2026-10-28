@@ -67,7 +67,7 @@ async function buildProfileConnectionConfig(
   const options = {
     debug: true,
     pushNotificationDeviceToken: pushToken || undefined,
-    pushWhenActive: true,
+    pushWhenActive: false,
     enableMissedCallNotifications: true,
     useTrickleIce: DEMO_USE_TRICKLE_ICE,
     environment,
