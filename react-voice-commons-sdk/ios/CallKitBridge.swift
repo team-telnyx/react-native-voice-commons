@@ -747,6 +747,10 @@ import React
         public var callKitProvider: CXProvider?
         public var callKitController: CXCallController?
         private let stateLock = NSRecursiveLock()
+        // Keep terminal missed-call invalidation atomic with registration side effects so a
+        // delayed CallKit completion cannot restore an already-ended incoming call.
+        private let incomingRegistrationQueue = DispatchQueue(
+            label: "com.telnyx.react-voice-commons.incoming-registration")
         public lazy var activeCalls = LockedDictionary<UUID, [String: Any]>(lock: stateLock)
         public lazy var pendingAnswerActions = LockedDictionary<UUID, CXAnswerCallAction>(
             lock: stateLock)
@@ -788,24 +792,33 @@ import React
             return true
         }
 
-        fileprivate func ownsIncomingRegistration(_ callUUID: UUID, token: String) -> Bool {
-            guard let callData = activeCalls[callUUID] else {
-                return false
-            }
+        @discardableResult
+        fileprivate func performIncomingRegistrationIfOwned(
+            _ callUUID: UUID,
+            token: String,
+            effects: () -> Void
+        ) -> Bool {
+            return incomingRegistrationQueue.sync {
+                guard let callData = activeCalls[callUUID],
+                    callData["incomingRegistrationToken"] as? String == token
+                else {
+                    return false
+                }
 
-            return callData["incomingRegistrationToken"] as? String == token
+                effects()
+                return true
+            }
         }
 
         fileprivate func invalidateIncomingRegistration(_ callUUID: UUID) {
-            stateLock.lock()
-            defer { stateLock.unlock() }
+            incomingRegistrationQueue.sync {
+                guard var callData = activeCalls[callUUID] else {
+                    return
+                }
 
-            guard var callData = activeCalls[callUUID] else {
-                return
+                callData.removeValue(forKey: "incomingRegistrationToken")
+                activeCalls[callUUID] = callData
             }
-
-            callData.removeValue(forKey: "incomingRegistrationToken")
-            activeCalls[callUUID] = callData
         }
 
         private override init() {
@@ -1801,62 +1814,65 @@ import React
             callKitProvider.reportNewIncomingCall(with: callUUID, update: callUpdate) { error in
                 defer { completion() }
 
-                guard callKitManager.ownsIncomingRegistration(
+                let handled = callKitManager.performIncomingRegistrationIfOwned(
                     callUUID, token: registrationToken
-                ) else {
+                ) {
+                    if let error = error {
+                        let nsError = error as NSError
+                        let reason =
+                            nsError.domain == CXErrorDomainIncomingCall && nsError.code == 3
+                            ? "filteredByDoNotDisturb" : "registrationRejected"
+                        NSLog(
+                            "[TelnyxVoipPushHandler] CallKit incoming registration rejected: domain=\(nsError.domain), code=\(nsError.code), reason=\(reason)"
+                        )
+                        callKitManager.activeCalls.removeValue(forKey: callUUID)
+                        callKitManager.clearPendingPushData(for: callUUID.uuidString)
+                    } else {
+                        NSLog(
+                            "[TelnyxVoipPushHandler] ✅ CallKit call reported successfully via unified path"
+                        )
+
+                        callKitManager.markCallKitRegistered(callUUID)
+                        self.storePendingVoipPush(payload.dictionaryPayload)
+
+                        // CRITICAL: Store the CallKit UUID for the React Native CallKitCoordinator
+                        // This allows the coordinator to find the existing CallKit call instead of creating a duplicate
+                        UserDefaults.standard.set(
+                            callUUID.uuidString, forKey: "@pending_callkit_uuid")
+                        UserDefaults.standard.synchronize()
+                        NSLog(
+                            "[TelnyxVoipPushHandler] ✅ Stored CallKit UUID for React Native coordinator: \(callUUID.uuidString)"
+                        )
+
+                        // Try to emit push received event if CallKit bridge is available
+                        if let callKitBridge = CallKitBridge.shared {
+                            let source =
+                                isAppRunning ? "push_notification" : "terminated_app_push"
+                            callKitBridge.emitCallEvent(
+                                "CallKitDidReceivePush", callUUID: callUUID,
+                                callData: [
+                                    "caller": callerName,
+                                    "handle": callerNumber,
+                                    "payload": payload.dictionaryPayload,
+                                    "uuid": callUUID.uuidString,
+                                    "direction": "incoming",
+                                    "source": source,
+                                ])
+                            NSLog(
+                                "[TelnyxVoipPushHandler] ✅ Emitted CallKitDidReceivePush event to React Native"
+                            )
+                        } else {
+                            NSLog(
+                                "[TelnyxVoipPushHandler] ⚠️ React Native bridge not ready - event will be emitted when bridge becomes available"
+                            )
+                        }
+                    }
+                }
+
+                if !handled {
                     NSLog(
                         "[TelnyxVoipPushHandler] Ignoring stale incoming registration completion for ended call: \(callUUID.uuidString)"
                     )
-                    return
-                }
-
-                if let error = error {
-                    let nsError = error as NSError
-                    let reason =
-                        nsError.domain == CXErrorDomainIncomingCall && nsError.code == 3
-                        ? "filteredByDoNotDisturb" : "registrationRejected"
-                    NSLog(
-                        "[TelnyxVoipPushHandler] CallKit incoming registration rejected: domain=\(nsError.domain), code=\(nsError.code), reason=\(reason)"
-                    )
-                    callKitManager.activeCalls.removeValue(forKey: callUUID)
-                    callKitManager.clearPendingPushData(for: callUUID.uuidString)
-                } else {
-                    NSLog(
-                        "[TelnyxVoipPushHandler] ✅ CallKit call reported successfully via unified path"
-                    )
-
-                    callKitManager.markCallKitRegistered(callUUID)
-                    self.storePendingVoipPush(payload.dictionaryPayload)
-
-                    // CRITICAL: Store the CallKit UUID for the React Native CallKitCoordinator
-                    // This allows the coordinator to find the existing CallKit call instead of creating a duplicate
-                    UserDefaults.standard.set(callUUID.uuidString, forKey: "@pending_callkit_uuid")
-                    UserDefaults.standard.synchronize()
-                    NSLog(
-                        "[TelnyxVoipPushHandler] ✅ Stored CallKit UUID for React Native coordinator: \(callUUID.uuidString)"
-                    )
-
-                    // Try to emit push received event if CallKit bridge is available
-                    if let callKitBridge = CallKitBridge.shared {
-                        let source = isAppRunning ? "push_notification" : "terminated_app_push"
-                        callKitBridge.emitCallEvent(
-                            "CallKitDidReceivePush", callUUID: callUUID,
-                            callData: [
-                                "caller": callerName,
-                                "handle": callerNumber,
-                                "payload": payload.dictionaryPayload,
-                                "uuid": callUUID.uuidString,
-                                "direction": "incoming",
-                                "source": source,
-                            ])
-                        NSLog(
-                            "[TelnyxVoipPushHandler] ✅ Emitted CallKitDidReceivePush event to React Native"
-                        )
-                    } else {
-                        NSLog(
-                            "[TelnyxVoipPushHandler] ⚠️ React Native bridge not ready - event will be emitted when bridge becomes available"
-                        )
-                    }
                 }
             }
         }

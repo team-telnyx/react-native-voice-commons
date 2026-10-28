@@ -55,6 +55,16 @@ function sliceBetween(source, startToken, endToken) {
   return source.slice(start, end + endToken.length);
 }
 
+function createSerialExecutor() {
+  let tail = Promise.resolve();
+
+  return (operation) => {
+    const result = tail.then(operation);
+    tail = result.catch(() => {});
+    return result;
+  };
+}
+
 const reportAndEndWatchdogCall = extractFunction('fileprivate func reportAndEndWatchdogCall(');
 const handleMissedCallPushIfNeeded = extractFunction('public func handleMissedCallPushIfNeeded(');
 const endAction = extractFunction(
@@ -69,7 +79,9 @@ const handleIncomingVoipPush = extractFunction('@objc public func handleVoipPush
 const setupCallKit = extractFunction('private func setupCallKit()');
 const reportCallConnected = extractFunction('@objc func reportCallConnected(');
 const activateWebRTCAudio = extractFunction('fileprivate func activateWebRTCAudio(');
-const ownsIncomingRegistration = extractFunction('fileprivate func ownsIncomingRegistration(');
+const performIncomingRegistrationIfOwned = extractFunction(
+  'fileprivate func performIncomingRegistrationIfOwned('
+);
 const invalidateIncomingRegistration = extractFunction(
   'fileprivate func invalidateIncomingRegistration('
 );
@@ -272,19 +284,24 @@ describe('iOS CallKitBridge call waiting contract', () => {
     );
     const reportIndex = handleIncomingVoipPush.indexOf('reportNewIncomingCall');
     const completionDeferIndex = handleIncomingVoipPush.indexOf('defer { completion() }');
-    const ownershipGuardIndex = handleIncomingVoipPush.indexOf(
-      'guard callKitManager.ownsIncomingRegistration('
+    const serializedCompletionIndex = handleIncomingVoipPush.indexOf(
+      'callKitManager.performIncomingRegistrationIfOwned('
     );
     const persistIndex = handleIncomingVoipPush.indexOf(
       'self.storePendingVoipPush(payload.dictionaryPayload)'
     );
     const emitIndex = handleIncomingVoipPush.indexOf('callKitBridge.emitCallEvent(');
 
-    expect(ownsIncomingRegistration).toContain('activeCalls[callUUID]');
-    expect(ownsIncomingRegistration).toContain(
+    const queueIndex = performIncomingRegistrationIfOwned.indexOf('incomingRegistrationQueue.sync');
+    const ownershipGuardIndex = performIncomingRegistrationIfOwned.indexOf(
       'callData["incomingRegistrationToken"] as? String == token'
     );
-    expect(invalidateIncomingRegistration).toContain('stateLock.lock()');
+    const effectsIndex = performIncomingRegistrationIfOwned.indexOf('effects()');
+
+    expect(queueIndex).toBeGreaterThanOrEqual(0);
+    expect(ownershipGuardIndex).toBeGreaterThan(queueIndex);
+    expect(effectsIndex).toBeGreaterThan(ownershipGuardIndex);
+    expect(invalidateIncomingRegistration).toContain('incomingRegistrationQueue.sync');
     expect(invalidateIncomingRegistration).toContain(
       'callData.removeValue(forKey: "incomingRegistrationToken")'
     );
@@ -297,9 +314,86 @@ describe('iOS CallKitBridge call waiting contract', () => {
     expect(tokenStorageIndex).toBeGreaterThan(tokenCreationIndex);
     expect(reportIndex).toBeGreaterThan(tokenStorageIndex);
     expect(completionDeferIndex).toBeGreaterThan(reportIndex);
-    expect(ownershipGuardIndex).toBeGreaterThan(completionDeferIndex);
-    expect(persistIndex).toBeGreaterThan(ownershipGuardIndex);
-    expect(emitIndex).toBeGreaterThan(ownershipGuardIndex);
+    expect(serializedCompletionIndex).toBeGreaterThan(completionDeferIndex);
+    expect(persistIndex).toBeGreaterThan(serializedCompletionIndex);
+    expect(emitIndex).toBeGreaterThan(serializedCompletionIndex);
+  });
+
+  it('serializes invalidation attempted between ownership validation and effects', async () => {
+    const executeSerially = createSerialExecutor();
+    let storedToken = 'registration-token';
+    let persistedPushes = 0;
+    let emittedPushes = 0;
+    let pushKitCompletions = 0;
+    let invalidations = 0;
+    let signalOwnershipChecked;
+    let allowEffects;
+    const ownershipChecked = new Promise((resolve) => {
+      signalOwnershipChecked = resolve;
+    });
+    const effectsAllowed = new Promise((resolve) => {
+      allowEffects = resolve;
+    });
+
+    const delayedCompletion = executeSerially(async () => {
+      try {
+        if (storedToken !== 'registration-token') {
+          return;
+        }
+        signalOwnershipChecked();
+        await effectsAllowed;
+        persistedPushes += 1;
+        emittedPushes += 1;
+      } finally {
+        pushKitCompletions += 1;
+      }
+    });
+
+    await ownershipChecked;
+    const delayedInvalidation = executeSerially(() => {
+      storedToken = null;
+      invalidations += 1;
+    });
+
+    await Promise.resolve();
+    expect(invalidations).toBe(0);
+
+    allowEffects();
+    await Promise.all([delayedCompletion, delayedInvalidation]);
+
+    expect(persistedPushes).toBe(1);
+    expect(emittedPushes).toBe(1);
+    expect(pushKitCompletions).toBe(1);
+    expect(invalidations).toBe(1);
+  });
+
+  it('suppresses delayed registration effects when invalidation wins the serial queue', async () => {
+    const executeSerially = createSerialExecutor();
+    let storedToken = 'registration-token';
+    let persistedPushes = 0;
+    let emittedPushes = 0;
+    let pushKitCompletions = 0;
+
+    const invalidation = executeSerially(() => {
+      storedToken = null;
+    });
+    const delayedCompletion = executeSerially(() => {
+      try {
+        if (storedToken !== 'registration-token') {
+          return;
+        }
+        persistedPushes += 1;
+        emittedPushes += 1;
+      } finally {
+        pushKitCompletions += 1;
+      }
+    });
+
+    await Promise.all([invalidation, delayedCompletion]);
+
+    expect(persistedPushes).toBe(0);
+    expect(emittedPushes).toBe(0);
+    expect(pushKitCompletions).toBe(1);
   });
 
   it('emits held actions and waits for explicit JavaScript completion', () => {
