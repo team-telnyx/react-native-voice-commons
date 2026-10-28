@@ -3,8 +3,10 @@
 # Run it with the same versions given to release-01. For each package it:
 #   - checks out the release PR's merge commit (not the current head of main),
 #   - checks that package.json and CHANGELOG.md match the version,
+#   - syncs the release and its notes to Linear,
 #   - creates the voice-sdk-vX.Y.Z / commons-sdk-vX.Y.Z tag and GitHub Release,
 #     using the package's CHANGELOG.md section as the release notes,
+#   - completes the Linear release,
 #   - publishes the package through publish.yml. voice-sdk is published first
 #     because commons-sdk depends on it.
 #
@@ -102,6 +104,62 @@ jobs:
             scripts/release/release_package.sh notes commons-sdk "$COMMONS_SDK_VERSION" > "$RUNNER_TEMP/notes-commons-sdk.md"
           fi
 
+      - name: Prepare Linear release
+        id: linear
+        env:
+          VOICE_SDK_VERSION: ${{ steps.plan.outputs.voice_version }}
+          VOICE_SDK_TAG: ${{ steps.plan.outputs.voice_tag }}
+          COMMONS_SDK_VERSION: ${{ steps.plan.outputs.commons_version }}
+          COMMONS_SDK_TAG: ${{ steps.plan.outputs.commons_tag }}
+        run: |
+          set -euo pipefail
+          versions=()
+          names=()
+          : > linear-release-notes.md
+
+          append_release() {
+            local pkg=$1 display_name=$2 version=$3 tag=$4
+            [[ -n "$version" ]] || return 0
+            versions+=("$tag")
+            names+=("$display_name $version")
+            if [[ -s linear-release-notes.md ]]; then
+              echo >> linear-release-notes.md
+            fi
+            {
+              echo "## $display_name $version"
+              cat "$RUNNER_TEMP/notes-$pkg.md"
+            } >> linear-release-notes.md
+          }
+
+          append_release voice-sdk "React Native Voice SDK" "$VOICE_SDK_VERSION" "$VOICE_SDK_TAG"
+          append_release commons-sdk "React Native Voice Commons SDK" "$COMMONS_SDK_VERSION" "$COMMONS_SDK_TAG"
+
+          LINEAR_VERSION=$(printf '+%s' "${versions[@]}")
+          LINEAR_NAME=$(printf ' + %s' "${names[@]}")
+          {
+            echo "version=${LINEAR_VERSION:1}"
+            echo "name=${LINEAR_NAME:3}"
+            echo 'links<<EOF'
+            if [[ -n "$VOICE_SDK_TAG" ]]; then
+              echo "Voice SDK GitHub Release=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$VOICE_SDK_TAG"
+            fi
+            if [[ -n "$COMMONS_SDK_TAG" ]]; then
+              echo "Commons SDK GitHub Release=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$COMMONS_SDK_TAG"
+            fi
+            echo "Workflow Run=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Sync Linear release
+        uses: linear/linear-release-action@v0
+        with:
+          access_key: ${{ secrets.LINEAR_ACCESS_KEY }}
+          command: sync
+          version: ${{ steps.linear.outputs.version }}
+          name: ${{ steps.linear.outputs.name }}
+          release_notes: linear-release-notes.md
+          links: ${{ steps.linear.outputs.links }}
+
       - name: Create GitHub releases
         env:
           GH_TOKEN: ${{ github.token }}
@@ -126,6 +184,13 @@ jobs:
           }
           create_release voice-sdk "$VOICE_SDK_VERSION"
           create_release commons-sdk "$COMMONS_SDK_VERSION"
+
+      - name: Complete Linear release
+        uses: linear/linear-release-action@v0
+        with:
+          access_key: ${{ secrets.LINEAR_ACCESS_KEY }}
+          command: complete
+          version: ${{ steps.linear.outputs.version }}
 
   publish-voice-sdk:
     name: Publish voice-sdk to npm
