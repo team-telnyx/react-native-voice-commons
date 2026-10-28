@@ -1,15 +1,31 @@
 # CHANGELOG.md
 
-## Unreleased
+## [1.2.0] (2026-10-28)
+
+### Enhancement
+
+- Expose call-quality metrics through `Call.qualityMetrics$`, `currentQualityMetrics`, and the exported metrics and quality-level types.
+- Add automatic active-call recovery through the Voice SDK, including signaling-health monitoring, ICE restart, RTP verification, and reconnect/reattach fallback.
+- Add `iceServers` to credential and token configurations so applications can provide custom STUN/TURN servers; omitted values use the Voice SDK's Telnyx production defaults.
+- Identify Commons signaling as `webrtc-react-native-commons` with the Commons package version while retaining per-client identity isolation and the existing User-Agent format.
 
 ### Dependencies
 
 - Require `react-native-webrtc ^155.0.1` (WebRTC M155), matching the Voice SDK's media dependency. Applications must target iOS 14 or newer; the Android minimum remains API 24.
-- Require `@telnyx/react-native-voice-sdk ^1.1.0` when publishing. This
-  includes the primitive SDK support required by Commons, such as
-  `pushWhenActive`, while staying within the compatible 1.x line.
+- Require `@telnyx/react-native-voice-sdk ^1.2.0` when publishing so Commons uses the matching signaling security, call recovery, metrics, and ICE-server behavior while staying within the compatible 1.x line.
 - Remove the unused direct `expo` dependency. Commons does not require Expo,
   so this avoids installing Expo SDK 53 alongside an application's Expo SDK.
+
+### Security
+
+- Use the Voice SDK's platform-default TLS certificate and hostname validation. On iOS, signaling uses `URLSessionWebSocketTask`; Android retains React Native's OkHttp-backed WebSocket.
+
+### Bug Fixing
+
+- Handle BYE and missed-call pushes that arrive before the incoming WebRTC call exists, dismiss the matching CallKit call, clear pending push state, and show the missed-call notification without treating the original UUID as a collision.
+- Serialize CallKit registration completion with missed-call invalidation so a delayed completion cannot restore an already-ended incoming call; PushKit completion remains exactly once.
+- Keep the active CallKit UUID claimed until WebRTC answering finishes, share concurrent answer work, and reject a second call while another call owns the answering/active slot.
+- Prevent duplicate incoming and reattached-call listeners when the same client-ready callback fires more than once during connection or reconnection.
 
 ## [1.1.1] (2026-09-11)
 

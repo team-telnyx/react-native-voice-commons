@@ -1,6 +1,14 @@
 # CHANGELOG.md
 
-## Unreleased
+## [1.2.0] (2026-10-28)
+
+### Enhancement
+
+- Add automatic active-call recovery with signaling-health checks, ICE restart, RTP verification, and a reconnect/reattach fallback when media does not recover.
+- Add call-quality metrics with periodic WebRTC statistics, MOS estimation, quality-level classification, callbacks, and start/stop/current-metrics APIs.
+- Add `ClientOptions.iceServers` and Telnyx production STUN/TURN defaults, including UDP, TCP, and TLS relay fallbacks for restrictive networks.
+- Identify direct SDK signaling as `webrtc-react-native` with the package version through `mobile_sdk_name` and `mobile_sdk_version` on login and call-control messages.
+- Add opt-in `pushWhenActive` parity with the native iOS SDK. Login sends `push_when_active` and `pn_late_fanout`, and answers include `answered_device_token` when a non-empty PushKit token is configured.
 
 ### Dependencies
 
@@ -14,8 +22,9 @@
 
 - Fix iOS signaling failures reported as `OSStatus error -9837` by using the current system WebSocket implementation.
 - Accept the gateway's canonical `holdState: "active"` unhold response so repeated hold/resume cycles do not leave the call stuck in `HELD`.
-- Add opt-in `pushWhenActive` parity with the native iOS SDK. Login sends `push_when_active` and `pn_late_fanout`, and answers include `answered_device_token` when a non-empty PushKit token is configured.
 - `call.hangup()` now chooses the BYE cause from the call state instead of always sending `USER_BUSY`/17: established calls (`active`, `held`) end with `NORMAL_CLEARING`/16 — a normal clear for the carrier — while pre-answer declines (`new`, `ringing`, `connecting`) keep `USER_BUSY`/17, which tells the platform the call was rejected and stops TeXML INVITE retries. Previously every app-ended hangup of an answered call propagated `Q.850;cause=17` in the carrier-facing BYE, so carriers played a busy/unavailable announcement to the PSTN party after a normal call end (parity with the JS SDK's `state < Active` mapping).
+- Share one in-flight answer operation across concurrent callers so duplicate answer requests cannot race each other.
+- Emit a remote-ended event when a BYE arrives before the incoming `Call` object is created, allowing push and CallKit state to be cleaned up instead of leaving a stale incoming call.
 
 ## [1.0.0](https://www.npmjs.com/package/@telnyx/react-native-voice-sdk/v/1.0.0) (2026-06-14)
 
