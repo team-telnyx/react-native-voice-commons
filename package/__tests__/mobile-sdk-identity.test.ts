@@ -4,6 +4,7 @@ import { createAttachCallMessage, createAttachMessage } from '../lib/messages/at
 import { createAnswerMessage, createInviteMessage } from '../lib/messages/call';
 import { createPasswordLoginMessage, createTokenLoginMessage } from '../lib/messages/login';
 import { DEFAULT_SDK_NAME } from '../lib/env';
+import packageMetadata from '../package.json';
 // VSDK-771: from package/__tests__/ we need two levels up to reach the repo root
 // where react-voice-commons-sdk/ lives (one `..` would land inside package/, which
 // does not contain the commons source). The AFK flag on this import was that
@@ -11,7 +12,10 @@ import { DEFAULT_SDK_NAME } from '../lib/env';
 // which is not a real path; using `../../` lands on the repo root correctly.
 import { REACT_NATIVE_COMMONS_SDK_IDENTITY } from '../../react-voice-commons-sdk/src/internal/sdk-identity';
 
-const coreIdentity = { mobile_sdk_name: 'webrtc-react-native', mobile_sdk_version: '1.1.0' };
+const coreIdentity = {
+  mobile_sdk_name: 'webrtc-react-native',
+  mobile_sdk_version: packageMetadata.version,
+};
 
 describe('mobile SDK identity signaling', () => {
   const expectCoreIdentity = (message: { params: Record<string, unknown> }) => {
@@ -73,7 +77,10 @@ describe('mobile SDK identity signaling', () => {
       name: 'webrtc-react-native-commons',
       version: '2.3.4',
     });
-    expect((core as any).sdkIdentity).toEqual({ name: 'webrtc-react-native', version: '1.1.0' });
+    expect((core as any).sdkIdentity).toEqual({
+      name: 'webrtc-react-native',
+      version: packageMetadata.version,
+    });
   });
 
   it('uses the per-client SDK version in call reports', () => {

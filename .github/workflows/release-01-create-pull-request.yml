@@ -130,6 +130,15 @@ jobs:
           npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
           npm run build
 
+      # Keep every generated release file aligned with the same Prettier rules enforced by
+      # code-quality.yml. The commons-sdk install above already provides the formatter.
+      - name: Format generated release files
+        run: |
+          react-voice-commons-sdk/node_modules/.bin/prettier --write \
+            package/package.json \
+            react-voice-commons-sdk/package.json \
+            "react-voice-commons-sdk/lib/**/*.{js,ts}"
+
       - name: Create release pull request
         uses: peter-evans/create-pull-request@v7
         with:

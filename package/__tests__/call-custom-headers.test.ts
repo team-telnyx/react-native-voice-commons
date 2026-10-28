@@ -2,6 +2,7 @@ import { Call } from '../lib/call';
 import { createAnswerMessage, createHangupRequest } from '../lib/messages/call';
 import { Connection } from '../lib/connection';
 import { Peer } from '../lib/peer';
+import packageMetadata from '../package.json';
 
 // Mock dependencies
 jest.mock('../lib/connection');
@@ -84,7 +85,7 @@ describe('Call Custom Headers', () => {
           sessionId: 'test-session-id',
           customHeaders: undefined,
         },
-        { name: 'webrtc-react-native', version: '1.1.0' }
+        { name: 'webrtc-react-native', version: packageMetadata.version }
       );
     });
 
@@ -111,7 +112,7 @@ describe('Call Custom Headers', () => {
           sessionId: 'test-session-id',
           customHeaders,
         },
-        { name: 'webrtc-react-native', version: '1.1.0' }
+        { name: 'webrtc-react-native', version: packageMetadata.version }
       );
     });
 
@@ -138,7 +139,7 @@ describe('Call Custom Headers', () => {
           pushWhenActive: true,
           pushDeviceToken: 'push-token',
         }),
-        { name: 'webrtc-react-native', version: '1.1.0' }
+        { name: 'webrtc-react-native', version: packageMetadata.version }
       );
     });
 
