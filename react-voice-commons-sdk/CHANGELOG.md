@@ -2,12 +2,33 @@
 
 ## Unreleased
 
+## [1.2.0] (2026-10-28)
+
+### Enhancement
+
+- Expose application-level call-quality metrics with MOS estimation, quality classification, and
+  observable updates from active calls.
+- Add active-call ICE restart and peer-connection recovery through the Voice SDK recovery flow.
+- Expose `iceServers` in `CredentialConfig` and `TokenConfig` and pass custom STUN/TURN servers to
+  the underlying Voice SDK.
+- Identify Commons signaling with the `webrtc-react-native-commons` SDK name and Commons package
+  version.
+
+### Bug Fixing
+
+- Serialize CallKit answer handling, retain the claimed CallKit UUID until the WebRTC answer
+  completes, and reject a second call while another owns the active or answering slot.
+- Prevent duplicate call listeners when client-ready callbacks run more than once during connect
+  and reconnect flows.
+- Handle iOS missed-call push races by dismissing pending CallKit calls when a BYE arrives before
+  the incoming call object and preventing late registration callbacks from restoring ended calls.
+
 ### Dependencies
 
 - Require `react-native-webrtc ^155.0.1` (WebRTC M155), matching the Voice SDK's media dependency. Applications must target iOS 14 or newer; the Android minimum remains API 24.
-- Require `@telnyx/react-native-voice-sdk ^1.1.0` when publishing. This
-  includes the primitive SDK support required by Commons, such as
-  `pushWhenActive`, while staying within the compatible 1.x line.
+- Require `@telnyx/react-native-voice-sdk ^1.2.0` when publishing so Commons receives the matching
+  identity, ICE configuration, call-quality, recovery, and missed-call handling primitives while
+  remaining within the compatible 1.x line.
 - Remove the unused direct `expo` dependency. Commons does not require Expo,
   so this avoids installing Expo SDK 53 alongside an application's Expo SDK.
 

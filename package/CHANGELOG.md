@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## [1.2.0](https://www.npmjs.com/package/@telnyx/react-native-voice-sdk/v/1.2.0) (2026-10-28)
+
+### Enhancement
+
+- Add application-level call-quality metrics with periodic WebRTC statistics, MOS estimation,
+  quality classification, and public accessors for the latest metrics.
+- Add active-call recovery with signaling health probes, ICE restart, media verification,
+  reattach fallback, and relay fallback when VPN candidate evidence requires it.
+- Add the Telnyx STUN/TURN server set as the default ICE configuration and expose
+  `ClientOptions.iceServers` for custom server configuration.
+- Emit the `webrtc-react-native` SDK name and package version on signaling messages while
+  preserving the existing User-Agent behavior.
+
 ### Dependencies
 
 - Upgrade `react-native-webrtc` from the WebRTC M124 line to `^155.0.1` (M155). This aligns the React Native SDK with the current upstream WebRTC milestone and raises the effective minimum iOS deployment target to iOS 14; Android continues to require API 24 or newer.
@@ -13,9 +26,24 @@
 ### Bug Fixing
 
 - Fix iOS signaling failures reported as `OSStatus error -9837` by using the current system WebSocket implementation.
-- Accept the gateway's canonical `holdState: "active"` unhold response so repeated hold/resume cycles do not leave the call stuck in `HELD`.
-- Add opt-in `pushWhenActive` parity with the native iOS SDK. Login sends `push_when_active` and `pn_late_fanout`, and answers include `answered_device_token` when a non-empty PushKit token is configured.
 - `call.hangup()` now chooses the BYE cause from the call state instead of always sending `USER_BUSY`/17: established calls (`active`, `held`) end with `NORMAL_CLEARING`/16 — a normal clear for the carrier — while pre-answer declines (`new`, `ringing`, `connecting`) keep `USER_BUSY`/17, which tells the platform the call was rejected and stops TeXML INVITE retries. Previously every app-ended hangup of an answered call propagated `Q.850;cause=17` in the carrier-facing BYE, so carriers played a busy/unavailable announcement to the PSTN party after a normal call end (parity with the JS SDK's `state < Active` mapping).
+- Serialize concurrent inbound answer attempts and share one answer promise so duplicate CallKit
+  actions cannot answer the same call twice.
+- Handle a remote BYE that arrives before its incoming `Call` object exists, allowing Commons to
+  dismiss pending iOS CallKit calls and clear the matching push state.
+
+## [1.1.0](https://www.npmjs.com/package/@telnyx/react-native-voice-sdk/v/1.1.0) (2026-08-12)
+
+### Enhancement
+
+- Add opt-in `pushWhenActive` parity with the native iOS SDK. Login sends
+  `push_when_active` and `pn_late_fanout`, and answers include `answered_device_token` when a
+  non-empty PushKit token is configured.
+
+### Bug Fixing
+
+- Accept the gateway's canonical `holdState: "active"` unhold response so repeated hold/resume
+  cycles do not leave the call stuck in `HELD`.
 
 ## [1.0.0](https://www.npmjs.com/package/@telnyx/react-native-voice-sdk/v/1.0.0) (2026-06-14)
 
