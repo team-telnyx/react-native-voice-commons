@@ -153,6 +153,30 @@ jobs:
         run: |
           # Switch from local file dependency to published version
           npm run dev:published
+
+          # npm publish can expose package metadata before its tarball is
+          # downloadable. Wait for the exact Voice SDK artifact before
+          # installing Commons, which depends on it.
+          VOICE_SDK_VERSION=$(node -p "require('../package/package.json').version")
+          VOICE_SDK_PACKAGE="@telnyx/react-native-voice-sdk@$VOICE_SDK_VERSION"
+          MAX_ATTEMPTS=80
+
+          for ((attempt = 1; attempt <= MAX_ATTEMPTS; attempt++)); do
+            TARBALL_URL=$(npm view "$VOICE_SDK_PACKAGE" dist.tarball 2>/dev/null || true)
+            if [[ -n "$TARBALL_URL" ]] && curl --fail --silent --show-error --location --output /dev/null "$TARBALL_URL"; then
+              echo "$VOICE_SDK_PACKAGE is available"
+              break
+            fi
+
+            if [[ "$attempt" -eq "$MAX_ATTEMPTS" ]]; then
+              echo "::error::$VOICE_SDK_PACKAGE did not become downloadable within 20 minutes"
+              exit 1
+            fi
+
+            echo "Waiting for $VOICE_SDK_PACKAGE to become downloadable (attempt $attempt/$MAX_ATTEMPTS)"
+            sleep 15
+          done
+
           npm install --legacy-peer-deps
 
       - name: Build
