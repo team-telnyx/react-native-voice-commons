@@ -18,8 +18,6 @@ declare class CallKitCoordinator {
   private static instance;
   private callMap;
   private processingCalls;
-  private activeOrAnsweringCallUUID;
-  private claimActiveCall;
   private endedCalls;
   private connectedCalls;
   private isCallFromPush;
@@ -144,7 +142,6 @@ declare class CallKitCoordinator {
   private getSDKClient;
   private normalizeUUID;
   private actionKey;
-  private releaseActiveCall;
   private selectCall;
   private isSelectedCall;
   private recordPendingSwapAction;
@@ -167,10 +164,6 @@ declare class CallKitCoordinator {
    * This helps prevent premature flag resets during CallKit operations
    */
   hasProcessingCalls(): boolean;
-  /** @internal Exposed for deterministic single-active-call regression tests. */
-  claimActiveCallForTesting(callKitUUID: string): boolean;
-  /** @internal Exposed for deterministic single-active-call regression tests. */
-  releaseActiveCallForTesting(callKitUUID: string): void;
   /**
    * Check if there's currently a call from push notification being processed
    * This helps prevent disconnection during push call handling
