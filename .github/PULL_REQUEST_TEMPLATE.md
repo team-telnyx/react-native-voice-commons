@@ -213,6 +213,9 @@ A is the current call, B is the second incoming call.
 - [ ] A held, B active -> End B -> Resume A -> Verify A has audio
   - [ ] Local hangup
   - [ ] Remote hangup
+- [ ] A held, B active -> End A -> Verify B stays active with two-way audio and working controls
+  - [ ] Local hangup
+  - [ ] Remote hangup
 - [ ] A active -> Receive B -> B hangs up while tapping Hold & Accept -> Verify no ghost B, A can resume
 - [ ] A active -> Receive B -> Answer from system UI and app at once -> Verify only one B connects
 - [ ] A active -> Decline B -> Immediately receive C -> Answer C -> Verify C connects with the right caller
