@@ -176,7 +176,7 @@ jobs:
 
             - [ ] Add a `## [X.Y.Z] (YYYY-MM-DD)` section to the `CHANGELOG.md` of each package being released (`package/CHANGELOG.md` for voice-sdk, `react-voice-commons-sdk/CHANGELOG.md` for commons-sdk), for example by renaming `## Unreleased`.
             - [ ] Wait for `release-pr-check` and the other checks. They start when you push the CHANGELOG commit, because PRs opened with `GITHUB_TOKEN` don't trigger workflows.
-            - [ ] Complete the Application Flow Checklist below on iOS and Android; record tested builds, results and evidence, and resolve or explicitly document failures, blocked checks and N/A reasons before release signoff.
+            - [ ] Complete the Application Flow Checklist below on iOS and Android.
             - [ ] After merging, run `release-03-create-gh-release` with the same versions (voice-sdk: `${{ steps.plan.outputs.voice_version || 'blank' }}`, commons-sdk: `${{ steps.plan.outputs.commons_version || 'blank' }}`).
 
             ${{ steps.qa.outputs.body }}

@@ -34,13 +34,11 @@ Please attach the screenshots if required
 
 ## Application Flow Checklist
 
-For releases, run this checklist on physical iOS and Android devices using the React Native demo/integration (native SDK testing alone is not sufficient). Record each platform's results separately below. Check an item only after all applicable runs pass; record FAIL, BLOCKED or N/A with a reason and linked evidence instead of checking an untested item. For feature PRs, record which scenarios were tested and why others are out of scope.
+Run on physical iOS and Android devices using the React Native demo. Mark anything not tested as N/A with a reason.
 
-- Packages/build tested (voice-sdk and commons-sdk versions):
-- Tester/date:
-- iOS device/OS, results and evidence:
-- Android device/OS, results and evidence:
-- Failures, blocked prerequisites or N/A reasons:
+- Versions tested (voice-sdk / commons-sdk):
+- iOS device / OS:
+- Android device / OS:
 
 ### 🧪 Logged in with Token
 
@@ -203,21 +201,23 @@ For releases, run this checklist on physical iOS and Android devices using the R
 
 ---
 
-### 📞 Call waiting and overlapping actions
+### 📞 Call Waiting Scenarios
 
-Use two independent callers: A is the existing call, B is the waiting call and C is a subsequent call. Repeat with incoming and outgoing A, and apply the existing auth/network/app-state coverage where relevant. Use the supported iOS CallKit or Android notification/in-app controls; record unsupported actions as N/A with a reason. In every connected case, verify the caller identity and actual two-way audio, not just an ACTIVE/HELD label.
+A is the current call, B is the second incoming call.
 
-- [ ] **Waiting-call choices:** With A active, receive B and separately try Hold & Accept, End & Accept and Decline. Only the intended call ends or holds; B connects when accepted and A remains usable when B is declined.
-- [ ] **Already-held / pending hold:** Answer B with A already held, then repeat by tapping Hold & Accept immediately when B arrives. B is not blocked by A's presence or pending hold; A stays held and B has two-way audio.
-- [ ] **Repeated swaps and surviving call:** With A held and B active, swap both ways three times. End A and B in separate runs, using both local and remote hangup. Each selected call regains audio; the survivor has correct controls and can resume.
-- [ ] **Caller cancels during acceptance:** Have B hang up just before/after Hold & Accept, including while A is being held. No ghost B remains; newly held A is restored or has a working Resume action. Repeat with A initially held: it must not resume unexpectedly.
-- [ ] **Hold / answer rejection:** Using a documented QA failure setup, reject the hold request, then separately fail B's answer after A was held. Failure is visible, A is recoverable, and waiting choices/retry remain available while B is ringing. End & Accept must not falsely restore an ended A.
-- [ ] **Duplicate answer entry points:** Answer B from system UI/notification while opening and tapping Answer in the app; also double-tap Answer. Only one B/audio path connects and A is not unintentionally ended.
-- [ ] **Old call versus new call:** Cancel/decline B while ringing/connecting, immediately call as C and answer quickly. Delayed B callbacks/timeouts must not answer, dismiss or end C; C shows the correct caller and has audio.
-- [ ] **Background / locked transitions:** With A active, accept and decline B from background/locked state and while reopening the app. System and React Native UI agree on both calls, with no duplicate incoming screen or unrelated teardown.
-- [ ] **Audio controls across swaps:** Change mute, speaker and a supported Bluetooth/headset route during A/B swaps, then end B and return to A. Controls affect the intended call, with no one-way audio or held-call microphone leakage.
-- [ ] **Network change during transition:** Switch Wi-Fi/cellular or briefly drop connectivity during hold/answer/swap, then recover. No stuck/ghost call or ended call returns; the survivor recovers audio or ends with clear feedback.
-- [ ] **React Native card selection:** Accept B from the waiting-call card; repeat while B cancels or acceptance fails. Successful B is selected, but a late completion never selects ended/failed B. A remains selectable and recoverable if it survives.
-- [ ] **Cold-start push overlap:** Start the app from B's push, cancel B and immediately call as C; also duplicate the same push with the approved QA tool. No duplicate incoming UI or stale B answer reaches C. Run through the React Native integration on each OS.
-
-For rejected requests, duplicate pushes or controlled delays, document the QA tool/setup used. If the required setup is unavailable, record BLOCKED and the missing prerequisite; mocked/unit tests are not a manual device pass.
+- [ ] A active -> Receive B -> Hold & Accept -> Verify A held, B active with audio
+- [ ] A active -> Receive B -> End & Accept -> Verify A ended, B active with audio
+- [ ] A active -> Receive B -> Decline -> Verify B ended, A still active with audio
+- [ ] A held -> Receive B -> Answer -> Verify A stays held, B active with audio
+- [ ] A held, B active -> Swap calls a few times -> Verify audio follows the active call
+- [ ] A held, B active -> End B -> Resume A -> Verify A has audio
+  - [ ] Local hangup
+  - [ ] Remote hangup
+- [ ] A active -> Receive B -> B hangs up while tapping Hold & Accept -> Verify no ghost B, A can resume
+- [ ] A active -> Receive B -> Answer from system UI and app at once -> Verify only one B connects
+- [ ] A active -> Decline B -> Immediately receive C -> Answer C -> Verify C connects with the right caller
+- [ ] A active -> Receive B -> Accept or Decline
+  - [ ] App Background
+  - [ ] Screen Locked
+- [ ] A held, B active -> Toggle mute/speaker -> Swap calls -> Verify controls apply to the active call
+- [ ] A active -> Hold & Accept B -> Drop network -> Verify calls recover or end cleanly
