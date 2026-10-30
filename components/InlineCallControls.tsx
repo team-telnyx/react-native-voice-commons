@@ -92,6 +92,9 @@ export function InlineCallControls({
     if (!waitingCall || !ongoingCall || isHandlingWaitingCall) return;
 
     setIsHandlingWaitingCall(true);
+    // Set only when this action put the ongoing call on hold, so a failed accept
+    // resumes it. A call the user had already held stays held.
+    let heldOngoingCall = false;
     try {
       if (action === 'decline') {
         await waitingCall.hangup();
@@ -102,12 +105,23 @@ export function InlineCallControls({
         await ongoingCall.hangup();
       } else if (ongoingCall.currentState === TelnyxCallState.ACTIVE) {
         await ongoingCall.hold();
+        heldOngoingCall = true;
+      }
+      // The caller may have hung up while the ongoing call was being held or ended.
+      if (waitingCall.currentState !== TelnyxCallState.RINGING) {
+        throw new Error('The incoming call is no longer ringing');
       }
       await waitingCall.answer();
-      onSelectCall(waitingCall);
+      if (isVisibleCallState(waitingCall.currentState)) {
+        onSelectCall(waitingCall);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown call-waiting error';
-      Alert.alert(action === 'decline' ? 'Decline Failed' : 'Accept Failed', message);
+      const resumeFailure = heldOngoingCall ? await resumeAfterFailedAccept(ongoingCall) : null;
+      Alert.alert(
+        action === 'decline' ? 'Decline Failed' : 'Accept Failed',
+        resumeFailure ? `${message}\n\n${resumeFailure}` : message
+      );
     } finally {
       setIsHandlingWaitingCall(false);
     }
@@ -325,6 +339,23 @@ export function InlineCallControls({
       )}
     </View>
   );
+}
+
+/**
+ * Resume a call that Hold & Accept put on hold when the waiting call could not be
+ * answered. Returns a message when the call stays on hold, or null otherwise.
+ */
+async function resumeAfterFailedAccept(heldCall: Call): Promise<string | null> {
+  // Skip when the call ended or another action (such as a swap) already changed it.
+  if (heldCall.currentState !== TelnyxCallState.HELD) return null;
+
+  try {
+    await heldCall.resume();
+    return null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown resume error';
+    return `The other call is still on hold: ${message}`;
+  }
 }
 
 function callDisplayName(call: Call | null, fallback: string) {
