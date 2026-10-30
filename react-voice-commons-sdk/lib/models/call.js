@@ -281,7 +281,10 @@ class Call {
         );
         if (callKitCoordinator.isAvailable()) {
           console.log('Call: Using CallKit coordinator to answer call (iOS)');
-          await callKitCoordinator.answerCallFromUI(this._telnyxCall);
+          const answered = await callKitCoordinator.answerCallFromUI(this._telnyxCall);
+          if (!answered) {
+            throw new Error('CallKit failed to answer call');
+          }
           return;
         }
       }

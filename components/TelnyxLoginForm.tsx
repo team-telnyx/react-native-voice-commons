@@ -706,6 +706,7 @@ export const TelnyxLoginForm: React.FC<TelnyxLoginFormProps> = ({
                   onAnswer={handleAnswerCall}
                   onEnd={handleEndCall}
                   onSwap={(heldCall) => voipClient.swapCalls(heldCall.callId)}
+                  onSelectCall={(call) => voipClient.setActiveCall(call.callId)}
                 />
               ) : (
                 <TouchableOpacity

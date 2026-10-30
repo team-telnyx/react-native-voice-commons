@@ -352,6 +352,7 @@ export const TelnyxDialer: React.FC<TelnyxDialerProps> = ({ debug = false }) => 
               onAnswer={handleAnswerCall}
               onEnd={handleEndCall}
               onSwap={(heldCall) => voipClient.swapCalls(heldCall.callId)}
+              onSelectCall={(call) => voipClient.setActiveCall(call.callId)}
             />
           ) : (
             <TouchableOpacity
