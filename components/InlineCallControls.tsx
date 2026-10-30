@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { ArrowLeftRight, Pause, Phone, PhoneOff, Play } from 'lucide-react-native';
+import { ArrowLeftRight, Pause, Phone, PhoneIncoming, PhoneOff, Play } from 'lucide-react-native';
 import { Call, TelnyxCallState } from '../react-voice-commons-sdk/src';
 import { demoColors, radii, spacing } from './demoTheme';
 
@@ -13,6 +13,7 @@ type InlineCallControlsProps = {
   onAnswer: () => void;
   onEnd: () => void;
   onSwap: (heldCall: Call) => Promise<void>;
+  onSelectCall: (call: Call) => void;
 };
 
 export function InlineCallControls({
@@ -24,16 +25,34 @@ export function InlineCallControls({
   onAnswer,
   onEnd,
   onSwap,
+  onSelectCall,
 }: InlineCallControlsProps) {
   const [isChangingHold, setIsChangingHold] = useState(false);
   const [swappingCallId, setSwappingCallId] = useState<string | null>(null);
+  const [isHandlingWaitingCall, setIsHandlingWaitingCall] = useState(false);
+  // Call waiting: an incoming call rings while another call is active or held.
+  const waitingCall = calls.find(
+    (call) => call.isIncoming && call.currentState === TelnyxCallState.RINGING
+  );
+  const ongoingCall = waitingCall
+    ? calls.find(
+        (call) =>
+          call.callId !== waitingCall.callId &&
+          (call.currentState === TelnyxCallState.ACTIVE ||
+            call.currentState === TelnyxCallState.HELD)
+      )
+    : undefined;
+  const isCallWaiting = !!waitingCall && !!ongoingCall;
   const showIncomingActions = activeCall?.isIncoming && activeCallState === TelnyxCallState.RINGING;
   const isOnHold = activeCallState === TelnyxCallState.HELD;
   const canChangeHold =
     !!activeCall &&
     (activeCallState === TelnyxCallState.ACTIVE || activeCallState === TelnyxCallState.HELD);
   const otherCalls = calls.filter(
-    (call) => call.callId !== activeCall?.callId && isVisibleCallState(call.currentState)
+    (call) =>
+      call.callId !== activeCall?.callId &&
+      !(isCallWaiting && call.callId === waitingCall?.callId) &&
+      isVisibleCallState(call.currentState)
   );
   const stateLabel = isStartingCall ? 'Connecting' : callStateLabel(activeCallState);
 
@@ -66,6 +85,31 @@ export function InlineCallControls({
       Alert.alert('Swap Failed', message);
     } finally {
       setSwappingCallId(null);
+    }
+  };
+
+  const handleWaitingCall = async (action: 'decline' | 'endAndAccept' | 'holdAndAccept') => {
+    if (!waitingCall || !ongoingCall || isHandlingWaitingCall) return;
+
+    setIsHandlingWaitingCall(true);
+    try {
+      if (action === 'decline') {
+        await waitingCall.hangup();
+        return;
+      }
+
+      if (action === 'endAndAccept') {
+        await ongoingCall.hangup();
+      } else if (ongoingCall.currentState === TelnyxCallState.ACTIVE) {
+        await ongoingCall.hold();
+      }
+      await waitingCall.answer();
+      onSelectCall(waitingCall);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown call-waiting error';
+      Alert.alert(action === 'decline' ? 'Decline Failed' : 'Accept Failed', message);
+    } finally {
+      setIsHandlingWaitingCall(false);
     }
   };
 
@@ -109,7 +153,72 @@ export function InlineCallControls({
         </View>
       )}
 
-      {showIncomingActions ? (
+      {isCallWaiting && waitingCall ? (
+        <View style={styles.waitingCall} testID="callWaitingView">
+          <View style={styles.waitingCallHeader}>
+            <PhoneIncoming size={18} color={demoColors.ringing} pointerEvents="none" />
+            <View style={styles.otherCallIdentity}>
+              <Text style={styles.waitingCallTitle}>Incoming call</Text>
+              <Text style={styles.otherCallName} numberOfLines={1}>
+                {callDisplayName(waitingCall, '')}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.waitingCallActions}>
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.waitingActionButton,
+                styles.endButton,
+                isHandlingWaitingCall && styles.disabled,
+              ]}
+              onPress={() => handleWaitingCall('decline')}
+              disabled={isHandlingWaitingCall}
+              testID="callWaitingDecline"
+              accessibilityRole="button"
+              accessibilityLabel="Decline incoming call"
+              activeOpacity={0.75}
+            >
+              <PhoneOff size={20} color={demoColors.white} pointerEvents="none" />
+              <Text style={styles.lightActionText}>Decline</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.waitingActionButton,
+                styles.holdButton,
+                isHandlingWaitingCall && styles.disabled,
+              ]}
+              onPress={() => handleWaitingCall('endAndAccept')}
+              disabled={isHandlingWaitingCall}
+              testID="callWaitingEndAndAccept"
+              accessibilityRole="button"
+              accessibilityLabel="End current call and accept incoming call"
+              activeOpacity={0.75}
+            >
+              <PhoneOff size={20} color={demoColors.text} pointerEvents="none" />
+              <Text style={styles.darkActionText}>End & Accept</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.waitingActionButton,
+                styles.answerButton,
+                isHandlingWaitingCall && styles.disabled,
+              ]}
+              onPress={() => handleWaitingCall('holdAndAccept')}
+              disabled={isHandlingWaitingCall}
+              testID="callWaitingHoldAndAccept"
+              accessibilityRole="button"
+              accessibilityLabel="Hold current call and accept incoming call"
+              activeOpacity={0.75}
+            >
+              <Pause size={20} color={demoColors.text} pointerEvents="none" />
+              <Text style={styles.darkActionText}>Hold & Accept</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : showIncomingActions ? (
         <View style={styles.callActions}>
           <TouchableOpacity
             style={[styles.actionButton, styles.endButton]}
@@ -460,6 +569,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.xs,
     paddingHorizontal: spacing.sm,
+  },
+  waitingCall: {
+    borderTopWidth: 1,
+    borderTopColor: demoColors.outline,
+    paddingTop: spacing.sm,
+    gap: spacing.sm,
+  },
+  waitingCallHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  waitingCallTitle: {
+    color: demoColors.ringing,
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  waitingCallActions: {
+    gap: spacing.sm,
+  },
+  waitingActionButton: {
+    flex: 0,
+    width: '100%',
   },
   swapButtonText: {
     color: demoColors.text,
