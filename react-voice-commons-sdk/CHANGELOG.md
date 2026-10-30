@@ -1,5 +1,12 @@
 # CHANGELOG.md
 
+## [1.2.1] (2026-10-30)
+
+### Bug Fixing
+
+- Restore iOS call waiting. In 1.2.0, a second call was rejected while another call was active or being answered, so Hold & Accept and End & Accept did nothing. A second call can be answered again, and answering the same call twice is still ignored.
+- `Call.answer()` now rejects on iOS when CallKit fails to answer the call, matching `hold()` and `resume()`. It previously resolved without answering.
+
 ## [1.2.0] (2026-10-28)
 
 ### Enhancement
