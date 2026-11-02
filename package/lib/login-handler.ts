@@ -78,7 +78,10 @@ export class LoginHandler {
     console.log('[LoginHandler] Set from push flag to:', fromPush);
   }
 
-  public login = async (options: ClientOptions): Promise<string | null> => {
+  public login = async (
+    options: ClientOptions,
+    onSessionId?: (sessionId: string) => void
+  ): Promise<string | null> => {
     // Ensure sessid is loaded before creating login message
     await this.loadPersistedSessionId();
 
@@ -93,6 +96,7 @@ export class LoginHandler {
 
     // Store the sessid from login response for future use
     this.lastSessionId = resp.result.sessid;
+    onSessionId?.(resp.result.sessid);
     log.debug('[LoginHandler] Stored sessid from login response:', this.lastSessionId);
 
     // Persist to AsyncStorage for future TelnyxRTC instances
