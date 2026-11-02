@@ -97,12 +97,23 @@ export class Connection extends EventEmitter<ConnectionEvents> {
     });
 
     this.socket.onClose(() => {
+      // TODO: Track an explicit close reason instead of inferring intent from `isClosed`.
+      // `close()` marks the Connection closed before asking the transport to
+      // close. The iOS URLSession adapter completes that close synchronously,
+      // so without this guard an intentional teardown is reported as an
+      // unexpected socket failure. During network recovery that bubbles up as
+      // `telnyx.client.error`, causing Commons to replace the client that owns
+      // the pending call reattach.
+      const closedIntentionally = this.isClosed;
+
       log.debug('[Connection]: WebSocket connection closed');
       this.isClosed = true;
       this.isSocketConnected = false;
       this.rejectPendingTransactions(new Error('Connection closed'));
       this.messageQueue = [];
-      this.emitConnectionClose();
+      if (!closedIntentionally) {
+        this.emitConnectionClose();
+      }
     });
 
     this.socket.onMessage((message: string) => {

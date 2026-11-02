@@ -948,7 +948,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       '[TelnyxRTC] Login will include attach_call and sessid (if available) for reliable reconnection'
     );
 
-    this.sessionId = await this.loginHandler.login(this.options);
+    this.sessionId = await this.loginHandler.login(this.options, (sessionId) => {
+      if (this.connectionGeneration === connectionGeneration) {
+        this.sessionId = sessionId;
+      }
+    });
     this.throwIfConnectCanceled(connectionGeneration);
     if (!this.sessionId) {
       log.error('Login failed. Please check your credentials and try again.');
