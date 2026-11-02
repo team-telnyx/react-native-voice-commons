@@ -38,10 +38,15 @@ describe('Connection teardown', () => {
     };
   });
 
-  it('rejects pending sendAndWait promises on explicit close', async () => {
+  it('does not emit a remote close when the transport closes synchronously during explicit close', async () => {
     const { Connection } = require('../lib/connection.ts') as typeof import('../lib/connection');
     const connection = new Connection();
     const closeListener = jest.fn();
+
+    // The iOS URLSession transport invokes its close callback synchronously
+    // from close(). An intentional recovery teardown must not escape as a
+    // remote socket close / client error.
+    mockSocket.close.mockImplementationOnce(() => emitClose());
 
     connection.addListener('telnyx.socket.close', closeListener);
 
