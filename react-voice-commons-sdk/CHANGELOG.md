@@ -1,5 +1,11 @@
 # CHANGELOG.md
 
+## [1.2.2-beta.1] (2026-11-03)
+
+### Dependencies
+
+- Publish against `@telnyx/react-native-voice-sdk ^1.2.1-beta.1` for beta validation of the iOS signaling reconnect and call-reattach fixes. This release contains no Commons runtime code changes.
+
 ## [1.2.1] (2026-10-30)
 
 ### Bug Fixing

@@ -1,5 +1,12 @@
 # CHANGELOG.md
 
+## [1.2.1-beta.1] (2026-11-03)
+
+### Bug Fixing
+
+- Preserve active calls on iOS after a brief network loss by treating the signaling socket close initiated during reconnection as an intentional teardown. This prevents a terminal client error from causing Commons to replace the client that owns the pending call reattach.
+- Publish the login session ID immediately after the successful login response, before waiting for client readiness and gateway state, so reconnect/reattach can use it without racing the remainder of login.
+
 ## [1.2.0] (2026-10-28)
 
 ### Enhancement
