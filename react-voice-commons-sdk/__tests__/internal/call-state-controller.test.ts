@@ -16,6 +16,7 @@ jest.mock('../../src/callkit/callkit-coordinator', () => ({
 jest.mock('../../src/internal/voice-pn-bridge', () => ({
   VoicePnBridge: {
     clearPendingVoipPush: jest.fn(() => Promise.resolve()),
+    clearPendingVoipPushIfMatches: jest.fn(() => Promise.resolve(true)),
     endCall: jest.fn(() => Promise.resolve()),
   },
 }));

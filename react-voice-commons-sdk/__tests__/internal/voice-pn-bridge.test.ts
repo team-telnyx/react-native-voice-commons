@@ -116,3 +116,30 @@ describe('VoicePnBridge speaker controls', () => {
     });
   });
 });
+
+describe('VoicePnBridge pending push cleanup', () => {
+  const loadBridge = async (clearPendingVoipPushIfMatches: jest.Mock) => {
+    jest.resetModules();
+    const { NativeModules } = require('react-native');
+    NativeModules.VoicePnBridge = { clearPendingVoipPushIfMatches };
+
+    const { VoicePnBridge } = await import('../../src/internal/voice-pn-bridge');
+    return VoicePnBridge;
+  };
+
+  it('asks native to clear the push only if it matches', async () => {
+    const nativeClear = jest.fn().mockResolvedValue(false);
+    const VoicePnBridge = await loadBridge(nativeClear);
+
+    await expect(VoicePnBridge.clearPendingVoipPushIfMatches('callkit-a')).resolves.toBe(false);
+    expect(nativeClear).toHaveBeenCalledWith('callkit-a');
+  });
+
+  it('reports nothing cleared when native fails', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    const VoicePnBridge = await loadBridge(jest.fn().mockRejectedValue(new Error('native failed')));
+
+    await expect(VoicePnBridge.clearPendingVoipPushIfMatches('callkit-a')).resolves.toBe(false);
+    jest.restoreAllMocks();
+  });
+});

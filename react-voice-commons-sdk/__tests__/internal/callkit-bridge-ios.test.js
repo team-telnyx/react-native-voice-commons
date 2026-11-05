@@ -235,6 +235,20 @@ describe('iOS CallKitBridge PushKit watchdog handling', () => {
 });
 
 describe('iOS CallKitBridge call waiting contract', () => {
+  it('checks and clears a pending VoIP push as one locked step', () => {
+    const clear = extractFunction('func clearPendingVoipPush(ifMatches callId: String)');
+    const write = extractFunction('fileprivate func writePendingVoipPush');
+
+    expect(clear).toContain('pendingVoipPushLock.lock()');
+    expect(clear.indexOf('caseInsensitiveCompare')).toBeLessThan(
+      clear.indexOf('removeObject(forKey: "pending_voip_push")')
+    );
+    expect(write).toContain('pendingVoipPushLock.lock()');
+    // Every write must take the lock, or a push could land between the check and the delete.
+    expect(swiftSource.match(/\.set\([^\n]*forKey: "pending_voip_push"\)/g)).toHaveLength(1);
+    expect(write).toContain('forKey: "pending_voip_push"');
+  });
+
   it('allows two one-call groups and advertises holding', () => {
     expect(swiftSource).toContain('configuration.maximumCallGroups = 2');
     expect(swiftSource).toContain('configuration.maximumCallsPerCallGroup = 1');

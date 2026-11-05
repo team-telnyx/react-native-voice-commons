@@ -1093,29 +1093,9 @@ class CallKitCoordinator {
   }
 
   private async clearMatchingPendingVoipPush(callKitUUID: string): Promise<void> {
-    try {
-      const pendingPushJson = await VoicePnBridge.getPendingVoipPush();
-      if (!pendingPushJson) {
-        return;
-      }
-
-      const pendingPush = JSON.parse(pendingPushJson);
-      const pendingCallId =
-        pendingPush?.payload?.metadata?.call_id ??
-        pendingPush?.payload?.call_id ??
-        pendingPush?.metadata?.call_id ??
-        pendingPush?.call_id;
-
-      // A push without a call ID can't belong to a different call, so it's safe to clear too.
-      if (
-        typeof pendingCallId !== 'string' ||
-        this.normalizeUUID(pendingCallId) === this.normalizeUUID(callKitUUID)
-      ) {
-        await VoicePnBridge.clearPendingVoipPush();
-        console.log('CallKitCoordinator: Cleared pending VoIP push', { callKitUUID });
-      }
-    } catch (error) {
-      console.warn('CallKitCoordinator: Failed to clear matching pending VoIP push', error);
+    const cleared = await VoicePnBridge.clearPendingVoipPushIfMatches(callKitUUID);
+    if (cleared) {
+      console.log('CallKitCoordinator: Cleared pending VoIP push', { callKitUUID });
     }
   }
 

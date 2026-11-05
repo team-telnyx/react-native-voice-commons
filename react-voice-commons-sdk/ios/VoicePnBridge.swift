@@ -72,6 +72,13 @@ class VoicePnBridge: NSObject {
     }
     
     @objc
+    func clearPendingVoipPushIfMatches(_ callId: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        let cleared = TelnyxCallKitManager.shared.clearPendingVoipPush(ifMatches: callId)
+        NSLog("[VoicePnBridge] clearPendingVoipPushIfMatches called. callId=\(callId), cleared=\(cleared)")
+        resolve(cleared)
+    }
+
+    @objc
     func getPendingCallKitAnswer(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         let answer = UserDefaults.standard.string(forKey: "pending_callkit_answer")
         NSLog("[VoicePnBridge] getPendingCallKitAnswer - answer: \(answer ?? "nil")")

@@ -12,6 +12,7 @@ jest.mock('../../src/internal/voice-pn-bridge', () => ({
   VoicePnBridge: {
     getPendingVoipPush: jest.fn().mockResolvedValue(null),
     clearPendingVoipPush: jest.fn().mockResolvedValue(undefined),
+    clearPendingVoipPushIfMatches: jest.fn().mockResolvedValue(true),
   },
 }));
 

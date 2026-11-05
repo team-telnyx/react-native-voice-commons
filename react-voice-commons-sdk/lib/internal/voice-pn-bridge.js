@@ -200,6 +200,19 @@ class VoicePnBridge {
     }
   }
   /**
+   * Clear pending VoIP push data only if it still belongs to this call (iOS only).
+   * Native checks and deletes in one step, so a newer push for another call survives.
+   */
+  static async clearPendingVoipPushIfMatches(callId) {
+    if (react_native_1.Platform.OS !== 'ios') return false;
+    try {
+      return await NativeBridge.clearPendingVoipPushIfMatches(callId);
+    } catch (error) {
+      console.error('VoicePnBridge: Error clearing matching pending VoIP push:', error);
+      return false;
+    }
+  }
+  /**
    * Get pending VoIP action from native storage (iOS only)
    */
   static async getPendingVoipAction() {

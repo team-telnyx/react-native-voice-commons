@@ -22,6 +22,10 @@ RCT_EXTERN_METHOD(getPendingVoipPush:(RCTPromiseResolveBlock)resolve
 RCT_EXTERN_METHOD(clearPendingVoipPush:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(clearPendingVoipPushIfMatches:(NSString *)callId
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 RCT_EXTERN_METHOD(getPendingCallKitAnswer:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
