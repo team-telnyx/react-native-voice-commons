@@ -1,4 +1,10 @@
-import { NativeModules, DeviceEventEmitter, EmitterSubscription, Platform } from 'react-native';
+import {
+  NativeModules,
+  NativeEventEmitter,
+  DeviceEventEmitter,
+  EmitterSubscription,
+  Platform,
+} from 'react-native';
 
 export interface CallActionEvent {
   action: string;
@@ -353,6 +359,25 @@ export class VoicePnBridge {
     // the OS, Bluetooth, wired accessories, or the active call session.
     const enabled = await VoicePnBridge.isSpeakerEnabled();
     return VoicePnBridge.setSpeakerEnabled(!enabled);
+  }
+
+  /**
+   * iOS: Listen for call audio route changes, including those made from the CallKit screen or by
+   * connecting an accessory. Does nothing on other platforms.
+   *
+   * @returns A function that removes the listener.
+   */
+  static addSpeakerStateListener(listener: (enabled: boolean) => void): () => void {
+    const { CallKitBridge } = NativeModules;
+    if (Platform.OS !== 'ios' || !CallKitBridge) {
+      return () => {};
+    }
+
+    const subscription = new NativeEventEmitter(CallKitBridge).addListener(
+      'AudioRouteChanged',
+      (event: { isSpeakerEnabled: boolean }) => listener(event.isSpeakerEnabled)
+    );
+    return () => subscription.remove();
   }
 
   /**

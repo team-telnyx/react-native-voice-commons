@@ -279,6 +279,23 @@ class VoicePnBridge {
     return VoicePnBridge.setSpeakerEnabled(!enabled);
   }
   /**
+   * iOS: Listen for call audio route changes, including those made from the CallKit screen or by
+   * connecting an accessory. Does nothing on other platforms.
+   *
+   * @returns A function that removes the listener.
+   */
+  static addSpeakerStateListener(listener) {
+    const { CallKitBridge } = react_native_1.NativeModules;
+    if (react_native_1.Platform.OS !== 'ios' || !CallKitBridge) {
+      return () => {};
+    }
+    const subscription = new react_native_1.NativeEventEmitter(CallKitBridge).addListener(
+      'AudioRouteChanged',
+      (event) => listener(event.isSpeakerEnabled)
+    );
+    return () => subscription.remove();
+  }
+  /**
    * Android → React Native: Listen for immediate call action events from notification buttons
    * Use this for active calls where immediate response is needed (e.g., ending ongoing calls)
    */

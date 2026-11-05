@@ -152,6 +152,13 @@ export declare class VoicePnBridge {
    */
   static toggleSpeaker(): Promise<boolean>;
   /**
+   * iOS: Listen for call audio route changes, including those made from the CallKit screen or by
+   * connecting an accessory. Does nothing on other platforms.
+   *
+   * @returns A function that removes the listener.
+   */
+  static addSpeakerStateListener(listener: (enabled: boolean) => void): () => void;
+  /**
    * Android → React Native: Listen for immediate call action events from notification buttons
    * Use this for active calls where immediate response is needed (e.g., ending ongoing calls)
    */

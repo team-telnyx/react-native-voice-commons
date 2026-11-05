@@ -72,4 +72,47 @@ describe('VoicePnBridge speaker controls', () => {
     await expect(VoicePnBridge.toggleSpeaker()).rejects.toThrow('native toggle read failed');
     expect(nativeBridge.setSpeakerEnabled).not.toHaveBeenCalled();
   });
+
+  describe('addSpeakerStateListener', () => {
+    const loadWithEmitter = async () => {
+      const loaded = await loadBridge();
+      const reactNative = require('react-native');
+      const remove = jest.fn();
+      const addListener = jest.fn(() => ({ remove }));
+      reactNative.NativeEventEmitter.mockImplementation(() => ({ addListener }));
+      reactNative.NativeModules.CallKitBridge = {};
+      return { ...loaded, reactNative, addListener, remove };
+    };
+
+    it('forwards native route changes and removes the subscription', async () => {
+      const { VoicePnBridge, addListener, remove } = await loadWithEmitter();
+      const listener = jest.fn();
+
+      const unsubscribe = VoicePnBridge.addSpeakerStateListener(listener);
+      const [eventName, nativeHandler] = addListener.mock.calls[0] as unknown as [
+        string,
+        (event: { isSpeakerEnabled: boolean }) => void,
+      ];
+      nativeHandler({ isSpeakerEnabled: true });
+
+      expect(eventName).toBe('AudioRouteChanged');
+      expect(listener).toHaveBeenCalledWith(true);
+
+      unsubscribe();
+      expect(remove).toHaveBeenCalledTimes(1);
+    });
+
+    it('does nothing on Android', async () => {
+      const { VoicePnBridge, reactNative, addListener } = await loadWithEmitter();
+      reactNative.Platform.OS = 'android';
+
+      try {
+        const unsubscribe = VoicePnBridge.addSpeakerStateListener(jest.fn());
+        unsubscribe();
+        expect(addListener).not.toHaveBeenCalled();
+      } finally {
+        reactNative.Platform.OS = 'ios';
+      }
+    });
+  });
 });

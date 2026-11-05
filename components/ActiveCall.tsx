@@ -43,9 +43,12 @@ export function ActiveCall({ call }: Props) {
   }, [call]);
 
   useEffect(() => {
+    const removeSpeakerListener = VoicePnBridge.addSpeakerStateListener(setIsSpeakerOn);
     VoicePnBridge.isSpeakerEnabled()
       .then(setIsSpeakerOn)
       .catch(() => setIsSpeakerOn(false));
+
+    return removeSpeakerListener;
   }, [call]);
 
   if (call.currentState !== TelnyxCallState.ACTIVE && call.currentState !== TelnyxCallState.HELD) {
