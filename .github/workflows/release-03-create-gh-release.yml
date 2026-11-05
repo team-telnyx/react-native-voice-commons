@@ -14,6 +14,8 @@
 #
 # Uses GITHUB_TOKEN. Releases created with it don't trigger publish.yml's release
 # event, so publish.yml is called directly and still uses npm trusted publishing.
+# Requires LINEAR_ACCESS_KEY: the shared React Native Linear pipeline access key.
+# Linear completion confirms GitHub releases, not the downstream npm publish jobs.
 name: release-03-create-gh-release
 
 on:
@@ -102,6 +104,43 @@ jobs:
             scripts/release/release_package.sh notes commons-sdk "$COMMONS_SDK_VERSION" > "$RUNNER_TEMP/notes-commons-sdk.md"
           fi
 
+      - name: Prepare Linear release notes
+        id: linear-release
+        env:
+          VOICE_SDK_VERSION: ${{ steps.plan.outputs.voice_version }}
+          COMMONS_SDK_VERSION: ${{ steps.plan.outputs.commons_version }}
+        run: |
+          set -euo pipefail
+          # The shared RN pipeline follows Commons when selected, otherwise core.
+          echo "version=${COMMONS_SDK_VERSION:-$VOICE_SDK_VERSION}" >> "$GITHUB_OUTPUT"
+          notes="$RUNNER_TEMP/notes-linear-release.md"
+          : > "$notes"
+          if [[ -n "$VOICE_SDK_VERSION" ]]; then
+            printf '## @telnyx/react-native-voice-sdk %s\n\n' "$VOICE_SDK_VERSION" >> "$notes"
+            cat "$RUNNER_TEMP/notes-voice-sdk.md" >> "$notes"
+            printf '\n\n' >> "$notes"
+            echo "voice_link=Voice SDK GitHub Release=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/voice-sdk-v$VOICE_SDK_VERSION" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ -n "$COMMONS_SDK_VERSION" ]]; then
+            printf '## @telnyx/react-voice-commons-sdk %s\n\n' "$COMMONS_SDK_VERSION" >> "$notes"
+            cat "$RUNNER_TEMP/notes-commons-sdk.md" >> "$notes"
+            printf '\n' >> "$notes"
+            echo "commons_link=Commons GitHub Release=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/commons-sdk-v$COMMONS_SDK_VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync Linear release
+        uses: linear/linear-release-action@v0
+        with:
+          access_key: ${{ secrets.LINEAR_ACCESS_KEY }}
+          command: sync
+          version: ${{ steps.linear-release.outputs.version }}
+          name: React Native SDK ${{ steps.linear-release.outputs.version }}
+          release_notes: ${{ runner.temp }}/notes-linear-release.md
+          links: |
+            ${{ steps.linear-release.outputs.voice_link }}
+            ${{ steps.linear-release.outputs.commons_link }}
+            Workflow Run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
       - name: Create GitHub releases
         env:
           GH_TOKEN: ${{ github.token }}
@@ -126,6 +165,13 @@ jobs:
           }
           create_release voice-sdk "$VOICE_SDK_VERSION"
           create_release commons-sdk "$COMMONS_SDK_VERSION"
+
+      - name: Complete Linear release
+        uses: linear/linear-release-action@v0
+        with:
+          access_key: ${{ secrets.LINEAR_ACCESS_KEY }}
+          command: complete
+          version: ${{ steps.linear-release.outputs.version }}
 
   publish-voice-sdk:
     name: Publish voice-sdk to npm
