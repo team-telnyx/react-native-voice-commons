@@ -333,4 +333,44 @@ describe('TelnyxRTC Multi-Call Support', () => {
       expect(client.getPushNotificationCallKitUUID()).toBe('callkit-b');
     });
   });
+
+  describe('isCallKitUUIDOwnedByAnotherCall', () => {
+    function trackCall(callId: string, state: string, callKitUUID?: string) {
+      const call = createMockCall(callId, state);
+      if (callKitUUID) {
+        (call as any)._callKitUUID = callKitUUID;
+      }
+      client.calls.set(callId, call as any);
+    }
+
+    it('detects a UUID owned by another live call', () => {
+      trackCall('signal-a', 'active', 'callkit-a');
+
+      expect(client.isCallKitUUIDOwnedByAnotherCall('CALLKIT-A', 'signal-b')).toBe(true);
+    });
+
+    it('detects a socket-only call whose signaling ID is the UUID', () => {
+      trackCall('call-a', 'held');
+
+      expect(client.isCallKitUUIDOwnedByAnotherCall('CALL-A', 'signal-b')).toBe(true);
+    });
+
+    it('lets a reattached call reclaim its own UUID', () => {
+      trackCall('signal-a', 'dropped', 'callkit-a');
+
+      expect(client.isCallKitUUIDOwnedByAnotherCall('callkit-a', 'signal-a')).toBe(false);
+    });
+
+    it('ignores ended calls', () => {
+      trackCall('signal-a', 'ended', 'callkit-a');
+
+      expect(client.isCallKitUUIDOwnedByAnotherCall('callkit-a', 'signal-b')).toBe(false);
+    });
+
+    it('allows a UUID that no call owns', () => {
+      trackCall('signal-a', 'active', 'callkit-a');
+
+      expect(client.isCallKitUUIDOwnedByAnotherCall('callkit-b', 'signal-b')).toBe(false);
+    });
+  });
 });

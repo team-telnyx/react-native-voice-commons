@@ -391,6 +391,44 @@ describe('Call Custom Headers', () => {
         null
       );
     });
+
+    it('should not assign a CallKit UUID that another live call owns', async () => {
+      // Setup
+      const mockConnectionWithClient = {
+        ...mockConnection,
+        _client: {
+          getPushNotificationCallKitUUID: jest.fn().mockReturnValue('callkit-a'),
+          setPushNotificationCallKitUUID: jest.fn(),
+          isCallKitUUIDOwnedByAnotherCall: jest.fn().mockReturnValue(true),
+        },
+      };
+
+      (Peer as jest.MockedClass<typeof Peer>).mockImplementation(() => mockPeer);
+      mockPeer.createPeerConnection = jest.fn();
+      mockPeer.setRemoteDescription = jest.fn();
+
+      // Execute
+      const inboundCall = await Call.createInboundCall({
+        connection: mockConnectionWithClient as any,
+        options: mockCallOptions,
+        sessionId: 'test-session-id',
+        telnyxSessionId: 'test-telnyx-session-id',
+        telnyxLegId: 'test-telnyx-leg-id',
+        remoteSDP: 'test-remote-sdp',
+        callId: 'signal-b',
+      });
+
+      // Verify the new call keeps its own identity and the stale UUID is dropped
+      expect(mockConnectionWithClient._client.isCallKitUUIDOwnedByAnotherCall).toHaveBeenCalledWith(
+        'callkit-a',
+        'signal-b'
+      );
+      expect((inboundCall as any)._callKitUUID).toBeUndefined();
+      expect((inboundCall as any)._isPushNotificationCall).toBeUndefined();
+      expect(mockConnectionWithClient._client.setPushNotificationCallKitUUID).toHaveBeenCalledWith(
+        null
+      );
+    });
   });
 });
 

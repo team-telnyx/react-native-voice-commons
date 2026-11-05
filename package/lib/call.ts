@@ -203,7 +203,19 @@ export class Call extends EventEmitter<CallEvents> {
     const connectionClient = (connection as any)._client;
     if (connectionClient && typeof connectionClient.getPushNotificationCallKitUUID === 'function') {
       const storedCallKitUUID = connectionClient.getPushNotificationCallKitUUID();
-      if (storedCallKitUUID) {
+      // A UUID that belongs to another live call can't identify this INVITE, for example when a
+      // push is processed again for a call that's already connected. Assigning it would hide this
+      // call from CallKit and misroute actions for the call that owns the UUID.
+      const isOwnedByAnotherCall =
+        !!storedCallKitUUID &&
+        connectionClient.isCallKitUUIDOwnedByAnotherCall?.(storedCallKitUUID, callId) === true;
+      if (isOwnedByAnotherCall) {
+        log.warn('[Call] Not assigning a CallKit UUID owned by another live call:', {
+          callId,
+          storedCallKitUUID,
+        });
+        connectionClient.setPushNotificationCallKitUUID(null);
+      } else if (storedCallKitUUID) {
         log.debug('[Call] Automatically assigning stored CallKit UUID to new inbound call:', {
           callId,
           storedCallKitUUID,
