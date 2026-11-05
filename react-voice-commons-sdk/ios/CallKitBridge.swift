@@ -77,6 +77,7 @@ import React
                 "AudioSessionActivated",
                 "AudioSessionDeactivated",
                 "AudioSessionFailed",
+                "AudioRouteChanged",
             ]
         }
 
@@ -892,24 +893,79 @@ import React
             RTCAudioSession.sharedInstance().useManualAudio = true
             RTCAudioSession.sharedInstance().isAudioEnabled = false
 
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleAudioRouteChange(_:)),
+                name: AVAudioSession.routeChangeNotification,
+                object: nil)
+
             _ = installCallKitProvider()
+        }
+
+        @objc private func handleAudioRouteChange(_ notification: Notification) {
+            let audioSession = AVAudioSession.sharedInstance()
+            let reason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            let outputs = audioSession.currentRoute.outputs
+            let isSpeakerEnabled = outputs.contains { $0.portType == .builtInSpeaker }
+            NSLog(
+                "TelnyxVoice: audio route changed; reason=\(reason.map(String.init) ?? "unknown") category=\(audioSession.category.rawValue) mode=\(audioSession.mode.rawValue) options=\(audioSession.categoryOptions.rawValue) speaker=\(isSpeakerEnabled)"
+            )
+
+            // Outside a call the session is .playback, which defaults to the speaker. That says
+            // nothing about the call's route, so only report routes for the call category.
+            guard audioSession.category == .playAndRecord else { return }
+
+            CallKitBridge.shared?.emitAudioSessionEvent(
+                "AudioRouteChanged",
+                data: [
+                    "isSpeakerEnabled": isSpeakerEnabled,
+                    "outputPortType": outputs.first?.portType.rawValue ?? "",
+                ])
+        }
+
+        /// Applies the call audio configuration. CallKit's UI tracks the session's route, and Apple
+        /// advises against changing a session's configuration once CallKit has activated it, so
+        /// call this before an action that leads to activation. Once applied, later calls change
+        /// nothing, because RTCAudioSession only touches the values that differ.
+        fileprivate func configureCallAudioSession(reason: String) {
+            let webRTCConfig = RTCAudioSessionConfiguration.webRTC()
+            // Keep .allowBluetoothA2DP: device testing showed that without it, the CallKit speaker
+            // indicator doesn't follow an in-app overrideOutputAudioPort. Apple doesn't document why.
+            webRTCConfig.categoryOptions = [
+                .allowBluetoothA2DP,
+                .duckOthers,
+                .allowBluetooth,
+                .mixWithOthers,
+            ]
+            // WebRTC's audio unit applies this global configuration when it starts. Without this,
+            // it would replace the options above on the session CallKit just activated.
+            RTCAudioSessionConfiguration.setWebRTC(webRTCConfig)
+
+            let rtcAudioSession = RTCAudioSession.sharedInstance()
+            rtcAudioSession.lockForConfiguration()
+            let optionsBefore = rtcAudioSession.categoryOptions.rawValue
+            do {
+                try rtcAudioSession.setConfiguration(webRTCConfig)
+            } catch {
+                NSLog("TelnyxVoice: configureCallAudioSession (\(reason)) error: \(error)")
+            }
+            NSLog(
+                "TelnyxVoice: configureCallAudioSession (\(reason)); requested=\(webRTCConfig.categoryOptions.rawValue) before=\(optionsBefore) after=\(rtcAudioSession.categoryOptions.rawValue)"
+            )
+            rtcAudioSession.unlockForConfiguration()
         }
 
         fileprivate func activateWebRTCAudio(
             _ audioSession: AVAudioSession = AVAudioSession.sharedInstance(),
             reason: String
         ) {
+            // Normally a no-op: kept so a session that missed pre-activation setup still recovers.
+            configureCallAudioSession(reason: reason)
+
             let rtcAudioSession = RTCAudioSession.sharedInstance()
             rtcAudioSession.lockForConfiguration()
             let wasAudioEnabled = rtcAudioSession.isAudioEnabled
             NSLog("TelnyxVoice: activating WebRTC audio (\(reason)); enabled=\(wasAudioEnabled)")
-            let webRTCConfig = RTCAudioSessionConfiguration.webRTC()
-            webRTCConfig.categoryOptions = [.duckOthers, .allowBluetooth]
-            do {
-                try rtcAudioSession.setConfiguration(webRTCConfig)
-            } catch {
-                NSLog("TelnyxVoice: activateWebRTCAudio configuration (\(reason)) error: \(error)")
-            }
 
             var activationSucceeded = false
             do {
@@ -1476,6 +1532,8 @@ import React
                 return
             }
 
+            configureCallAudioSession(reason: "CXAnswerCallAction")
+
             // Check if this is a programmatic answer (call already answered in WebRTC)
             // vs a user answer from CallKit UI
             if let callData = activeCalls[action.callUUID],
@@ -1515,6 +1573,12 @@ import React
                 NSLog("TelnyxVoice: Failing duplicate held action for UUID: \(action.callUUID)")
                 action.fail()
                 return
+            }
+
+            // Holding can deactivate the session, which resets its category, so restore the
+            // configuration before CallKit reactivates it on resume.
+            if !action.isOnHold {
+                configureCallAudioSession(reason: "CXSetHeldCallAction resume")
             }
 
             pendingHeldActions[action.callUUID] = action
@@ -1570,6 +1634,8 @@ import React
 
         public func provider(_ provider: CXProvider, perform action: CXStartCallAction) {
             NSLog("TelnyxVoice: Starting outgoing call with UUID: \(action.callUUID)")
+
+            configureCallAudioSession(reason: "CXStartCallAction")
 
             // Notify React Native via CallKit bridge
             CallKitBridge.shared?.emitCallEvent(
@@ -1728,13 +1794,7 @@ import React
             }
 
             // Configure audio session early for VoIP call
-            let audioSession = AVAudioSession.sharedInstance()
-            do {
-                try audioSession.setCategory(.playAndRecord, mode: .voiceChat)
-                NSLog("Succeeded to activate audio session")
-            } catch {
-                NSLog("Failed to activate audio session: \(error)")
-            }
+            TelnyxCallKitManager.shared.configureCallAudioSession(reason: "VoIP push")
 
             // Extract caller information and call_id from the payload
             var callerName = "Unknown Caller"
