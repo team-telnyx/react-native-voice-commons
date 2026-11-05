@@ -1,7 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { ArrowLeftRight, Pause, Phone, PhoneIncoming, PhoneOff, Play } from 'lucide-react-native';
-import { Call, TelnyxCallState } from '../react-voice-commons-sdk/src';
+import {
+  ArrowLeftRight,
+  Pause,
+  Phone,
+  PhoneIncoming,
+  PhoneOff,
+  Play,
+  Volume2,
+  VolumeX,
+} from 'lucide-react-native';
+import { Call, TelnyxCallState, VoicePnBridge } from '../react-voice-commons-sdk/src';
 import { demoColors, radii, spacing } from './demoTheme';
 
 type InlineCallControlsProps = {
@@ -30,6 +39,8 @@ export function InlineCallControls({
   const [isChangingHold, setIsChangingHold] = useState(false);
   const [swappingCallId, setSwappingCallId] = useState<string | null>(null);
   const [isHandlingWaitingCall, setIsHandlingWaitingCall] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
+  const [isChangingSpeaker, setIsChangingSpeaker] = useState(false);
   // Call waiting: an incoming call rings while another call is active or held.
   const waitingCall = calls.find(
     (call) => call.isIncoming && call.currentState === TelnyxCallState.RINGING
@@ -55,6 +66,31 @@ export function InlineCallControls({
       isVisibleCallState(call.currentState)
   );
   const stateLabel = isStartingCall ? 'Connecting' : callStateLabel(activeCallState);
+
+  useEffect(() => {
+    if (!canChangeHold) return;
+
+    const removeSpeakerListener = VoicePnBridge.addSpeakerStateListener(setIsSpeakerOn);
+    VoicePnBridge.isSpeakerEnabled()
+      .then(setIsSpeakerOn)
+      .catch(() => setIsSpeakerOn(false));
+
+    return removeSpeakerListener;
+  }, [canChangeHold]);
+
+  const handleSpeakerToggle = async () => {
+    if (isChangingSpeaker) return;
+
+    setIsChangingSpeaker(true);
+    try {
+      setIsSpeakerOn(await VoicePnBridge.toggleSpeaker());
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown speaker error';
+      Alert.alert('Speaker Failed', message);
+    } finally {
+      setIsChangingSpeaker(false);
+    }
+  };
 
   const handleHoldChange = async () => {
     if (!activeCall || !canChangeHold || isChangingHold) return;
@@ -286,6 +322,29 @@ export function InlineCallControls({
               </Text>
             </TouchableOpacity>
           )}
+          {canChangeHold && (
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                isSpeakerOn ? styles.answerButton : styles.holdButton,
+                isChangingSpeaker && styles.disabled,
+              ]}
+              onPress={handleSpeakerToggle}
+              disabled={isChangingSpeaker}
+              testID="speakerButton"
+              accessibilityRole="button"
+              accessibilityLabel={isSpeakerOn ? 'Turn speaker off' : 'Turn speaker on'}
+              accessibilityState={{ disabled: isChangingSpeaker, selected: isSpeakerOn }}
+              activeOpacity={0.75}
+            >
+              {isSpeakerOn ? (
+                <Volume2 size={20} color={demoColors.text} pointerEvents="none" />
+              ) : (
+                <VolumeX size={20} color={demoColors.text} pointerEvents="none" />
+              )}
+              <Text style={styles.darkActionText}>Speaker</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[styles.actionButton, styles.endButton]}
             onPress={onEnd}
@@ -500,6 +559,7 @@ const styles = StyleSheet.create({
   },
   callActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.sm,
   },

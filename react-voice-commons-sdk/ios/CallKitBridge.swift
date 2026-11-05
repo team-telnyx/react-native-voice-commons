@@ -929,18 +929,29 @@ import React
         /// nothing, because RTCAudioSession only touches the values that differ.
         fileprivate func configureCallAudioSession(reason: String) {
             let webRTCConfig = RTCAudioSessionConfiguration.webRTC()
-            webRTCConfig.categoryOptions = [.duckOthers, .allowBluetooth]
+            // Keep .allowBluetoothA2DP: device testing showed that without it, the CallKit speaker
+            // indicator doesn't follow an in-app overrideOutputAudioPort. Apple doesn't document why.
+            webRTCConfig.categoryOptions = [
+                .allowBluetoothA2DP,
+                .duckOthers,
+                .allowBluetooth,
+                .mixWithOthers,
+            ]
             // WebRTC's audio unit applies this global configuration when it starts. Without this,
             // it would replace the options above on the session CallKit just activated.
             RTCAudioSessionConfiguration.setWebRTC(webRTCConfig)
 
             let rtcAudioSession = RTCAudioSession.sharedInstance()
             rtcAudioSession.lockForConfiguration()
+            let optionsBefore = rtcAudioSession.categoryOptions.rawValue
             do {
                 try rtcAudioSession.setConfiguration(webRTCConfig)
             } catch {
                 NSLog("TelnyxVoice: configureCallAudioSession (\(reason)) error: \(error)")
             }
+            NSLog(
+                "TelnyxVoice: configureCallAudioSession (\(reason)); requested=\(webRTCConfig.categoryOptions.rawValue) before=\(optionsBefore) after=\(rtcAudioSession.categoryOptions.rawValue)"
+            )
             rtcAudioSession.unlockForConfiguration()
         }
 
