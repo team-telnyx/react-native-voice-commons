@@ -6,6 +6,7 @@ jest.mock('../../src/internal/voice-pn-bridge', () => ({
   VoicePnBridge: {
     getPendingVoipPush: jest.fn(),
     clearPendingVoipPush: jest.fn().mockResolvedValue(true),
+    clearPendingVoipPushIfMatches: jest.fn().mockResolvedValue(true),
     setPendingPushAction: jest.fn().mockResolvedValue(true),
   },
 }));
@@ -57,6 +58,7 @@ describe('CallKitCoordinator UUID-targeted call waiting', () => {
     }
     (VoicePnBridge.getPendingVoipPush as jest.Mock).mockResolvedValue(null);
     (VoicePnBridge.clearPendingVoipPush as jest.Mock).mockResolvedValue(true);
+    (VoicePnBridge.clearPendingVoipPushIfMatches as jest.Mock).mockResolvedValue(true);
     jest.spyOn(CallKit, 'isAvailable').mockReturnValue(true);
     jest.spyOn(CallKit, 'isCallRegistered').mockResolvedValue(true);
     jest.spyOn(CallKit, 'reportIncomingCall').mockResolvedValue(true);
@@ -143,7 +145,7 @@ describe('CallKitCoordinator UUID-targeted call waiting', () => {
     await expect(callKitCoordinator.answerCallFromUI(call)).resolves.toBe(true);
 
     expect(call.answer).toHaveBeenCalledTimes(1);
-    expect(VoicePnBridge.clearPendingVoipPush).toHaveBeenCalledTimes(1);
+    expect(VoicePnBridge.clearPendingVoipPushIfMatches).toHaveBeenCalledWith('callkit-b');
     expect(coordinator.pendingPushCallUUIDs.has('callkit-b')).toBe(false);
   });
 
@@ -169,7 +171,7 @@ describe('CallKitCoordinator UUID-targeted call waiting', () => {
     ).resolves.toBe(true);
 
     expect(CallKit.reportCallEnded).toHaveBeenCalledWith('callkit-b', CallEndReason.RemoteEnded);
-    expect(VoicePnBridge.clearPendingVoipPush).toHaveBeenCalledTimes(1);
+    expect(VoicePnBridge.clearPendingVoipPushIfMatches).toHaveBeenCalledWith('callkit-b');
     expect(coordinator.pendingPushCallUUIDs.has('callkit-b')).toBe(false);
     expect(coordinator.isCallFromPush).toBe(false);
   });
@@ -397,7 +399,7 @@ describe('CallKitCoordinator UUID-targeted call waiting', () => {
 
     expect(voipClient.queueEndFromCallKit).toHaveBeenCalledWith('callkit-focus');
     expect(voipClient.handlePushNotification).not.toHaveBeenCalled();
-    expect(VoicePnBridge.clearPendingVoipPush).toHaveBeenCalledTimes(1);
+    expect(VoicePnBridge.clearPendingVoipPushIfMatches).toHaveBeenCalledWith('callkit-focus');
   });
 
   it('uses only the UUID-keyed pending answer path for a cold CallKit answer', async () => {
@@ -430,7 +432,7 @@ describe('CallKitCoordinator UUID-targeted call waiting', () => {
   });
 
   it('processes the persisted push immediately when CallKit is answered before its INVITE', async () => {
-    (VoicePnBridge.clearPendingVoipPush as jest.Mock).mockClear();
+    (VoicePnBridge.clearPendingVoipPushIfMatches as jest.Mock).mockClear();
     (VoicePnBridge.getPendingVoipPush as jest.Mock).mockResolvedValue(
       JSON.stringify({
         payload: { metadata: { call_id: 'callkit-b', voice_sdk_id: 'voice-sdk-b' } },
@@ -447,7 +449,7 @@ describe('CallKitCoordinator UUID-targeted call waiting', () => {
 
     expect(voipClient.queueAnswerFromCallKit).toHaveBeenCalledWith('callkit-b');
     expect(voipClient.handlePushNotification).toHaveBeenCalledTimes(1);
-    expect(VoicePnBridge.clearPendingVoipPush).not.toHaveBeenCalled();
+    expect(VoicePnBridge.clearPendingVoipPushIfMatches).not.toHaveBeenCalled();
   });
 
   it('returns false when CallKit registration is rejected', async () => {
@@ -522,5 +524,100 @@ describe('CallKitCoordinator UUID-targeted call waiting', () => {
 
     expect(call.answer).not.toHaveBeenCalled();
     expect(CallKit.reportCallConnected).not.toHaveBeenCalled();
+  });
+
+  describe('stale push after a CallKit answer made before the INVITE', () => {
+    const storePendingPush = (callId: string) => {
+      (VoicePnBridge.getPendingVoipPush as jest.Mock).mockResolvedValue(
+        JSON.stringify({ payload: { metadata: { call_id: callId, voice_sdk_id: 'voice-sdk' } } })
+      );
+    };
+
+    const linkCall = (callId: string, callKitUUID: string, state: string) => {
+      const call = lowLevelCall(callId, state);
+      callKitCoordinator.linkExistingCallKitCall(call, callKitUUID);
+      const stateHandler = call.on.mock.calls.find(
+        ([eventName]: [string]) => eventName === 'telnyx.call.state'
+      )[1];
+      return { call, stateHandler };
+    };
+
+    const createVoipClient = () => {
+      const voipClient = {
+        setPushNotificationCallKitUUID: jest.fn(),
+        queueAnswerFromCallKit: jest.fn(),
+        handlePushNotification: jest.fn().mockResolvedValue(undefined),
+      };
+      coordinator.voipClient = voipClient;
+      return voipClient;
+    };
+
+    const expectOnlyConditionalClear = (callKitUUID: string) => {
+      expect(VoicePnBridge.clearPendingVoipPushIfMatches).toHaveBeenCalledTimes(1);
+      expect(VoicePnBridge.clearPendingVoipPushIfMatches).toHaveBeenCalledWith(callKitUUID);
+      expect(VoicePnBridge.clearPendingVoipPush).not.toHaveBeenCalled();
+    };
+
+    it('leaves the check and delete to native when the call connects', async () => {
+      const { call, stateHandler } = linkCall('signal-a', 'callkit-a', 'connecting');
+
+      await stateHandler(call, 'active');
+
+      expectOnlyConditionalClear('callkit-a');
+      // Reading in JS first would allow another call's push to replace it before the delete.
+      expect(VoicePnBridge.getPendingVoipPush).not.toHaveBeenCalled();
+    });
+
+    it('does not clear the stored push again when a call resumes from hold', async () => {
+      const { call, stateHandler } = linkCall('signal-a', 'callkit-a', 'connecting');
+
+      await stateHandler(call, 'active');
+      await stateHandler(call, 'active');
+
+      expectOnlyConditionalClear('callkit-a');
+    });
+
+    it.each(['ended', 'failed'])(
+      'clears the push when the call reaches %s before connecting',
+      async (state) => {
+        const { call, stateHandler } = linkCall('signal-a', 'callkit-a', 'connecting');
+
+        await stateHandler(call, state);
+
+        expectOnlyConditionalClear('callkit-a');
+      }
+    );
+
+    it('does not store the UUID of an existing call for the next INVITE', async () => {
+      const voipClient = createVoipClient();
+      linkCall('signal-a', 'callkit-a', 'active');
+
+      await expect(callKitCoordinator.handleCallKitPushReceived('CALLKIT-A')).resolves.toBe(false);
+
+      expect(voipClient.setPushNotificationCallKitUUID).not.toHaveBeenCalled();
+      expect(voipClient.handlePushNotification).not.toHaveBeenCalled();
+      expect(coordinator.pendingPushCallUUIDs.has('callkit-a')).toBe(false);
+      expectOnlyConditionalClear('callkit-a');
+    });
+
+    it('still processes a real push for a second call while the first is active', async () => {
+      const voipClient = createVoipClient();
+      storePendingPush('callkit-b');
+      linkCall('signal-a', 'callkit-a', 'active');
+
+      await expect(callKitCoordinator.handleCallKitPushReceived('callkit-b')).resolves.toBe(true);
+
+      expect(voipClient.setPushNotificationCallKitUUID).toHaveBeenCalledWith('callkit-b');
+      expect(VoicePnBridge.clearPendingVoipPushIfMatches).not.toHaveBeenCalled();
+    });
+
+    it('only clears its own push after a CallKit answer', async () => {
+      const { call } = linkCall('signal-a', 'callkit-a', 'ringing');
+
+      await callKitCoordinator.handleCallKitAnswer('callkit-a');
+
+      expect(call.answer).toHaveBeenCalledTimes(1);
+      expectOnlyConditionalClear('callkit-a');
+    });
   });
 });

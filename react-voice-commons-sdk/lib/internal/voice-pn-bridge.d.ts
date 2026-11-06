@@ -31,6 +31,7 @@ export interface VoicePnBridgeInterface {
   getVoipToken(): Promise<string | null>;
   getPendingVoipPush(): Promise<string | null>;
   clearPendingVoipPush(): Promise<boolean>;
+  clearPendingVoipPushIfMatches(callId: string): Promise<boolean>;
   getPendingVoipAction(): Promise<string | null>;
   clearPendingVoipAction(): Promise<boolean>;
   setMissedCallNotificationsEnabled(enabled: boolean): Promise<boolean>;
@@ -121,6 +122,11 @@ export declare class VoicePnBridge {
    * Clear pending VoIP push from native storage (iOS only)
    */
   static clearPendingVoipPush(): Promise<boolean>;
+  /**
+   * Clear pending VoIP push data only if it still belongs to this call (iOS only).
+   * Native checks and deletes in one step, so a newer push for another call survives.
+   */
+  static clearPendingVoipPushIfMatches(callId: string): Promise<boolean>;
   /**
    * Get pending VoIP action from native storage (iOS only)
    */

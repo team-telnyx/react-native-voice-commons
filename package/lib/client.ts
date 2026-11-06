@@ -669,6 +669,25 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   }
 
   /**
+   * Whether a live call with a different signaling ID already owns a CallKit UUID.
+   * A reattached call keeps its signaling ID, so it can reclaim its own UUID.
+   * @internal
+   */
+  public isCallKitUUIDOwnedByAnotherCall(uuid: string, callId: string): boolean {
+    const normalizedUUID = this.normalizeCallIdentity(uuid);
+    for (const call of this.calls.values()) {
+      if (
+        call.callId !== callId &&
+        call.state !== 'ended' &&
+        this.getCallKitIdentity(call) === normalizedUUID
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Execute pending answer action
    */
   private async executePendingAnswer(targetCall: Call, actionKey: string) {

@@ -47,6 +47,7 @@ export interface VoicePnBridgeInterface {
   getVoipToken(): Promise<string | null>;
   getPendingVoipPush(): Promise<string | null>;
   clearPendingVoipPush(): Promise<boolean>;
+  clearPendingVoipPushIfMatches(callId: string): Promise<boolean>;
   getPendingVoipAction(): Promise<string | null>;
   clearPendingVoipAction(): Promise<boolean>;
   setMissedCallNotificationsEnabled(enabled: boolean): Promise<boolean>;
@@ -271,6 +272,20 @@ export class VoicePnBridge {
       return await NativeBridge.clearPendingVoipPush();
     } catch (error) {
       console.error('VoicePnBridge: Error clearing pending VoIP push:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Clear pending VoIP push data only if it still belongs to this call (iOS only).
+   * Native checks and deletes in one step, so a newer push for another call survives.
+   */
+  static async clearPendingVoipPushIfMatches(callId: string): Promise<boolean> {
+    if (Platform.OS !== 'ios') return false;
+    try {
+      return await NativeBridge.clearPendingVoipPushIfMatches(callId);
+    } catch (error) {
+      console.error('VoicePnBridge: Error clearing matching pending VoIP push:', error);
       return false;
     }
   }

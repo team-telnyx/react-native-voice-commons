@@ -449,20 +449,13 @@ class CallKitCoordinator {
         console.log('CallKitCoordinator: Outgoing call, skipping answer and CONNECTING state');
       }
       // Clear push data now that answer action is fulfilled
-      try {
-        await voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush();
-        console.log('CallKitCoordinator: Cleared pending VoIP push after answer fulfilled');
-      } catch (clearErr) {
-        console.error('CallKitCoordinator: Error clearing push data after answer:', clearErr);
-      }
+      await this.clearMatchingPendingVoipPush(callKitUUID);
     } catch (error) {
       console.error('CallKitCoordinator: Error processing CallKit answer', error);
       await callkit_1.default.reportCallEnded(callKitUUID, callkit_1.CallEndReason.Failed);
       this.cleanupCall(callKitUUID);
       // Clear push data even on error to prevent stale state
-      try {
-        await voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush();
-      } catch (_) {}
+      await this.clearMatchingPendingVoipPush(callKitUUID);
     } finally {
       this.processingCalls.delete(processingKey);
     }
@@ -592,6 +585,13 @@ class CallKitCoordinator {
     callKitUUID = this.normalizeUUID(callKitUUID);
     if (this.pendingPushCallUUIDs.has(callKitUUID)) {
       console.log('CallKitCoordinator: Ignoring duplicate push UUID', callKitUUID);
+      return false;
+    }
+    // A push for a call we already have is stale. Processing it would store this UUID for the
+    // next inbound INVITE, which would then take over this call's CallKit identity.
+    if (this.callMap.has(callKitUUID)) {
+      console.log('CallKitCoordinator: Ignoring push for an existing call', callKitUUID);
+      await this.clearMatchingPendingVoipPush(callKitUUID);
       return false;
     }
     const isRegistered = await callkit_1.default.isCallRegistered(callKitUUID);
@@ -806,6 +806,9 @@ class CallKitCoordinator {
               console.error('CallKitCoordinator: Error reporting call connected:', error);
             }
             this.connectedCalls.add(callKitUUID);
+            // A CallKit answer made before the INVITE arrived leaves the push stored, because that
+            // path still needs it. The call is connected now, so the push has served its purpose.
+            await this.clearMatchingPendingVoipPush(callKitUUID);
           }
           break;
         case 'ended':
@@ -825,6 +828,7 @@ class CallKitCoordinator {
           }
           // Clean up the call mapping
           this.cleanupCall(callKitUUID);
+          await this.clearMatchingPendingVoipPush(callKitUUID);
           if (shouldRestoreRemainingCall) {
             await this.restoreRemainingHeldCall();
           }
@@ -962,25 +966,10 @@ class CallKitCoordinator {
     await this.clearMatchingPendingVoipPush(callKitUUID);
   }
   async clearMatchingPendingVoipPush(callKitUUID) {
-    try {
-      const pendingPushJson = await voice_pn_bridge_1.VoicePnBridge.getPendingVoipPush();
-      if (!pendingPushJson) {
-        return;
-      }
-      const pendingPush = JSON.parse(pendingPushJson);
-      const pendingCallId =
-        pendingPush?.payload?.metadata?.call_id ??
-        pendingPush?.payload?.call_id ??
-        pendingPush?.metadata?.call_id ??
-        pendingPush?.call_id;
-      if (
-        typeof pendingCallId === 'string' &&
-        this.normalizeUUID(pendingCallId) === this.normalizeUUID(callKitUUID)
-      ) {
-        await voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPush();
-      }
-    } catch (error) {
-      console.warn('CallKitCoordinator: Failed to clear matching pending VoIP push', error);
+    const cleared =
+      await voice_pn_bridge_1.VoicePnBridge.clearPendingVoipPushIfMatches(callKitUUID);
+    if (cleared) {
+      console.log('CallKitCoordinator: Cleared pending VoIP push', { callKitUUID });
     }
   }
   /**

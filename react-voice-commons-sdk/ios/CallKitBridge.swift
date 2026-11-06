@@ -748,6 +748,7 @@ import React
         public var callKitProvider: CXProvider?
         public var callKitController: CXCallController?
         private let stateLock = NSRecursiveLock()
+        private let pendingVoipPushLock = NSLock()
         // Keep terminal missed-call invalidation atomic with registration side effects so a
         // delayed CallKit completion cannot restore an already-ended incoming call.
         private let incomingRegistrationQueue = DispatchQueue(
@@ -934,7 +935,7 @@ import React
             webRTCConfig.categoryOptions = [
                 .allowBluetoothA2DP,
                 .duckOthers,
-                .allowBluetooth,
+                .allowBluetoothHFP,
                 .mixWithOthers,
             ]
             // WebRTC's audio unit applies this global configuration when it starts. Without this,
@@ -1276,6 +1277,35 @@ import React
             return pendingIds.contains {
                 !$0.isEmpty && $0.caseInsensitiveCompare(missedCallId) != .orderedSame
             }
+        }
+
+        /// Stores a push under the lock that `clearPendingVoipPush(ifMatches:)` holds, so a new push
+        /// can't land between that method's check and its delete.
+        fileprivate func writePendingVoipPush(_ json: String) {
+            pendingVoipPushLock.lock()
+            defer { pendingVoipPushLock.unlock() }
+            UserDefaults.standard.set(json, forKey: "pending_voip_push")
+        }
+
+        /// Clears the stored push only if it still belongs to `callId`. Checking and deleting in
+        /// separate bridge calls could delete a newer push for a different call. A push without a
+        /// call ID can't belong to a different call, so it's cleared too.
+        func clearPendingVoipPush(ifMatches callId: String) -> Bool {
+            pendingVoipPushLock.lock()
+            defer { pendingVoipPushLock.unlock() }
+
+            guard UserDefaults.standard.string(forKey: "pending_voip_push") != nil else {
+                return false
+            }
+            if let pendingId = pendingCallId(fromJsonForKey: "pending_voip_push"),
+                pendingId.caseInsensitiveCompare(callId) != .orderedSame
+            {
+                return false
+            }
+
+            UserDefaults.standard.removeObject(forKey: "pending_voip_push")
+            UserDefaults.standard.synchronize()
+            return true
         }
 
         private func pendingCallId(fromJsonForKey key: String) -> String? {
@@ -1739,7 +1769,7 @@ import React
                 ]
                 let voipJsonData = try JSONSerialization.data(withJSONObject: voipPushData)
                 let voipJsonString = String(data: voipJsonData, encoding: .utf8) ?? ""
-                UserDefaults.standard.set(voipJsonString, forKey: "pending_voip_push")
+                TelnyxCallKitManager.shared.writePendingVoipPush(voipJsonString)
                 UserDefaults.standard.synchronize()
                 NSLog(
                     "[TelnyxVoipPushHandler] Stored VoIP push data after CallKit registration succeeded"
@@ -1748,7 +1778,7 @@ import React
                 NSLog("[TelnyxVoipPushHandler] Error converting VoIP payload to JSON: \(error)")
                 UserDefaults.standard.set("incoming_call", forKey: "pending_push_action")
                 UserDefaults.standard.set("{}", forKey: "pending_push_metadata")
-                UserDefaults.standard.set("{\"payload\":{}}", forKey: "pending_voip_push")
+                TelnyxCallKitManager.shared.writePendingVoipPush("{\"payload\":{}}")
                 UserDefaults.standard.synchronize()
             }
         }
