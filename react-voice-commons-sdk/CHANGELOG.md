@@ -1,5 +1,12 @@
 # CHANGELOG.md
 
+## Unreleased
+
+### Bug Fixing
+
+- Fix iOS CallKit speaker state sync. The CallKit speaker indicator now follows the in-app speaker switch, and the in-app speaker state follows taps on the CallKit speaker button, so a desynced indicator no longer makes taps fail to turn the speaker off. The call audio session is now configured before CallKit activates it on every path that leads to activation, and the WebRTC audio configuration template is kept aligned with the live session so internal reconfigurations no longer clear the speaker route mid-call. Call audio options now include `.allowBluetoothA2DP` and `.mixWithOthers`, so paired output-only Bluetooth (A2DP) devices can be selected as the call's output. Adds `VoicePnBridge.addSpeakerStateListener(listener)` on iOS, which reports call audio route changes — including those made from the CallKit screen — and returns a function that removes the listener (no-op on other platforms).
+- Fix iOS call waiting after an early CallKit answer. When a call is answered from the CallKit screen before its INVITE arrives, its VoIP push is cleared and its CallKit UUID is never handed to the next inbound call, so the second call now appears on the CallKit screen and Hold & Answer connects it.
+
 ## [1.2.2-beta.1] (2026-11-03)
 
 ### Dependencies
