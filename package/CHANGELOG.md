@@ -1,5 +1,11 @@
 # CHANGELOG.md
 
+## Unreleased
+
+### Bug Fixing
+
+- Fix iOS call waiting after an early CallKit answer. An inbound call no longer adopts a stored CallKit UUID that another live call owns: the stale UUID is released and the new call keeps its own identity, so it appears on the CallKit screen and Hold & Answer works.
+
 ## [1.2.1-beta.1] (2026-11-03)
 
 ### Bug Fixing
