@@ -1,5 +1,25 @@
 # CHANGELOG.md
 
+## [1.2.2] (2026-11-10)
+
+### Enhancement
+
+- Add `VoicePnBridge.addSpeakerStateListener(listener)`, which reports speaker on/off whenever the iOS audio route changes, including from the CallKit speaker button. It returns a function that removes the listener. It does nothing on Android.
+
+### Dependencies
+
+- Require `@telnyx/react-native-voice-sdk ^1.2.1` when publishing, for its iOS signaling reconnect and call-reattach fixes and its check that stops an inbound call taking a CallKit UUID owned by another live call.
+
+### Compatibility
+
+- The iOS call audio session now includes `.allowBluetoothA2DP` and `.mixWithOthers`. With `.allowBluetoothA2DP`, iOS can route call audio to an output-only Bluetooth device while the microphone stays on the iPhone.
+
+### Bug Fixing
+
+- Fix iOS call waiting after a push call is answered on the CallKit screen before its INVITE arrives. That call's VoIP push was never cleared, so opening the app processed it again and the next inbound call took the first call's CallKit UUID. CallKit didn't show the second call, and Hold & Accept failed with "Could not hold the current call". The push is now cleared when the call connects, ends or fails, a push for a call that already exists is ignored, and a CallKit answer clears only that call's push.
+- Check and clear the stored VoIP push in native code as one locked step, so a push for another call can't be lost between the check and the delete.
+- Fix the iOS CallKit speaker indicator staying off after the speaker is turned on in the app. The call audio session configuration is now applied before CallKit activates the session (on VoIP push, start, answer and resume from hold) and set as WebRTC's default.
+
 ## [1.2.2-beta.1] (2026-11-03)
 
 ### Dependencies
