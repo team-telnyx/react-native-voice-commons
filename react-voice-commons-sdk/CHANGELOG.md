@@ -12,7 +12,6 @@
 
 ### Compatibility
 
-- **Building for iOS now requires Xcode 26.** The deprecated `.allowBluetooth` audio session option was replaced with `.allowBluetoothHFP`, which older iOS SDKs don't define. Both have the same value, so runtime behavior doesn't change.
 - The iOS call audio session now includes `.allowBluetoothA2DP` and `.mixWithOthers`. With `.allowBluetoothA2DP`, iOS can route call audio to an output-only Bluetooth device while the microphone stays on the iPhone.
 
 ### Bug Fixing
