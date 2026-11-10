@@ -935,8 +935,6 @@ import React
             webRTCConfig.categoryOptions = [
                 .allowBluetoothA2DP,
                 .duckOthers,
-                // Keep the deprecated name: .allowBluetoothHFP (same value) needs the iOS 26 SDK,
-                // which would make Xcode 26 a build requirement.
                 .allowBluetooth,
                 .mixWithOthers,
             ]
