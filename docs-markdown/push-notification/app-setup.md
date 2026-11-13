@@ -16,6 +16,12 @@ The Telnyx React Voice Commons SDK provides comprehensive push notification supp
 
 Telnyx WebRTC supports multidevice push notifications. A single user can have up to 5 device tokens (either iOS - APNs or Android - FCM). When a user logs into the socket and provides a push token, our services will register this token to that user - allowing it to receive push notifications for incoming calls. If a 6th registration is made, the least recently used token will be removed. This effectively means that you can have up to 5 devices that can receive push notifications for the same incoming call.
 
+### Ring alongside a connected web client
+
+For browser and mobile ringing on the same credential identity, enable `pushWhenActive: true` on the **web client as well as the mobile clients**. Registering the mobile token alone does not enable push alongside a browser that logged in with the default `pushWhenActive: false`.
+
+Follow [Push Notifications While Connected](./push-when-active.md) for credential/token login examples, the browser prerequisite, and answered-elsewhere cleanup. Reconnect clients after changing login options, then verify the browser's outgoing login advertises both `push_when_active` and `pn_late_fanout` as `true`.
+
 ## Prerequisites
 
 Before implementing push notifications, ensure you have:
