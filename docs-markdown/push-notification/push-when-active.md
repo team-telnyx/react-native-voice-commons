@@ -6,11 +6,13 @@ By default, a live client for the same credential identity can receive an incomi
 
 This is useful for call waiting and multi-device calling. It is disabled by default.
 
-## Enable `pushWhenActive`
+## Push-when-active multi-device flows
+
+### Enable `pushWhenActive`
 
 Complete the normal PushKit (iOS) or FCM (Android) setup first, then set `pushWhenActive: true` when logging in. Continue to provide the device push token through `pushNotificationDeviceToken`.
 
-### Credential authentication
+#### Credential authentication
 
 ```tsx
 const config = createCredentialConfig('your_sip_username', 'your_sip_password', {
@@ -21,7 +23,7 @@ const config = createCredentialConfig('your_sip_username', 'your_sip_password', 
 await voipClient.login(config);
 ```
 
-### Token authentication
+#### Token authentication
 
 ```tsx
 const config = createTokenConfig('your_jwt_token', {
@@ -34,7 +36,7 @@ await voipClient.loginWithToken(config);
 
 The push token is configured at login time; do not pass it again to `call.answer()`.
 
-## When a web client is also connected
+### When a web client is also connected
 
 Enable `pushWhenActive: true` on the **JavaScript web client as well as this mobile client** when they use the same credential identity. The JavaScript default is `false`: a browser logged in with that default can receive the call over its active WebSocket without triggering mobile push. Enabling the option only in the mobile app does not change the browser's login configuration.
 
@@ -56,7 +58,7 @@ These login flags are distinct from the connection-level `simultaneous_ringing` 
 
 See [cross-client setup and verification](https://developers.telnyx.com/docs/voice/webrtc/push-notifications#ring-mobile-devices-while-a-browser-is-connected) for the shared flow and troubleshooting. If mobile push works with web disconnected but stops when web connects, inspect the **web login flags first**. Retest with a fresh inbound call after reconnecting; if it still fails with both flags enabled, collect the call ID, UTC timestamp, and SDK versions without including credentials or complete push tokens.
 
-## When another device answers
+### When another device answers
 
 If the same incoming call is delivered to several devices and another device answers first, the ringing call on this device ends normally. Dismiss any incoming-call UI and do not show an error or retry prompt.
 
