@@ -66,6 +66,17 @@ class VoicePnBridgeModule(reactContext: ReactApplicationContext) : ReactContextB
         }
     }
 
+    @ReactMethod
+    fun clearPendingPushActionIfMatches(action: String, metadata: String, promise: Promise) {
+        try {
+            promise.resolve(
+                VoicePnManager.clearPendingPushActionIfMatches(reactApplicationContext, action, metadata)
+            )
+        } catch (e: Exception) {
+            promise.reject("CLEAR_PENDING_PUSH_ACTION_ERROR", e.message, e)
+        }
+    }
+
     /**
      * React Native → Android: Get any pending call action from notification buttons
      * Uses the same reliable pattern as getPendingPushAction

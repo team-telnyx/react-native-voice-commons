@@ -1308,6 +1308,24 @@ import React
             return true
         }
 
+        private func writePendingCallKitAnswer(_ callId: String) {
+            pendingVoipPushLock.lock()
+            defer { pendingVoipPushLock.unlock() }
+            UserDefaults.standard.set(callId, forKey: "pending_callkit_answer")
+        }
+
+        func takePendingCallKitAnswer(ifMatches callId: String) -> Bool {
+            pendingVoipPushLock.lock()
+            defer { pendingVoipPushLock.unlock() }
+            guard let pendingId = UserDefaults.standard.string(forKey: "pending_callkit_answer"),
+                pendingId.caseInsensitiveCompare(callId) == .orderedSame
+            else {
+                return false
+            }
+            UserDefaults.standard.removeObject(forKey: "pending_callkit_answer")
+            return true
+        }
+
         private func pendingCallId(fromJsonForKey key: String) -> String? {
             guard let jsonString = UserDefaults.standard.string(forKey: key),
                 let data = jsonString.data(using: .utf8),
@@ -1577,8 +1595,7 @@ import React
                     "CallKitDidPerformAnswerCallAction", callUUID: action.callUUID,
                     callData: activeCalls[action.callUUID]) ?? false
                 if !eventDelivered {
-                    UserDefaults.standard.set(action.callUUID.uuidString, forKey: "pending_callkit_answer")
-                    UserDefaults.standard.synchronize()
+                    writePendingCallKitAnswer(action.callUUID.uuidString)
                     NSLog("TelnyxVoice: Stored pending CallKit answer for UUID: \(action.callUUID)")
                 }
             }
@@ -1643,10 +1660,7 @@ import React
                 action.fail()
                 return
             }
-            if UserDefaults.standard.string(forKey: "pending_callkit_answer") == action.callUUID.uuidString {
-                UserDefaults.standard.removeObject(forKey: "pending_callkit_answer")
-                UserDefaults.standard.synchronize()
-            }
+            _ = takePendingCallKitAnswer(ifMatches: action.callUUID.uuidString)
 
             // Notify React Native via CallKit bridge
             CallKitBridge.shared?.emitCallEvent(

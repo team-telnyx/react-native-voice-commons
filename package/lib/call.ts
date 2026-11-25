@@ -39,7 +39,7 @@ import type { CallReportConfig, CallReportSummary } from './call-report-models';
 import { DEFAULT_CALL_REPORT_CONFIG } from './call-report-models';
 import { QualityMetricsCollector } from './quality-metrics-collector';
 import type { CallQualityMetrics } from './quality-metrics';
-import { CALL_REPORT_ID, VOICE_SDK_ID } from './global';
+import { CALL_REPORT_ID } from './global';
 import { DEFAULT_SDK_IDENTITY, type SDKIdentity } from './env';
 
 type CallEvents = {
@@ -122,6 +122,7 @@ export type CreateInboundCall = {
   remoteSDP: string;
   callId: string;
   inviteCustomHeaders?: { name: string; value: string }[] | null;
+  pushCallKitUUID?: string | null;
   initialState?: CallState;
   debug?: boolean;
   /** Deliver call quality metrics while active (also enabled by `debug`). */
@@ -167,6 +168,7 @@ export class Call extends EventEmitter<CallEvents> {
     telnyxCallControlId,
     callId,
     inviteCustomHeaders = null,
+    pushCallKitUUID,
     initialState = 'ringing',
     debug = false,
     enableQualityMetrics = false,
@@ -201,20 +203,22 @@ export class Call extends EventEmitter<CallEvents> {
     // Check if the connection has a reference to the client with stored push notification CallKit UUID
     // The client should store the UUID when CallKitHandler processes the push notification
     const connectionClient = (connection as any)._client;
-    if (connectionClient && typeof connectionClient.getPushNotificationCallKitUUID === 'function') {
-      const storedCallKitUUID = connectionClient.getPushNotificationCallKitUUID();
+    const storedCallKitUUID = pushCallKitUUID === undefined
+      ? connectionClient?.getPushNotificationCallKitUUID?.()
+      : pushCallKitUUID;
+    if (storedCallKitUUID) {
       // A UUID that belongs to another live call can't identify this INVITE, for example when a
       // push is processed again for a call that's already connected. Assigning it would hide this
       // call from CallKit and misroute actions for the call that owns the UUID.
       const isOwnedByAnotherCall =
         !!storedCallKitUUID &&
-        connectionClient.isCallKitUUIDOwnedByAnotherCall?.(storedCallKitUUID, callId) === true;
+        connectionClient?.isCallKitUUIDOwnedByAnotherCall?.(storedCallKitUUID, callId) === true;
       if (isOwnedByAnotherCall) {
         log.warn('[Call] Not assigning a CallKit UUID owned by another live call:', {
           callId,
           storedCallKitUUID,
         });
-        connectionClient.setPushNotificationCallKitUUID(null);
+        if (pushCallKitUUID === undefined) connectionClient?.setPushNotificationCallKitUUID(null);
       } else if (storedCallKitUUID) {
         log.debug('[Call] Automatically assigning stored CallKit UUID to new inbound call:', {
           callId,
@@ -246,7 +250,7 @@ export class Call extends EventEmitter<CallEvents> {
         }
 
         // Clear the stored UUID since we've used it
-        connectionClient.setPushNotificationCallKitUUID(null);
+        if (pushCallKitUUID === undefined) connectionClient?.setPushNotificationCallKitUUID(null);
 
         log.debug('[Call] CallKit UUID properties set during call creation:', {
           _callKitUUID: (call as any)._callKitUUID,
@@ -1281,7 +1285,7 @@ export class Call extends EventEmitter<CallEvents> {
         jsonrpc: '2.0' as const,
         method: TelnyxRTCMethod.PING,
         params: {},
-        voice_sdk_id: VOICE_SDK_ID,
+        voice_sdk_id: this.connection.voiceSDKId,
       };
       const result = await this.connection.sendAndWait(probe);
       if (isJsonRpcErrorMessage(result)) {
@@ -1601,7 +1605,7 @@ export class Call extends EventEmitter<CallEvents> {
     const payload = this.callReportCollector.buildPayload(summary);
 
     this.callReportCollector
-      .sendPayload(payload, callReportId, this.connection.host, VOICE_SDK_ID)
+      .sendPayload(payload, callReportId, this.connection.host, this.connection.voiceSDKId)
       .then(() => {
         log.debug('[Call] Posted call report');
       })
@@ -1620,7 +1624,7 @@ export class Call extends EventEmitter<CallEvents> {
     const payload = this.callReportCollector.flush(summary);
 
     this.callReportCollector
-      .sendPayload(payload, callReportId, this.connection.host, VOICE_SDK_ID)
+      .sendPayload(payload, callReportId, this.connection.host, this.connection.voiceSDKId)
       .catch((err) => {
         log.error('[Call] Failed to send intermediate call report:', err);
       });

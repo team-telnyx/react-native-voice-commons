@@ -16,6 +16,45 @@ describe('LoginHandler session ID ordering', () => {
     (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
   });
 
+  it.each([
+    ['fresh', {}, { reconnection: false }],
+    [
+      'push',
+      { fromPush: true },
+      { reconnection: false, from_push: true, loginParams: { attach_call: 'true' } },
+    ],
+    [
+      'recovery',
+      { sessionId: 'confirmed-session' },
+      { reconnection: true, sessid: 'confirmed-session', loginParams: { attach_call: 'true' } },
+    ],
+  ])('serializes %s intent for both authentication modes', async (_mode, intent, expected) => {
+    const { LoginHandler } = jest.requireActual('../lib/login-handler.ts');
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue('legacy-global-session');
+    for (const auth of [
+      { login: 'user', password: 'test-password' },
+      { login_token: 'test-token' },
+    ]) {
+      const sendAndWait = jest.fn().mockResolvedValue(null);
+      const handler = new LoginHandler(
+        { addListener: jest.fn(), sendAndWait },
+        {
+          name: 'test-sdk',
+          version: '1',
+        }
+      );
+      // Legacy values injected via options must never determine recovery identity either.
+      await handler.login({ ...auth, sessid: 'unconfirmed-session' }, undefined, intent);
+      const params = sendAndWait.mock.calls[0][0].params;
+      const { reconnection, from_push, loginParams, sessid } = params;
+      expect({ reconnection, from_push, loginParams, sessid }).toEqual(expected);
+      for (const key of ['from_push', 'loginParams', 'sessid']) {
+        if (!(key in expected)) expect(params).not.toHaveProperty(key);
+      }
+    }
+    expect(AsyncStorage.getItem).not.toHaveBeenCalled();
+  });
+
   it('publishes the login response session ID before waiting for client readiness', async () => {
     const { LoginHandler } = jest.requireActual('../lib/login-handler.ts');
     let onMessage: (message: unknown) => void = () => {};
@@ -55,7 +94,9 @@ describe('LoginHandler session ID ordering', () => {
       await Promise.resolve();
     }
 
-    expect(onSessionId).toHaveBeenCalledWith('new-session-id');
+    expect(onSessionId).toHaveBeenCalledWith('new-session-id', 'voice-sdk-id');
+    expect(AsyncStorage.getItem).not.toHaveBeenCalled();
+    expect(AsyncStorage.setItem).not.toHaveBeenCalled();
     expect(loginFinished).toBe(false);
 
     onMessage({ method: 'telnyx_rtc.clientReady' });

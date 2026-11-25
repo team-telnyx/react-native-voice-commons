@@ -82,6 +82,21 @@ describe('Connection freshness tracking (ICE restart recovery)', () => {
     );
   });
 
+  it('keeps explicit push routing and server voice IDs on their own connection', () => {
+    const { createSignalingSocket } = require('../lib/signaling-socket');
+    const pushConnection = new Connection('route-from-push', 'development');
+    expect(createSignalingSocket).toHaveBeenLastCalledWith(
+      'wss://rtcdev.telnyx.com/?voice_sdk_id=route-from-push'
+    );
+
+    receive({ voice_sdk_id: 'server-voice-id' });
+    expect(pushConnection.voiceSDKId).toBe('server-voice-id');
+
+    const fresh = new Connection();
+    expect(createSignalingSocket).toHaveBeenLastCalledWith('wss://rtc.telnyx.com/');
+    expect(fresh.voiceSDKId).toBeNull();
+  });
+
   it('treats a socket open as total activity but not confirmed traffic', () => {
     openSocket();
 

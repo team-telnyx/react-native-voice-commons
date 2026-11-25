@@ -119,6 +119,7 @@ export class TelnyxVoipClient {
     // Clear any tracked calls when the session disconnects, so ghosts
     // don't accumulate across background → foreground reconnect cycles.
     this._sessionManager.setOnDisconnect(() => {
+      this._pendingCallKitAnswers.clear();
       this._callStateController.clearAllCalls();
     });
 
@@ -617,12 +618,21 @@ export class TelnyxVoipClient {
       });
     }
 
-    const telnyxClient = this._sessionManager.telnyxClient;
-    if (telnyxClient && typeof (telnyxClient as any).queueAnswerFromCallKit === 'function') {
+    const telnyxClient = this._sessionManager.telnyxClient as any;
+    const normalizedUUID =
+      typeof callKitUUIDOrHeaders === 'string' ? callKitUUIDOrHeaders.toLowerCase() : undefined;
+    const ownsCall =
+      telnyxClient &&
+      (!normalizedUUID ||
+        telnyxClient.getPushNotificationCallKitUUID?.() === normalizedUUID ||
+        telnyxClient
+          .getActiveCalls?.()
+          .some(
+            (call: any) => (call._callKitUUID ?? call.callId)?.toLowerCase() === normalizedUUID
+          ));
+    if (ownsCall && typeof telnyxClient.queueAnswerFromCallKit === 'function') {
       (telnyxClient as any).queueAnswerFromCallKit(callKitUUIDOrHeaders, customHeaders);
     } else {
-      const normalizedUUID =
-        typeof callKitUUIDOrHeaders === 'string' ? callKitUUIDOrHeaders.toLowerCase() : undefined;
       const actionKey = normalizedUUID ?? LEGACY_CALLKIT_ANSWER_KEY;
       let retainedUUIDOrHeaders: string | Record<string, string> | undefined = normalizedUUID;
       if (callKitUUIDOrHeaders && typeof callKitUUIDOrHeaders !== 'string') {
@@ -717,20 +727,20 @@ export class TelnyxVoipClient {
       return;
     }
 
-    for (const [actionKey, pendingAnswer] of this._pendingCallKitAnswers) {
-      try {
-        (telnyxClient as any).queueAnswerFromCallKit(
-          pendingAnswer.callKitUUIDOrHeaders,
-          pendingAnswer.customHeaders
-        );
-        this._pendingCallKitAnswers.delete(actionKey);
-      } catch (error) {
-        console.error('TelnyxVoipClient: Failed to restore pending CallKit answer', {
-          actionKey,
-          error,
-        });
-      }
-    }
+    const pushUUID = (telnyxClient as any).getPushNotificationCallKitUUID?.();
+    if (!pushUUID) return;
+
+    const actionKey = this._pendingCallKitAnswers.has(pushUUID)
+      ? pushUUID
+      : LEGACY_CALLKIT_ANSWER_KEY;
+    const pendingAnswer = this._pendingCallKitAnswers.get(actionKey);
+    if (!pendingAnswer) return;
+
+    this._pendingCallKitAnswers.delete(actionKey);
+    (telnyxClient as any).queueAnswerFromCallKit(
+      pendingAnswer.callKitUUIDOrHeaders,
+      pendingAnswer.customHeaders
+    );
   }
 
   /**

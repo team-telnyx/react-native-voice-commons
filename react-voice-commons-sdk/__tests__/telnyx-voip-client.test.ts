@@ -104,6 +104,7 @@ describe('TelnyxVoipClient singleton lifecycle', () => {
 
     sessionManager._telnyxClient = {
       queueAnswerFromCallKit,
+      getPushNotificationCallKitUUID: () => 'callkit-b',
       on: jest.fn(),
       off: jest.fn(),
       listenerCount: jest.fn().mockReturnValue(1),

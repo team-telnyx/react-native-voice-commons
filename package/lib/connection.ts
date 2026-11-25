@@ -4,7 +4,6 @@ import { isMessage } from './message';
 import { createDeferredPromise } from './promise';
 import type { DeferredPromise } from './promise';
 import log from 'loglevel';
-import { updateVoiceSDKId, VOICE_SDK_ID } from './global';
 import { createSignalingSocket, type SignalingSocket } from './signaling-socket';
 
 type ConnectionEvents = {
@@ -17,7 +16,11 @@ type ConnectionEvents = {
 export class Connection extends EventEmitter<ConnectionEvents> {
   public socket: SignalingSocket;
   private isSocketConnected: boolean = false;
-  private customVoiceSDKId?: string;
+  private _voiceSDKId: string | null;
+
+  public get voiceSDKId(): string | null {
+    return this._voiceSDKId;
+  }
   public _client: any = null; // Reference to the client for CallKit UUID storage
   private reconnectEnabled: boolean = true;
   private reconnectAttempts: number = 0;
@@ -39,15 +42,13 @@ export class Connection extends EventEmitter<ConnectionEvents> {
 
   constructor(voiceSDKId?: string, environment: TelnyxEnvironment = 'production') {
     super();
-    this.customVoiceSDKId = voiceSDKId;
+    this._voiceSDKId = voiceSDKId ?? null;
     this.signalingHost = resolveSignalingHost(environment);
     const wsUrl = this.buildWebsocketURL();
     log.debug('[Connection]: WebSocket URL:', wsUrl);
     log.debug('[Connection]: Attempting to connect to:', wsUrl);
 
     // Console logs for release debugging
-    console.log('[Connection] RELEASE DEBUG - WebSocket URL:', wsUrl);
-    console.log('[Connection] RELEASE DEBUG - Attempting to connect to:', wsUrl);
 
     // Use the platform's built-in WebSocket so TLS certificate and hostname
     // validation follow platform defaults (VSDK-909). The previous transport
@@ -140,8 +141,8 @@ export class Connection extends EventEmitter<ConnectionEvents> {
         }
       }
 
-      if (parsedMessage.voice_sdk_id) {
-        updateVoiceSDKId(parsedMessage.voice_sdk_id);
+      if (typeof parsedMessage.voice_sdk_id === 'string' && parsedMessage.voice_sdk_id) {
+        this._voiceSDKId = parsedMessage.voice_sdk_id;
       }
       try {
         this.emit('telnyx.socket.message', parsedMessage);
@@ -174,7 +175,7 @@ export class Connection extends EventEmitter<ConnectionEvents> {
     }
 
     try {
-      log.debug('Sending message to gateway', msg);
+      log.debug('Sending message to gateway', (msg as { method?: string })?.method);
       this.socket.send(JSON.stringify(msg));
       // Only stamp activity AFTER a successful send so a throwing/queued
       // send doesn't make a dead socket look fresh to isFresh() callers.
@@ -260,24 +261,10 @@ export class Connection extends EventEmitter<ConnectionEvents> {
   private buildWebsocketURL = () => {
     const url = new URL(this.signalingHost);
 
-    // Use custom voice_sdk_id from push notification if available, otherwise use global one
-    const voiceSDKIdToUse = this.customVoiceSDKId || VOICE_SDK_ID;
-    if (voiceSDKIdToUse) {
-      url.searchParams.set('voice_sdk_id', voiceSDKIdToUse);
-      if (this.customVoiceSDKId) {
-        log.debug(
-          '[Connection]: Using custom voice_sdk_id from push notification:',
-          this.customVoiceSDKId
-        );
-      }
+    if (this._voiceSDKId) {
+      url.searchParams.set('voice_sdk_id', this._voiceSDKId);
     }
-
     const result = url.toString();
-    log.debug('[Connection]: Final WebSocket URL:', result);
-
-    // Console log for release debugging
-    console.log('[Connection] RELEASE DEBUG - Final WebSocket URL with params:', result);
-
     return result;
   };
   private flushMessageQueue = () => {

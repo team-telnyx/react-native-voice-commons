@@ -32,6 +32,10 @@ RCT_EXTERN_METHOD(getPendingCallKitAnswer:(RCTPromiseResolveBlock)resolve
 RCT_EXTERN_METHOD(clearPendingCallKitAnswer:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(takePendingCallKitAnswerIfMatches:(NSString *)callId
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 RCT_EXTERN_METHOD(getPendingVoipAction:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 

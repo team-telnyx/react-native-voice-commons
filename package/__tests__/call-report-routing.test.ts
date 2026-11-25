@@ -2,7 +2,7 @@ import { Call } from '../lib/call';
 import { CallReportCollector } from '../lib/call-report-collector';
 import type { Connection } from '../lib/connection';
 import { resolveSignalingHost, TelnyxEnvironment } from '../lib/env';
-import { updateCallReportId, updateVoiceSDKId } from '../lib/global';
+import { updateCallReportId } from '../lib/global';
 
 jest.mock('loglevel', () => ({
   debug: jest.fn(),
@@ -20,6 +20,7 @@ function buildCall(environment: TelnyxEnvironment) {
     isConnected: true,
     // Same shape Connection exposes: the bare signaling host, no query params.
     host: resolveSignalingHost(environment),
+    voiceSDKId: 'voice-sdk-id',
   };
 
   const call = new Call({
@@ -62,13 +63,11 @@ describe('Call report routing', () => {
   beforeEach(() => {
     global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200 });
     updateCallReportId('report-id');
-    updateVoiceSDKId('voice-sdk-id');
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
     updateCallReportId(null);
-    updateVoiceSDKId(null);
     jest.restoreAllMocks();
   });
 

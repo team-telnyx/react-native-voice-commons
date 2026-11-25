@@ -282,16 +282,16 @@ class TelnyxNotificationHelper(private val context: Context) {
             Log.w(TAG, "Notifications unavailable ($blockReason); launched full-screen incoming call fallback for call: $callId")
         } catch (e: PendingIntent.CanceledException) {
             Log.e(TAG, "Notifications unavailable ($blockReason); failed to launch full-screen incoming call fallback for call: $callId", e)
-            clearFallbackPushAction(callId)
+            clearFallbackPushAction(callId, metadata)
         } catch (e: RuntimeException) {
             Log.e(TAG, "Notifications unavailable ($blockReason); background fallback launch failed for call: $callId", e)
-            clearFallbackPushAction(callId)
+            clearFallbackPushAction(callId, metadata)
         }
     }
 
-    private fun clearFallbackPushAction(callId: String) {
+    private fun clearFallbackPushAction(callId: String, metadata: String) {
         try {
-            VoicePnManager.clearPendingPushAction(context)
+            VoicePnManager.clearPendingPushActionIfMatches(context, "incoming_call", metadata)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to clear preserved incoming-call metadata after fallback launch failure for call: $callId", e)
         }

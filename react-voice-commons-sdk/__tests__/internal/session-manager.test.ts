@@ -253,6 +253,105 @@ describe('SessionManager', () => {
     expect(manager.telnyxClient).toBe(telnyxClient);
   });
 
+  it('hands only the newest push to core when an older disconnect finishes late', async () => {
+    const manager = new SessionManager();
+    await manager.connectWithToken(createTokenConfig('test-token'));
+    const rtc = TelnyxSDK.TelnyxRTC as unknown as jest.Mock;
+    const original = rtc.mock.results[0].value;
+    let finishOldDisconnect: () => void;
+    original.disconnect.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishOldDisconnect = resolve;
+        })
+    );
+
+    const older = manager.handlePushNotification({
+      metadata: { call_id: 'a', voice_sdk_id: 'route-a' },
+    });
+    await manager.handlePushNotification({
+      action: 'answer',
+      from_notification: true,
+      metadata: JSON.stringify({ call_id: 'b', voice_sdk_id: 'route-b' }),
+    });
+    const current = rtc.mock.results[1].value;
+    finishOldDisconnect();
+    await older;
+
+    expect(manager.telnyxClient).toBe(current);
+    expect(rtc).toHaveBeenCalledTimes(2);
+    expect(current.processVoIPNotification).toHaveBeenCalledWith({
+      action: 'answer',
+      from_notification: true,
+      call_id: 'b',
+      voice_sdk_id: 'route-b',
+    });
+    expect(current.processVoIPNotification.mock.invocationCallOrder[0]).toBeLessThan(
+      current.connect.mock.invocationCallOrder[0]
+    );
+    await manager.connectWithToken(createTokenConfig('ordinary-token'));
+    expect(rtc.mock.results[2].value.processVoIPNotification).not.toHaveBeenCalled();
+  });
+
+  it('updates an in-flight push with a notification answer without opening another socket', async () => {
+    const manager = new SessionManager();
+    await manager.connectWithToken(createTokenConfig('test-token'));
+    const rtc = TelnyxSDK.TelnyxRTC as unknown as jest.Mock;
+    let finishConnect: () => void;
+    let startConnect: () => void;
+    const connected = new Promise<void>((resolve) => {
+      finishConnect = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      startConnect = resolve;
+    });
+    const pushClient = {
+      connect: jest.fn(() => {
+        startConnect();
+        return connected;
+      }),
+      disconnect: jest.fn(),
+      processVoIPNotification: jest.fn(),
+      on: jest.fn(),
+    };
+    rtc.mockImplementationOnce(() => pushClient);
+    const metadata = { call_id: 'a', voice_sdk_id: 'route-a' };
+
+    const initial = manager.handlePushNotification({ metadata, action: 'incoming_call' });
+    await started;
+    await manager.handlePushNotification({ metadata, action: 'answer', from_notification: true });
+    finishConnect();
+    await initial;
+
+    expect(rtc).toHaveBeenCalledTimes(2);
+    expect(pushClient.processVoIPNotification).toHaveBeenLastCalledWith({
+      ...metadata,
+      action: 'answer',
+      from_notification: true,
+    });
+    expect(pushClient.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('answers an already delivered Android notification call on its existing socket', async () => {
+    const manager = new SessionManager();
+    await manager.connectWithToken(createTokenConfig('test-token'));
+    const rtc = TelnyxSDK.TelnyxRTC as unknown as jest.Mock;
+    const client = rtc.mock.results[0].value;
+    const target = {
+      callId: 'signal-id',
+      _callKitUUID: 'push-id',
+      state: 'ringing',
+      answer: jest.fn(),
+    };
+    client.getActiveCalls = jest.fn(() => [target]);
+
+    await manager.handlePushNotification({ action: 'answer', metadata: { call_id: 'PUSH-ID' } });
+
+    expect(target.answer).toHaveBeenCalledTimes(1);
+    expect(client.disconnect).not.toHaveBeenCalled();
+    expect(rtc).toHaveBeenCalledTimes(1);
+  });
+
   it.each(['active', 'held'])(
     'preserves the client for a second push while a call is %s',
     async (state) => {

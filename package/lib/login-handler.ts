@@ -1,6 +1,5 @@
 import log from 'loglevel';
 import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ClientOptions } from './client-options';
 import type { SDKIdentity } from './env';
 import { Connection } from './connection';
@@ -22,13 +21,7 @@ export class LoginHandler {
   private connection: Connection;
   private clientIsReady: DeferredPromise<boolean> | null;
   private waitingForClientReady: boolean = false;
-  private shouldAttachCall: boolean = false;
-  private isFromPush: boolean = false;
-  private lastSessionId: string | null = null; // Store sessid from login response
   private readonly sdkIdentity: SDKIdentity;
-
-  // AsyncStorage key for persisting sessid
-  private static readonly SESSID_STORAGE_KEY = '@telnyx_last_sessid';
 
   constructor(con: Connection, sdkIdentity: SDKIdentity) {
     this.connection = con;
@@ -39,53 +32,12 @@ export class LoginHandler {
     this.clientIsReady = null;
   }
 
-  /**
-   * Load previously stored sessid from AsyncStorage
-   */
-  private async loadPersistedSessionId() {
-    try {
-      const storedSessid = await AsyncStorage.getItem(LoginHandler.SESSID_STORAGE_KEY);
-      if (storedSessid) {
-        this.lastSessionId = storedSessid;
-        log.debug('[LoginHandler] Loaded persisted sessid:', storedSessid);
-      } else {
-        log.debug('[LoginHandler] No persisted sessid found');
-      }
-    } catch (error) {
-      log.error('[LoginHandler] Failed to load persisted sessid:', error);
-    }
-  }
-
-  /**
-   * Persist sessid to AsyncStorage
-   */
-  private async persistSessionId(sessid: string) {
-    try {
-      await AsyncStorage.setItem(LoginHandler.SESSID_STORAGE_KEY, sessid);
-      log.debug('[LoginHandler] Persisted sessid to AsyncStorage:', sessid);
-    } catch (error) {
-      log.error('[LoginHandler] Failed to persist sessid:', error);
-    }
-  }
-
-  public setAttachCall(shouldAttach: boolean) {
-    this.shouldAttachCall = shouldAttach;
-    console.log('[LoginHandler] Set attach call flag to:', shouldAttach);
-  }
-
-  public setFromPush(fromPush: boolean) {
-    this.isFromPush = fromPush;
-    console.log('[LoginHandler] Set from push flag to:', fromPush);
-  }
-
   public login = async (
     options: ClientOptions,
-    onSessionId?: (sessionId: string) => void
+    onSessionId?: (sessionId: string, voiceSDKId?: string) => void,
+    { fromPush = false, sessionId }: { fromPush?: boolean; sessionId?: string } = {}
   ): Promise<string | null> => {
-    // Ensure sessid is loaded before creating login message
-    await this.loadPersistedSessionId();
-
-    const message = this.createLoginMessage(options);
+    const message = this.createLoginMessage(options, fromPush, sessionId);
     this.clientIsReady = createDeferredPromise<boolean>();
 
     const resp = await this.connection.sendAndWait(message);
@@ -94,13 +46,11 @@ export class LoginHandler {
       return null;
     }
 
-    // Store the sessid from login response for future use
-    this.lastSessionId = resp.result.sessid;
-    onSessionId?.(resp.result.sessid);
-    log.debug('[LoginHandler] Stored sessid from login response:', this.lastSessionId);
+    if (!this.clientIsReady) {
+      throw new Error('Login canceled');
+    }
 
-    // Persist to AsyncStorage for future TelnyxRTC instances
-    this.persistSessionId(this.lastSessionId);
+    onSessionId?.(resp.result.sessid, resp.voice_sdk_id);
 
     this.waitingForClientReady = true;
     try {
@@ -135,7 +85,7 @@ export class LoginHandler {
     this.clientIsReady = null;
   }
 
-  private createLoginMessage = (options: ClientOptions) => {
+  private createLoginMessage = (options: ClientOptions, fromPush: boolean, sessid?: string) => {
     const userVariables = createLoginUserVariables({
       pushDeviceToken: options.pushNotificationDeviceToken,
       pushNotificationProvider: Platform.OS,
@@ -143,20 +93,13 @@ export class LoginHandler {
       pushWhenActive: options.pushWhenActive,
     });
 
-    // Use stored sessid from previous login response, or from options if provided
-    const sessid = (options as any).sessid || this.lastSessionId;
-    if (sessid) {
-      log.debug('[LoginHandler] Using sessid for login:', sessid);
-    } else {
-      log.debug('[LoginHandler] No sessid available for this login');
-    }
-
     if (options.login && options.password) {
       return createPasswordLoginMessage({
         login: options.login,
         password: options.password,
-        attachCall: true, // Always include attach_call for reliable reconnection
-        fromPush: this.isFromPush, // Pass the from push flag
+        attachCall: fromPush || Boolean(sessid),
+        reconnection: Boolean(sessid),
+        fromPush,
         enableMissedCallNotifications: options.enableMissedCallNotifications ?? false,
         userVariables,
         sessid,
@@ -166,8 +109,9 @@ export class LoginHandler {
     if (options.login_token) {
       return createTokenLoginMessage({
         login_token: options.login_token,
-        attachCall: true, // Always include attach_call for reliable reconnection
-        fromPush: this.isFromPush, // Pass the from push flag
+        attachCall: fromPush || Boolean(sessid),
+        reconnection: Boolean(sessid),
+        fromPush,
         enableMissedCallNotifications: options.enableMissedCallNotifications ?? false,
         userVariables,
         sessid,

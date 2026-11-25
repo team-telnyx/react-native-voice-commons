@@ -91,19 +91,15 @@ export function createPasswordLoginMessage({
   // Add from_push flag if this is a push-initiated connection (matching iOS SDK behavior)
   if (fromPush) {
     params.from_push = true; // Boolean value as shown in iOS SDK example
-    console.log('[Login] Adding from_push parameter to login message');
   }
 
-  // Always create loginParams since we always include attach_call
-  params.loginParams = {
-    attach_call: 'true', // iOS SDK uses true.description which converts to string
-  };
-  console.log('[Login] Adding attach_call parameter to login message');
+  if (attachCall) {
+    params.loginParams = { attach_call: 'true' };
+  }
 
   // Include existing session id when provided (useful for reconnection scenarios)
   if (sessid) {
     params.sessid = sessid;
-    console.log('[Login] Including existing sessid in params:', sessid);
   }
 
   return {
@@ -135,18 +131,14 @@ export function createTokenLoginMessage({
   // Add from_push flag if this is a push-initiated connection (matching iOS SDK behavior)
   if (fromPush) {
     params.from_push = true; // Boolean value as shown in iOS SDK example
-    console.log('[Login] Adding from_push parameter to token login message');
   }
 
-  // Always create loginParams since we always include attach_call
-  params.loginParams = {
-    attach_call: 'true', // iOS SDK uses true.description which converts to string
-  };
-  console.log('[Login] Adding attach_call parameter to token login message');
+  if (attachCall) {
+    params.loginParams = { attach_call: 'true' };
+  }
 
   if (sessid) {
     params.sessid = sessid;
-    console.log('[Login] Including existing sessid in token login params:', sessid);
   }
 
   return {
@@ -163,5 +155,6 @@ export function isLoginSuccessResponse(response: unknown): response is LoginSucc
   }
 
   const temp = response as Partial<LoginSuccessResponse>;
-  return !!temp.result?.message && !!temp.result?.sessid && temp.result.message === 'logged in';
+  return temp.result?.message === 'logged in' &&
+    typeof temp.result.sessid === 'string' && temp.result.sessid.length > 0;
 }

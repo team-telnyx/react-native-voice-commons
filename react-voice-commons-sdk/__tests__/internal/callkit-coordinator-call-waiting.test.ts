@@ -5,6 +5,7 @@ import { VoicePnBridge } from '../../src/internal/voice-pn-bridge';
 jest.mock('../../src/internal/voice-pn-bridge', () => ({
   VoicePnBridge: {
     getPendingVoipPush: jest.fn(),
+    takePendingCallKitAnswerIfMatches: jest.fn().mockResolvedValue(false),
     clearPendingVoipPush: jest.fn().mockResolvedValue(true),
     clearPendingVoipPushIfMatches: jest.fn().mockResolvedValue(true),
     setPendingPushAction: jest.fn().mockResolvedValue(true),
@@ -379,7 +380,9 @@ describe('CallKitCoordinator UUID-targeted call waiting', () => {
     await callKitCoordinator.handleCallKitPushReceived('callkit-b');
 
     expect(voipClient.handlePushNotification).toHaveBeenCalledTimes(1);
-    expect(voipClient.setPushNotificationCallKitUUID).toHaveBeenCalledWith('callkit-b');
+    expect(voipClient.handlePushNotification).toHaveBeenCalledWith({
+      metadata: expect.objectContaining({ call_id: 'callkit-b' }),
+    });
   });
 
   it('suppresses persisted push processing when CallKit rejected its UUID', async () => {
@@ -469,6 +472,51 @@ describe('CallKitCoordinator UUID-targeted call waiting', () => {
 
     expect(result).toBe(false);
     expect(voipClient.handlePushNotification).not.toHaveBeenCalled();
+  });
+
+  it('does not route a stale CallKit event using another call’s native push', async () => {
+    (VoicePnBridge.getPendingVoipPush as jest.Mock).mockResolvedValue(
+      JSON.stringify({ payload: { metadata: { call_id: 'callkit-b', voice_sdk_id: 'route-b' } } })
+    );
+    const voipClient = { handlePushNotification: jest.fn() };
+    coordinator.voipClient = voipClient;
+
+    await expect(coordinator.handleCallKitPushReceived('callkit-a')).resolves.toBe(false);
+    expect(voipClient.handlePushNotification).not.toHaveBeenCalled();
+    expect(VoicePnBridge.clearPendingVoipPushIfMatches).not.toHaveBeenCalled();
+  });
+
+  it('leaves the newer push in control when an older pending-answer read completes late', async () => {
+    const nativePush = VoicePnBridge.getPendingVoipPush as jest.Mock;
+    for (const call_id of ['callkit-a', 'callkit-b']) {
+      nativePush.mockResolvedValueOnce(JSON.stringify({ payload: { metadata: { call_id } } }));
+    }
+    let finishAnswer: (matched: boolean) => void;
+    let startAnswer: () => void;
+    const answer = new Promise<boolean>((resolve) => {
+      finishAnswer = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      startAnswer = resolve;
+    });
+    (VoicePnBridge.takePendingCallKitAnswerIfMatches as jest.Mock).mockImplementationOnce(() => {
+      startAnswer();
+      return answer;
+    });
+    const voipClient = { handlePushNotification: jest.fn(), queueAnswerFromCallKit: jest.fn() };
+    coordinator.voipClient = voipClient;
+
+    const older = coordinator.handleCallKitPushReceived('callkit-a');
+    await started;
+    await expect(coordinator.handleCallKitPushReceived('callkit-b')).resolves.toBe(true);
+    finishAnswer(true);
+    await expect(older).resolves.toBe(false);
+
+    expect(voipClient.handlePushNotification).toHaveBeenCalledTimes(1);
+    expect(voipClient.handlePushNotification).toHaveBeenCalledWith({
+      metadata: expect.objectContaining({ call_id: 'callkit-b' }),
+    });
+    expect(voipClient.queueAnswerFromCallKit).not.toHaveBeenCalled();
   });
 
   it('returns false for a duplicate push UUID', async () => {
@@ -607,7 +655,9 @@ describe('CallKitCoordinator UUID-targeted call waiting', () => {
 
       await expect(callKitCoordinator.handleCallKitPushReceived('callkit-b')).resolves.toBe(true);
 
-      expect(voipClient.setPushNotificationCallKitUUID).toHaveBeenCalledWith('callkit-b');
+      expect(voipClient.handlePushNotification).toHaveBeenCalledWith({
+        metadata: expect.objectContaining({ call_id: 'callkit-b' }),
+      });
       expect(VoicePnBridge.clearPendingVoipPushIfMatches).not.toHaveBeenCalled();
     });
 

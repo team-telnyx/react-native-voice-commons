@@ -114,6 +114,7 @@ object VoicePnManager {
     }
 
     // PnModule functions
+    @Synchronized
     fun setPendingPushAction(context: Context, action: String, metadata: String) {
         Log.d(TAG, "setPendingPushAction called with action: $action")
         val editor = getSharedPreferences(context).edit()
@@ -122,6 +123,7 @@ object VoicePnManager {
         editor.apply()
     }
     
+    @Synchronized
     fun getPendingPushAction(context: Context): Pair<String?, String?> {
         Log.d(TAG, "getPendingPushAction called")
         val prefs = getSharedPreferences(context)
@@ -130,6 +132,7 @@ object VoicePnManager {
         return Pair(action, metadata)
     }
     
+    @Synchronized
     fun clearPendingPushAction(context: Context): Boolean {
         Log.d(TAG, "clearPendingPushAction called")
         val editor = getSharedPreferences(context).edit()
@@ -139,6 +142,13 @@ object VoicePnManager {
         return true
     }
     
+    @Synchronized
+    fun clearPendingPushActionIfMatches(context: Context, action: String, metadata: String): Boolean {
+        if (getPendingPushAction(context) != Pair(action, metadata)) return false
+        return clearPendingPushAction(context)
+    }
+
+    @Synchronized
     fun checkPendingPushAction(context: Context): Boolean {
         Log.d(TAG, "checkPendingPushAction called")
         val (pendingAction, pendingMetadata) = getPendingPushAction(context)

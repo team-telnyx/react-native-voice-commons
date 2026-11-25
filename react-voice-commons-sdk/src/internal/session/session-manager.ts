@@ -43,6 +43,8 @@ export class SessionManager {
   private _disposed = false;
   private _disposing = false;
   private _connectionGeneration = 0;
+  private _pushRequest = 0;
+  private _connectingPush?: Record<string, any>;
   private _disposePromise?: Promise<void>;
   private _connectPromise?: Promise<void>;
   private _onClientReady?: () => void;
@@ -106,6 +108,7 @@ export class SessionManager {
    */
   async connectWithCredential(config: CredentialConfig): Promise<void> {
     this._assertCanStartConnection();
+    this._pushRequest += 1;
     this._currentConfig = config;
     await this._connect();
     this._assertCanStartConnection();
@@ -116,6 +119,7 @@ export class SessionManager {
    */
   async connectWithToken(config: TokenConfig): Promise<void> {
     this._assertCanStartConnection();
+    this._pushRequest += 1;
     this._currentConfig = config;
     await this._connect();
     this._assertCanStartConnection();
@@ -137,6 +141,7 @@ export class SessionManager {
     }
 
     this._connectionGeneration += 1;
+    this._pushRequest += 1;
     this._currentConfig = undefined;
     this._connectionState.next(TelnyxConnectionState.DISCONNECTED);
 
@@ -193,49 +198,53 @@ export class SessionManager {
       return;
     }
 
-    console.log(
-      'SessionManager: RELEASE DEBUG - Processing push notification, payload:',
-      JSON.stringify(payload)
-    );
-
-    // Store the push notification payload for when the client is created
-    (this as any)._pendingPushPayload = payload;
-
-    // A second-call push must stay on the client that owns the active/held
-    // call. Tearing it down destroys the first signaling session and clears
-    // the call collection before CallKit can complete Hold & Accept.
-    if (this._telnyxClient && this._hasActiveOrHeldCall(this._telnyxClient)) {
-      const actualPayload = this._extractPushPayload(payload);
-      const processVoIPNotification = (this._telnyxClient as any).processVoIPNotification;
-
-      if (typeof processVoIPNotification !== 'function') {
-        throw new Error('TelnyxRTC client cannot process an active-call VoIP notification');
-      }
-
-      console.log(
-        'SessionManager: Preserving active client while processing second-call push notification'
-      );
-      processVoIPNotification.call(this._telnyxClient, actualPayload);
-      (this as any)._pendingPushPayload = null;
+    const actualPayload = this._extractPushPayload(payload);
+    const callId = actualPayload.call_id ?? actualPayload.callId;
+    const client = this._telnyxClient;
+    const calls = client ? this._getLiveCalls(client) : [];
+    const target =
+      typeof callId === 'string'
+        ? calls.find(
+            (call) => (call._callKitUUID ?? call.callId)?.toLowerCase() === callId.toLowerCase()
+          )
+        : undefined;
+    if (target) {
+      if (actualPayload.action === 'answer' && target.state === 'ringing') await target.answer();
+      if (actualPayload.action === 'reject' && target.state === 'ringing') target.hangup();
       return;
     }
 
-    // The cold/no-active-call path still rebuilds the client so the socket is
-    // stamped with the push voice_sdk_id before connecting.
-    if (this._telnyxClient) {
+    const connectingPush = this._connectingPush;
+    if (
+      client &&
+      connectingPush &&
+      callId &&
+      callId === (connectingPush.call_id ?? connectingPush.callId) &&
+      actualPayload.voice_sdk_id === connectingPush.voice_sdk_id
+    ) {
+      if (actualPayload.action === 'answer' || actualPayload.action === 'reject') {
+        (client as any).processVoIPNotification(actualPayload);
+      }
+      return;
+    }
+
+    const request = ++this._pushRequest;
+    const isCurrent = () => !this._isTeardownActive() && request === this._pushRequest;
+
+    if (client && calls.some((call) => call.state === 'active' || call.state === 'held')) {
+      (client as any).processVoIPNotification(actualPayload);
+      this._onClientReady?.();
+      return;
+    }
+
+    if (client) {
+      this._connectionGeneration += 1;
       await this._disconnectAndForgetClient(
-        this._telnyxClient,
+        client,
         'SessionManager: disconnect of prior client threw:'
       );
     }
-
-    if (this._isTeardownActive()) {
-      return;
-    }
-
-    if (this.currentState !== TelnyxConnectionState.DISCONNECTED) {
-      this._connectionState.next(TelnyxConnectionState.DISCONNECTED);
-    }
+    if (!isCurrent()) return;
 
     // If we don't have a config yet but we're processing a push notification,
     // attempt to load stored config first (for terminated app startup)
@@ -267,7 +276,7 @@ export class SessionManager {
         const enableQualityMetrics = storedQualityMetrics === 'true';
         const environment = resolveStoredEnvironment(storedEnvironment, this._defaultEnvironment);
 
-        if (this._isTeardownActive()) {
+        if (!isCurrent()) {
           return;
         }
 
@@ -312,97 +321,17 @@ export class SessionManager {
       }
     }
 
-    if (this._isTeardownActive()) {
-      return;
+    if (isCurrent() && this._currentConfig) {
+      await this._connect({ payload: actualPayload, request });
     }
-
-    // If we already have a client, process the push notification immediately
-    if (this._telnyxClient) {
-      console.log(
-        'SessionManager: RELEASE DEBUG - Client available, processing push notification immediately'
-      );
-
-      // Use type assertion to access the processVoIPNotification method
-      // This method sets the isCallFromPush flag which is needed for proper push handling
-      if (typeof (this._telnyxClient as any).processVoIPNotification === 'function') {
-        console.log(
-          'SessionManager: RELEASE DEBUG - Calling processVoIPNotification with payload:',
-          JSON.stringify(payload)
-        );
-
-        // Extract the actual push notification metadata that the client expects
-        const actualPayload = this._extractPushPayload(payload);
-
-        (this._telnyxClient as any).processVoIPNotification(actualPayload);
-        console.log('SessionManager: RELEASE DEBUG - Called processVoIPNotification successfully');
-      } else {
-        console.warn(
-          'SessionManager: processVoIPNotification method not available on TelnyxRTC client'
-        );
-      }
-
-      // Clear the pending payload since it was processed
-      (this as any)._pendingPushPayload = null;
-    } else {
-      console.log(
-        'SessionManager: RELEASE DEBUG - No client available, checking if we can trigger immediate connection'
-      );
-
-      // If we have config (either existing or newly loaded from storage) and
-      // are not currently connected/connecting, trigger immediate connection.
-      // We accept DISCONNECTED and ERROR (a socket failure bumps state to
-      // ERROR) so a push after a failed session still re-establishes the
-      // connection. The _connect() method will process the pending push
-      // payload BEFORE calling connect().
-      if (
-        this._currentConfig &&
-        (this.currentState === TelnyxConnectionState.DISCONNECTED ||
-          this.currentState === TelnyxConnectionState.ERROR)
-      ) {
-        console.log(
-          'SessionManager: RELEASE DEBUG - Triggering immediate connection for push notification with config type:',
-          (this._currentConfig as any).type || 'credential'
-        );
-        try {
-          await this._connect();
-          if (this._isTeardownActive()) {
-            return;
-          }
-          console.log(
-            'SessionManager: RELEASE DEBUG - Successfully connected after push notification trigger'
-          );
-        } catch (error) {
-          if (this._isTeardownActive()) {
-            return;
-          }
-          console.error(
-            'SessionManager: Failed to connect after push notification trigger:',
-            error
-          );
-        }
-      } else {
-        console.log(
-          'SessionManager: RELEASE DEBUG - Cannot trigger connection, config available:',
-          !!this._currentConfig,
-          'current state:',
-          this.currentState
-        );
-        console.log(
-          'SessionManager: RELEASE DEBUG - Push payload stored for later processing when client becomes available'
-        );
-      }
-    }
-
-    console.log('SessionManager: RELEASE DEBUG - Push notification handling complete');
   }
 
-  private _hasActiveOrHeldCall(client: TelnyxSDK.TelnyxRTC): boolean {
+  private _getLiveCalls(client: TelnyxSDK.TelnyxRTC): any[] {
     const calls =
       typeof (client as any).getActiveCalls === 'function'
         ? (client as any).getActiveCalls()
         : Array.from(((client as any).calls as Map<string, any> | undefined)?.values?.() || []);
-
-    return calls.some((call: any) => call?.state === 'active' || call?.state === 'held');
+    return calls.filter((call: any) => call && call.state !== 'ended');
   }
 
   /**
@@ -423,7 +352,7 @@ export class SessionManager {
   /**
    * Internal method to establish connection with or without push notification handling
    */
-  private async _connect(): Promise<void> {
+  private async _connect(push?: { payload: Record<string, any>; request: number }): Promise<void> {
     const previousConnect = this._connectPromise;
     if (previousConnect) {
       try {
@@ -436,6 +365,7 @@ export class SessionManager {
     }
 
     this._assertCanStartConnection();
+    if (push && push.request !== this._pushRequest) return;
 
     const config = this._currentConfig;
     if (!config) {
@@ -443,7 +373,8 @@ export class SessionManager {
     }
 
     const connectionGeneration = (this._connectionGeneration += 1);
-    const connectPromise = this._runConnect(config, connectionGeneration);
+    this._connectingPush = push?.payload;
+    const connectPromise = this._runConnect(config, connectionGeneration, push?.payload);
     this._connectPromise = connectPromise;
 
     try {
@@ -451,6 +382,7 @@ export class SessionManager {
     } finally {
       if (this._connectPromise === connectPromise) {
         this._connectPromise = undefined;
+        this._connectingPush = undefined;
       }
     }
   }
@@ -477,13 +409,16 @@ export class SessionManager {
     }
 
     this._currentConfig = undefined;
-    (this as any)._pendingPushPayload = null;
     this._disposed = true;
     this._disposing = false;
     this._connectionState.complete();
   }
 
-  private async _runConnect(config: Config, connectionGeneration: number): Promise<void> {
+  private async _runConnect(
+    config: Config,
+    connectionGeneration: number,
+    pushPayload?: Record<string, any>
+  ): Promise<void> {
     this._throwIfConnectCanceled(connectionGeneration);
     this._connectionState.next(TelnyxConnectionState.CONNECTING);
 
@@ -559,35 +494,8 @@ export class SessionManager {
       client = new TelnyxSDK.TelnyxRTC(clientOptions);
       this._telnyxClient = client;
 
-      // CRITICAL: Process any pending push notification payload BEFORE connecting
-      // This ensures voice_sdk_id and other payload variables are set before connect() is called
-      const pendingPushPayload = (this as any)._pendingPushPayload;
-      if (pendingPushPayload) {
-        console.log(
-          'SessionManager: RELEASE DEBUG - Processing pending push notification BEFORE connect:',
-          JSON.stringify(pendingPushPayload)
-        );
-
-        if (typeof (this._telnyxClient as any).processVoIPNotification === 'function') {
-          console.log(
-            'SessionManager: RELEASE DEBUG - Calling processVoIPNotification BEFORE connect to set voice_sdk_id'
-          );
-
-          // Extract the actual push notification metadata that the client expects
-          const actualPayload = this._extractPushPayload(pendingPushPayload);
-
-          (this._telnyxClient as any).processVoIPNotification(actualPayload);
-          console.log(
-            'SessionManager: RELEASE DEBUG - Successfully processed pending push notification before connect'
-          );
-        } else {
-          console.warn(
-            'SessionManager: processVoIPNotification method not available on new client'
-          );
-        }
-
-        // Clear the pending payload
-        (this as any)._pendingPushPayload = null;
+      if (pushPayload) {
+        (client as any).processVoIPNotification(pushPayload);
       }
 
       this._setupClientListeners(client);
@@ -638,7 +546,9 @@ export class SessionManager {
           console.error('Error during failed connect cleanup:', cleanupError);
         }
       }
-      this._connectionState.next(TelnyxConnectionState.ERROR);
+      if (!this._isConnectCanceled(connectionGeneration)) {
+        this._connectionState.next(TelnyxConnectionState.ERROR);
+      }
       throw error;
     }
   }
@@ -692,50 +602,23 @@ export class SessionManager {
    * Extract the actual payload metadata from wrapped push notification payload
    */
   private _extractPushPayload(payload: Record<string, any>): any {
-    // The payload might be wrapped, so we need to extract the core metadata
-    let actualPayload = payload;
-
-    if (payload.metadata && typeof payload.metadata === 'object') {
-      // If there's a metadata wrapper, use that but preserve wrapper-level flags
-      actualPayload = payload.metadata;
-
-      // Preserve important flags from the wrapper level
-      if (payload.from_notification !== undefined) {
-        actualPayload.from_notification = payload.from_notification;
-      }
-      if (payload.action !== undefined) {
-        actualPayload.action = payload.action;
-      }
-
-      console.log(
-        'SessionManager: RELEASE DEBUG - Using metadata portion of payload with preserved flags:',
-        JSON.stringify(actualPayload)
-      );
-    } else if (payload.action === 'incoming_call' && payload.metadata) {
-      // Handle the case where metadata is a string that needs parsing
+    let metadata = payload.metadata;
+    if (typeof metadata === 'string') {
       try {
-        const parsedMetadata =
-          typeof payload.metadata === 'string' ? JSON.parse(payload.metadata) : payload.metadata;
-        actualPayload = parsedMetadata;
-
-        // Preserve important flags from the wrapper level
-        if (payload.from_notification !== undefined) {
-          actualPayload.from_notification = payload.from_notification;
-        }
-        if (payload.action !== undefined) {
-          actualPayload.action = payload.action;
-        }
-
-        console.log(
-          'SessionManager: RELEASE DEBUG - Using parsed metadata with preserved flags:',
-          JSON.stringify(actualPayload)
-        );
-      } catch (error) {
-        console.warn('SessionManager: Failed to parse metadata:', error);
+        metadata = JSON.parse(metadata);
+      } catch {
+        metadata = undefined;
       }
     }
 
-    return actualPayload;
+    if (!metadata || typeof metadata !== 'object') return payload;
+    return {
+      ...metadata,
+      ...(payload.from_notification !== undefined && {
+        from_notification: payload.from_notification,
+      }),
+      ...(payload.action !== undefined && { action: payload.action }),
+    };
   }
 
   /**

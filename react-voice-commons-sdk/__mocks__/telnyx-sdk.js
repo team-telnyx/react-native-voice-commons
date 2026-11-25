@@ -1,10 +1,12 @@
 module.exports = {
   TelnyxRTC: jest.fn(() => ({
     connect: jest.fn(),
+    processVoIPNotification: jest.fn(),
     disconnect: jest.fn(),
     newCall: jest.fn(),
     on: jest.fn(),
     off: jest.fn(),
+    listenerCount: jest.fn().mockReturnValue(0),
   })),
   Call: jest.fn(() => ({
     id: 'mock-call-id',

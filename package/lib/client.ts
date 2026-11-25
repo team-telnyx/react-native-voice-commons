@@ -1,5 +1,4 @@
 import NetInfo, { NetInfoState, NetInfoSubscription } from '@react-native-community/netinfo';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { EventEmitter } from 'eventemitter3';
 import log from 'loglevel';
 import uuid from 'uuid-random';
@@ -34,7 +33,6 @@ import {
   getCallIdFromTrickleParams,
 } from './messages/call';
 import { TelnyxRTCMethod } from './messages/methods';
-import { createAttachCallMessage } from './messages/attach';
 import type { AttachEvent } from './messages/attach';
 import { isAttachEvent } from './messages/attach';
 import type { MediaEvent } from './messages/media';
@@ -102,7 +100,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private credentialSessionConfig: any = null; // Store login credentials for reconnection
   private tokenSessionConfig: any = null; // Store login token for reconnection
   private reconnectionTimeoutHandle: any = null;
-  private reconnectionSessionId: string | null = null; // Store sessionId during reconnection
+  private confirmedSession?: { id: string; voiceSDKId?: string; pushGeneration?: number };
   private connectionGeneration: number = 0;
 
   // Active-call ICE restart recovery (VSDK-679)
@@ -136,78 +134,31 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private pendingEndActions: Set<string> = new Set();
   private static readonly LEGACY_PENDING_ACTION_KEY = '__legacy_unambiguous_call__';
 
-  // AsyncStorage keys for persisting push state
-  private static readonly PUSH_STATE_KEY = '@telnyx_push_state';
-  private static readonly PUSH_VOICE_SDK_ID_KEY = '@telnyx_push_voice_sdk_id';
+  private pushGeneration = 0;
+  private pushVoiceSDKId?: string;
+  private pushConnection: Connection | null = null;
 
-  /**
-   * Save push notification state to AsyncStorage
-   */
-  private async savePushState() {
-    try {
-      const pushState = {
-        isCallFromPush: this.isCallFromPush,
-        pushNotificationPayload: this.pushNotificationPayload,
-        pushNotificationCallKitUUID: this.pushNotificationCallKitUUID,
-        voice_sdk_id: (this as any)._pushVoiceSDKId,
-        timestamp: Date.now(),
-      };
+  private clearPushContext(generation: number) {
+    if (generation !== this.pushGeneration) return;
 
-      await AsyncStorage.setItem(TelnyxRTC.PUSH_STATE_KEY, JSON.stringify(pushState));
-      log.debug('[TelnyxRTC] Saved push state to AsyncStorage:', pushState);
-    } catch (error) {
-      log.error('[TelnyxRTC] Failed to save push state to AsyncStorage:', error);
+    const actionKey = this.pushNotificationCallKitUUID;
+    if (actionKey) {
+      this.pendingAnswerActions.delete(actionKey);
+      this.pendingEndActions.delete(actionKey);
     }
-  }
-
-  /**
-   * Load push notification state from AsyncStorage
-   */
-  private async loadPushState() {
-    try {
-      const pushStateJson = await AsyncStorage.getItem(TelnyxRTC.PUSH_STATE_KEY);
-      if (!pushStateJson) {
-        log.debug('[TelnyxRTC] No saved push state found');
-        return;
-      }
-
-      const pushState = JSON.parse(pushStateJson);
-
-      // Only restore if state is recent (within last 30 seconds to handle fresh push notifications)
-      const ageMs = Date.now() - (pushState.timestamp || 0);
-      if (ageMs > 30000) {
-        log.debug('[TelnyxRTC] Saved push state is too old, ignoring');
-        await this.clearPushState();
-        return;
-      }
-
-      this.isCallFromPush = pushState.isCallFromPush || false;
-      this.pushNotificationPayload = pushState.pushNotificationPayload || null;
-      this.pushNotificationCallKitUUID = pushState.pushNotificationCallKitUUID || null;
-      (this as any)._pushVoiceSDKId = pushState.voice_sdk_id || null;
-
-      log.debug('[TelnyxRTC] Restored push state from AsyncStorage:', pushState);
-      console.log('[TelnyxRTC] RELEASE DEBUG - Restored push state from AsyncStorage:', pushState);
-    } catch (error) {
-      log.error('[TelnyxRTC] Failed to load push state from AsyncStorage:', error);
-    }
-  }
-
-  /**
-   * Clear push notification state from AsyncStorage
-   */
-  private async clearPushState() {
-    try {
-      await AsyncStorage.removeItem(TelnyxRTC.PUSH_STATE_KEY);
-      log.debug('[TelnyxRTC] Cleared push state from AsyncStorage');
-    } catch (error) {
-      log.error('[TelnyxRTC] Failed to clear push state from AsyncStorage:', error);
-    }
+    this.pendingAnswerActions.delete(TelnyxRTC.LEGACY_PENDING_ACTION_KEY);
+    this.pendingEndActions.delete(TelnyxRTC.LEGACY_PENDING_ACTION_KEY);
+    this.pushGeneration += 1;
+    this.isCallFromPush = false;
+    this.pushNotificationPayload = null;
+    this.pushNotificationCallKitUUID = null;
+    this.pushVoiceSDKId = undefined;
+    this.pushConnection = null;
   }
 
   constructor(opts: ClientOptions) {
     super();
-    this.options = opts;
+    this.options = { ...opts };
 
     if (Boolean(opts.sdkName) !== Boolean(opts.sdkVersion)) {
       throw new Error('[TelnyxRTC] sdkName and sdkVersion must be provided together');
@@ -538,52 +489,29 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * ```
    */
   public processVoIPNotification(pushNotificationPayload: any) {
-    log.debug('[TelnyxRTC] Processing VoIP push notification:', pushNotificationPayload);
-    this.isCallFromPush = true;
-    this.pushNotificationPayload = pushNotificationPayload;
-
-    // Extract voice_sdk_id from push notification metadata (matching iOS SDK)
     const metadata = pushNotificationPayload?.metadata || pushNotificationPayload;
-    const pushCallKitUUID = metadata?.call_id || metadata?.callId;
-    if (typeof pushCallKitUUID === 'string' && pushCallKitUUID.length > 0) {
-      // Keep the app-facing PushKit/CallKit identity separate from the
-      // signaling INVITE callID. Call.createInboundCall attaches this UUID to
-      // the new call without changing Call.callId.
-      this.setPushNotificationCallKitUUID(this.normalizeCallIdentity(pushCallKitUUID));
+    const callId = metadata?.call_id || metadata?.callId;
+    const callKitUUID = typeof callId === 'string' && callId ? this.normalizeCallIdentity(callId) : null;
+    const voiceSDKId = typeof metadata?.voice_sdk_id === 'string'
+      ? metadata.voice_sdk_id || undefined
+      : undefined;
+
+    if (this.isCallFromPush &&
+      (this.pushNotificationCallKitUUID !== callKitUUID || this.pushVoiceSDKId !== voiceSDKId)) {
+      this.clearPushContext(this.pushGeneration);
     }
-
-    if (metadata?.voice_sdk_id) {
-      const newVoiceSDKId = metadata.voice_sdk_id;
-      const currentVoiceSDKId = (this as any)._pushVoiceSDKId;
-
-      log.debug('[TelnyxRTC] Extracted voice_sdk_id from push notification:', newVoiceSDKId);
-      log.debug('[TelnyxRTC] Current stored voice_sdk_id:', currentVoiceSDKId);
-
-      // Console logs for release debugging
-      console.log(
-        '[TelnyxRTC] RELEASE DEBUG - Extracted voice_sdk_id from push notification:',
-        newVoiceSDKId
-      );
-      console.log('[TelnyxRTC] RELEASE DEBUG - Current stored voice_sdk_id:', currentVoiceSDKId);
-
-      if (newVoiceSDKId !== currentVoiceSDKId) {
-        log.debug('[TelnyxRTC] Updating voice_sdk_id with fresh value from push notification');
-        (this as any)._pushVoiceSDKId = newVoiceSDKId;
-      } else {
-        log.debug(
-          '[TelnyxRTC] Voice_sdk_id unchanged - may be reprocessing same push notification'
-        );
-      }
-    } else {
-      log.warn('[TelnyxRTC] No voice_sdk_id found in push notification payload');
+    if (!this.isCallFromPush) this.pushGeneration += 1;
+    this.isCallFromPush = true;
+    this.pushNotificationCallKitUUID = callKitUUID;
+    this.pushVoiceSDKId = voiceSDKId;
+    if (this.getActiveCalls().some((call) => call.state === 'active' || call.state === 'held')) {
+      this.pushConnection = this.connection;
     }
-
-    log.debug('[TelnyxRTC] isCallFromPush flag set to:', this.isCallFromPush);
-
-    // Save push state to AsyncStorage for persistence across client recreation
-    this.savePushState().catch((error) => {
-      log.error('[TelnyxRTC] Failed to save push state:', error);
-    });
+    this.pushNotificationPayload = {
+      ...metadata,
+      from_notification: pushNotificationPayload?.from_notification ?? metadata?.from_notification,
+      action: pushNotificationPayload?.action ?? metadata?.action,
+    };
   }
 
   /**
@@ -696,6 +624,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       return;
     }
 
+    this.pendingAnswerActions.delete(actionKey);
     try {
       log.debug('[TelnyxRTC] Executing pending answer action');
 
@@ -710,9 +639,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       log.debug('[TelnyxRTC] Pending answer executed successfully');
     } catch (error) {
       log.error('[TelnyxRTC] Failed to execute pending answer:', error);
-    } finally {
-      this.pendingAnswerActions.delete(actionKey);
-      this.resetPushContextIfActionsComplete();
     }
   }
 
@@ -724,35 +650,13 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       return;
     }
 
+    this.pendingEndActions.delete(actionKey);
     try {
       log.debug('[TelnyxRTC] Executing pending end action');
       targetCall.hangup();
       log.debug('[TelnyxRTC] Pending end executed successfully');
     } catch (error) {
       log.error('[TelnyxRTC] Failed to execute pending end:', error);
-    } finally {
-      this.pendingEndActions.delete(actionKey);
-      this.resetPushContextIfActionsComplete();
-    }
-  }
-
-  /**
-   * Reset pending action flags (matching iOS SDK resetPushVariables)
-   * Also resets push flags so subsequent calls are not auto-answered.
-   */
-  private resetPushContextIfActionsComplete() {
-    if (
-      this.isCallFromPush &&
-      this.pendingAnswerActions.size === 0 &&
-      this.pendingEndActions.size === 0
-    ) {
-      log.debug('[TelnyxRTC] Resetting push flags after pending action executed');
-      this.isCallFromPush = false;
-      this.pushNotificationPayload = null;
-      this.pushNotificationCallKitUUID = null;
-      this.clearPushState().catch((error) => {
-        log.warn('[TelnyxRTC] Failed to clear push state after pending action:', error);
-      });
     }
   }
 
@@ -798,7 +702,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
    * If the login fails, it logs an error and throws an exception.
    * @see {@link ClientOptions} for the options that can be passed to the constructor.
    */
-  public async connect() {
+  public connect(): Promise<void> {
+    return this.connectSession(false);
+  }
+
+  private async connectSession(recover: boolean) {
     if (this.connection) {
       log.warn('A connection already exists. Please close it before creating a new one.');
       return;
@@ -817,178 +725,113 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       log.debug('[TelnyxRTC] Stored credential configuration for reconnection');
     }
 
-    // Ensure push state is loaded before proceeding with connection
-    // This is critical for push notifications where state might be restored from AsyncStorage
+    const pushGeneration = this.pushGeneration;
+    const fromPush = this.isCallFromPush;
+    const pushVoiceSDKId = this.pushVoiceSDKId;
+    // A pending push can recover only a session confirmed for that same flow.
+    const recovery = recover && this.confirmedSession?.voiceSDKId &&
+      (!fromPush || this.confirmedSession.pushGeneration === pushGeneration)
+      ? this.confirmedSession
+      : undefined;
+    if (!recover || !recovery) this.confirmedSession = undefined;
+    this.sessionId = null;
+
+    const route = recovery?.voiceSDKId ?? pushVoiceSDKId;
+    const connection = new Connection(route, this.options.environment);
+    this.connection = connection;
+    if (fromPush) this.pushConnection = connection;
     try {
-      await this.loadPushState();
-      log.debug('[TelnyxRTC] Push state loading completed before connection');
+      await this.registerConnection(connection, connectionGeneration, pushGeneration, fromPush, route, recovery?.id);
     } catch (error) {
-      log.error('[TelnyxRTC] Failed to load push state before connection:', error);
+      if (this.connectionGeneration === connectionGeneration) {
+        this.connectionGeneration += 1;
+        this.clearPushContext(pushGeneration);
+        this.closeConnection();
+      }
+      throw error;
     }
+  }
 
-    this.throwIfConnectCanceled(connectionGeneration);
-
-    // Use custom voice_sdk_id for push notifications (matching iOS SDK behavior)
-    const pushVoiceSDKId = (this as any)._pushVoiceSDKId;
-    if (this.isCallFromPush && pushVoiceSDKId) {
-      log.debug(
-        '[TelnyxRTC] Creating connection with push notification voice_sdk_id:',
-        pushVoiceSDKId
-      );
-      console.log(
-        '[TelnyxRTC] RELEASE DEBUG - Creating connection with push notification voice_sdk_id:',
-        pushVoiceSDKId
-      );
-      this.connection = new Connection(pushVoiceSDKId, this.options.environment);
-    } else {
-      log.debug('[TelnyxRTC] Creating standard connection');
-      console.log(
-        '[TelnyxRTC] RELEASE DEBUG - Creating standard connection, isCallFromPush:',
-        this.isCallFromPush,
-        'pushVoiceSDKId:',
-        pushVoiceSDKId
-      );
-      this.connection = new Connection(undefined, this.options.environment);
-    }
-
-    // Store reference to this client in the connection for CallKit UUID access
-    this.connection._client = this;
-
-    log.debug('[TelnyxRTC] Setting up connection event listeners');
-    this.connection.addListener('telnyx.socket.message', this.onSocketMessage);
-    // Socket error/close are propagated as `telnyx.client.error` so consumers
-    // (e.g. SessionManager) can move to ERROR state and decide what to do
-    // next, but we deliberately do NOT auto-reconnect from here. A previous
-    // implementation triggered an internal reconnect on these events, which
-    // raced against consumer-driven rebuilds (e.g. SessionManager rebuilding
-    // on each VoIP push) and created parallel sessions the gateway then
-    // `punt`-ed. Mid-call network changes are still handled by the NetInfo-
-    // driven onNetworkUnavailable path. Pre-login failures are owned by the
-    // initial connect() promise and ignored here.
-    this.connection.addListener('telnyx.socket.error', (error) => {
-      log.error('[TelnyxRTC] WebSocket connection error:', error);
+  private async registerConnection(
+    connection: Connection,
+    connectionGeneration: number,
+    pushGeneration: number,
+    fromPush: boolean,
+    route: string | undefined,
+    recoverySessionId?: string
+  ) {
+    connection._client = this;
+    const isCurrent = () => this.connectionGeneration === connectionGeneration;
+    connection.addListener('telnyx.socket.message', (message) => {
+      if (isCurrent()) return this.onSocketMessage(message);
+    });
+    const onSocketFailure = (error: Error) => {
+      if (!isCurrent()) return;
+      if (this.pushConnection === connection) this.clearPushContext(this.pushGeneration);
       if (this.sessionId) {
         try {
-          this.emit('telnyx.client.error', error as any);
-        } catch {
-          /* consumers may not be subscribed */
+          this.emit('telnyx.client.error', error);
+        } catch (listenerError) {
+          log.error('[TelnyxRTC] Client error listener failed:', listenerError);
         }
       }
+    };
+    connection.addListener('telnyx.socket.error', (error) => {
+      onSocketFailure(new Error(`WebSocket connection failed: ${error.type}`));
     });
-    this.connection.addListener('telnyx.socket.close', () => {
-      log.debug('[TelnyxRTC] WebSocket connection closed');
-      if (this.sessionId) {
-        try {
-          this.emit('telnyx.client.error', new Error('WebSocket closed'));
-        } catch {
-          /* consumers may not be subscribed */
-        }
-      }
+    connection.addListener('telnyx.socket.close', () => {
+      onSocketFailure(new Error('WebSocket closed'));
     });
 
-    // Wait for WebSocket connection to be established
-    if (!this.connection.isConnected) {
-      log.debug('[TelnyxRTC] Waiting for WebSocket connection...');
+    if (!connection.isConnected) {
       await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('WebSocket connection timeout after 15 seconds'));
-        }, 15000); // 15 second timeout
-
-        const onOpen = () => {
-          log.debug('[TelnyxRTC] WebSocket connection established');
+        const cleanup = () => {
           clearTimeout(timeout);
-          this.connection!.removeListener('telnyx.socket.open', onOpen);
-          this.connection!.removeListener('telnyx.socket.error', onError);
-          this.connection!.removeListener('telnyx.socket.close', onClose);
+          connection.removeListener('telnyx.socket.open', onOpen);
+          connection.removeListener('telnyx.socket.error', onError);
+          connection.removeListener('telnyx.socket.close', onClose);
+        };
+        const fail = (error: Error) => {
+          cleanup();
+          reject(error);
+        };
+        const onOpen = () => {
+          cleanup();
           resolve();
         };
-
-        const onError = (error: Event) => {
-          log.error('[TelnyxRTC] WebSocket connection failed:', error);
-          clearTimeout(timeout);
-          this.connection!.removeListener('telnyx.socket.open', onOpen);
-          this.connection!.removeListener('telnyx.socket.error', onError);
-          this.connection!.removeListener('telnyx.socket.close', onClose);
-
-          // Clear push-specific voice_sdk_id on connection failure to allow normal reconnection
-          if ((this as any)._pushVoiceSDKId) {
-            log.debug(
-              '[TelnyxRTC] Clearing push voice_sdk_id after connection failure to enable normal reconnection'
-            );
-            (this as any)._pushVoiceSDKId = null;
-          }
-
-          reject(new Error(`WebSocket connection failed: ${error.type}`));
-        };
-
-        const onClose = () => {
-          log.debug('[TelnyxRTC] WebSocket connection closed during connection attempt');
-          clearTimeout(timeout);
-          this.connection!.removeListener('telnyx.socket.open', onOpen);
-          this.connection!.removeListener('telnyx.socket.error', onError);
-          this.connection!.removeListener('telnyx.socket.close', onClose);
-
-          // Clear push-specific voice_sdk_id on connection close to allow normal reconnection
-          if ((this as any)._pushVoiceSDKId) {
-            log.debug(
-              '[TelnyxRTC] Clearing push voice_sdk_id after connection close to enable normal reconnection'
-            );
-            (this as any)._pushVoiceSDKId = null;
-          }
-
-          reject(new Error('WebSocket connection closed unexpectedly'));
-        };
-
-        this.connection!.addListener('telnyx.socket.open', onOpen);
-        this.connection!.addListener('telnyx.socket.error', onError);
-        this.connection!.addListener('telnyx.socket.close', onClose);
+        const onError = (error: Event) => fail(new Error(`WebSocket connection failed: ${error.type}`));
+        const onClose = () => fail(new Error('WebSocket connection closed unexpectedly'));
+        const timeout = setTimeout(() => fail(new Error('WebSocket connection timeout after 15 seconds')), 15000);
+        connection.addListener('telnyx.socket.open', onOpen);
+        connection.addListener('telnyx.socket.error', onError);
+        connection.addListener('telnyx.socket.close', onClose);
       });
     }
 
     this.throwIfConnectCanceled(connectionGeneration);
+    if (fromPush && this.pushGeneration !== pushGeneration) {
+      throw new Error('VoIP push was superseded before login');
+    }
 
-    this.loginHandler = new LoginHandler(this.connection, this.sdkIdentity);
-    this.keepAliveHandler = new KeepAliveHandler(this.connection);
+    this.loginHandler = new LoginHandler(connection, this.sdkIdentity);
+    this.keepAliveHandler = new KeepAliveHandler(connection);
     this.keepAliveHandler.start();
 
-    // Set push notification flags if this is a push-initiated connection
-    log.debug('[TelnyxRTC] Checking isCallFromPush flag:', this.isCallFromPush);
-    if (this.isCallFromPush) {
-      log.debug('[TelnyxRTC] Setting push notification flags for login');
-      this.loginHandler.setAttachCall(true);
-      this.loginHandler.setFromPush(true);
-    } else {
-      log.debug('[TelnyxRTC] Not a push connection, no push flags needed');
-    }
-
-    log.debug('[TelnyxRTC] Attempting login...');
-    // The attach_call parameter and sessid are now handled automatically in the LoginHandler
-    log.debug(
-      '[TelnyxRTC] Login will include attach_call and sessid (if available) for reliable reconnection'
-    );
-
-    this.sessionId = await this.loginHandler.login(this.options, (sessionId) => {
-      if (this.connectionGeneration === connectionGeneration) {
-        this.sessionId = sessionId;
+    const sessionId = await this.loginHandler.login(this.options, (id, voiceSDKId) => {
+      if (isCurrent()) {
+        this.sessionId = id;
+        this.confirmedSession = {
+          id,
+          voiceSDKId: typeof voiceSDKId === 'string' && voiceSDKId ? voiceSDKId : route,
+          pushGeneration: fromPush ? pushGeneration : undefined,
+        };
       }
-    });
+    }, { fromPush, sessionId: recoverySessionId });
     this.throwIfConnectCanceled(connectionGeneration);
-    if (!this.sessionId) {
-      log.error('Login failed. Please check your credentials and try again.');
+    if (!sessionId) {
       throw new Error('Login failed. Please check your credentials and try again.');
     }
-
-    log.debug('[TelnyxRTC] Login successful, session ID:', this.sessionId);
-
-    // Don't send attach call if we expect an invite to come through
-    // The attach call is mainly for cases where the invite might be missed
-    // Since we're connected and ready, we should receive the invite directly
-    if (this.isCallFromPush && this.pushNotificationPayload) {
-      log.debug(
-        '[TelnyxRTC] Connection initiated by push notification - waiting for invite instead of sending attach call'
-      );
-      log.debug('[TelnyxRTC] Push payload ready for processing:', this.pushNotificationPayload);
-    }
+    this.sessionId = sessionId;
 
     // Process any pending invite that arrived during login (matching iOS SDK behavior)
     if (this.pendingInvite) {
@@ -1001,6 +844,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       log.debug('[TelnyxRTC] No pending invites to process');
     }
 
+    this.throwIfConnectCanceled(connectionGeneration);
     this.emit('telnyx.client.ready');
   }
 
@@ -1038,51 +882,34 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     this.credentialSessionConfig = null;
     this.tokenSessionConfig = null;
 
-    if (!this.connection) {
-      log.warn('No connection exists.');
-    } else {
-      this.loginHandler?.cancelPendingLogin();
-      this.connection.close();
-      this.connection = null;
-    }
-    this.loginHandler = null;
+    this.closeConnection();
 
     if (!fromReconnection) {
-      log.debug('[TelnyxRTC] Disconnected due to reconnection process');
+      this.confirmedSession = undefined;
+      this.clearPushContext(this.pushGeneration);
+      this.pendingAnswerActions.clear();
+      this.pendingEndActions.clear();
       this.removeAllListeners();
       try {
         this.netInfoSubscription?.();
       } catch (error) {
         log.warn('[TelnyxRTC] NetInfo subscription cleanup failed:', error);
       }
-
-      // Clear push-specific voice_sdk_id on disconnect to ensure clean state
-      if ((this as any)._pushVoiceSDKId) {
-        log.debug('[TelnyxRTC] Clearing push voice_sdk_id on disconnect');
-        (this as any)._pushVoiceSDKId = null;
-      }
-    }
-
-    // Reset push flags on disconnect to ensure clean state for next connection
-    // Preserve push-related flags during reconnection so they survive the disconnect
-    if (!this.reconnecting) {
-      this.isCallFromPush = false;
-      this.pushNotificationPayload = null;
-      this.pendingInvite = null;
-      this.pushNotificationCallKitUUID = null;
-      // Cancel any ongoing reconnection process
-      this.reconnecting = false;
-      log.debug('[TelnyxRTC] Reset push flags on disconnect');
-
-      // Clear stored push state from AsyncStorage
-      this.clearPushState().catch((error) => {
-        log.error('[TelnyxRTC] Failed to clear push state on disconnect:', error);
-      });
-    } else {
-      log.debug('[TelnyxRTC] Preserving push flags due to ongoing reconnection');
     }
 
     log.warn('[TelnyxRTC] Disconnected from Telnyx RTC');
+  }
+
+  private closeConnection() {
+    const connection = this.connection;
+    this.connection = null;
+    this.sessionId = null;
+    this.pendingInvite = null;
+    this.loginHandler?.cancelPendingLogin();
+    this.loginHandler = null;
+    this.keepAliveHandler?.stop();
+    this.keepAliveHandler = null;
+    connection?.close();
   }
 
   public get connected() {
@@ -1201,7 +1028,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     reason: CallTerminationReason
   ) => {
     const callKitUUID = this.pushNotificationCallKitUUID;
-    const pushVoiceSDKId = (this as any)._pushVoiceSDKId;
+    const pushVoiceSDKId = this.pushVoiceSDKId;
 
     // Unknown BYEs can belong to calls from an earlier socket session. Only
     // bridge the event while an explicit PushKit call is awaiting its INVITE.
@@ -1215,8 +1042,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     if (
       typeof pushVoiceSDKId === 'string' &&
       typeof msg.voice_sdk_id === 'string' &&
-      this.normalizeCallIdentity(pushVoiceSDKId) !==
-        this.normalizeCallIdentity(msg.voice_sdk_id)
+      pushVoiceSDKId !== msg.voice_sdk_id
     ) {
       log.debug('[TelnyxRTC] Ignoring pre-INVITE BYE from another push session', {
         callID: msg.params.callID,
@@ -1237,25 +1063,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     this.pendingMediaEvents.delete(msg.params.callID);
     this.pendingTrickleEvents.delete(msg.params.callID);
 
-    const actionKey = this.normalizeCallIdentity(callKitUUID);
-    this.pendingAnswerActions.delete(actionKey);
-    this.pendingEndActions.delete(actionKey);
-    this.pendingAnswerActions.delete(TelnyxRTC.LEGACY_PENDING_ACTION_KEY);
-    this.pendingEndActions.delete(TelnyxRTC.LEGACY_PENDING_ACTION_KEY);
-
-    // Native iOS exposes this as onRemoteCallEnded and Android emits a normal
-    // BYE terminal event. Preserve that general contract even though this
-    // particular path has no Call object yet. Once an INVITE has created a
-    // Call, commons can also run its existing state-listener teardown; both
-    // consumers deliberately keep their cleanup idempotent.
+    this.clearPushContext(this.pushGeneration);
     this.emit('telnyx.call.remoteEnded', callKitUUID, reason);
-
-    this.isCallFromPush = false;
-    this.pushNotificationPayload = null;
-    this.pushNotificationCallKitUUID = null;
-    this.clearPushState().catch((error) => {
-      log.warn('[TelnyxRTC] Failed to clear push state after pre-INVITE BYE:', error);
-    });
   };
 
   private handleCallInvite = async (msg: InviteEvent) => {
@@ -1282,16 +1091,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private processInvite = async (msg: InviteEvent) => {
     log.debug('[TelnyxRTC] Processing invite with session ID:', this.sessionId);
 
-    // If this is a push notification call and we have a stored CallKit UUID,
-    // ensure it's available for the createInboundCall method
-    if (this.isCallFromPush && this.pushNotificationCallKitUUID) {
-      log.debug(
-        '[TelnyxRTC] Push notification call - CallKit UUID will be automatically assigned during call creation:',
-        this.pushNotificationCallKitUUID
-      );
-    }
-
-    log.debug('[TelnyxRTC] Creating inbound call object');
+    const pushGeneration = this.pushGeneration;
+    const connectionGeneration = this.connectionGeneration;
+    const pushPayload = this.isCallFromPush && this.pushConnection === this.connection
+      ? this.pushNotificationPayload
+      : null;
 
     // Check if we have SDP from invite or from a pending media event
     let remoteSDP = msg.params.sdp;
@@ -1315,6 +1119,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       incomingCall = await Call.createInboundCall({
         connection: this.connection!,
         remoteSDP,
+        pushCallKitUUID: pushPayload ? this.pushNotificationCallKitUUID : null,
         sessionId: this.sessionId!,
         callId: msg.params.callID,
         telnyxLegId: msg.params.telnyx_leg_id,
@@ -1337,11 +1142,16 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       });
     } catch (error) {
       log.error('[TelnyxRTC] Failed to create inbound call:', error);
-      console.error('[TelnyxRTC] RELEASE DEBUG - createInboundCall error:', error);
+      if (pushPayload) this.clearPushContext(pushGeneration);
       return;
     }
 
     // Add to calls tracking (matches iOS SDK behavior)
+    if (connectionGeneration !== this.connectionGeneration) {
+      incomingCall.disposePeer();
+      return;
+    }
+
     this.addCall(incomingCall);
 
     log.debug('[TelnyxRTC] Call state set to connecting after creation');
@@ -1361,67 +1171,28 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     // ringing screen for a call that's already dead.
     let rejectedByPushAction = false;
 
-    // Check for pending actions from CallKit (matching iOS SDK behavior)
-    if (this.isCallFromPush) {
-      log.debug('[TelnyxRTC] This is a push notification call, checking pending actions');
-
-      // Check if this call came from a notification Answer action
-      const fromNotification = this.pushNotificationPayload?.from_notification;
-      const action = this.pushNotificationPayload?.action;
-
-      if (fromNotification) {
-        log.debug('[TelnyxRTC] <Call came from >notification Answer button - auto-answering');
-        // Auto-answer the call since user already pressed Answer button
-        log.debug(
-          '[TelnyxRTC] Auto-answering push notification call, current state:',
-          incomingCall.state
-        );
-        if (action === 'answer') {
-          incomingCall.answer();
-        } else if (action === 'reject') {
-          incomingCall.hangup();
-          // Push action already rejected this call — bye was sent, the call
-          // is in 'ended' state. Don't surface it to consumers as an
-          // incoming call; otherwise the UI flashes a ringing screen for a
-          // call that's already dead. Socket teardown for "user kills the
-          // app afterwards" is handled by the consumer's app-backgrounded
-          // path (mirroring the Android SDK's MainActivity.onStop disconnect
-          // pattern), not here.
-          rejectedByPushAction = true;
-        }
-        // Reset push flags immediately since the action was handled inline
-        this.resetPushContextIfActionsComplete();
+    if (pushPayload && pushGeneration === this.pushGeneration) {
+      const { from_notification, action } = this.pushNotificationPayload;
+      if (from_notification && action === 'answer') {
+        void incomingCall.answer().catch((error) => {
+          log.error('[TelnyxRTC] Failed to answer from push notification:', error);
+        });
+      } else if (from_notification && action === 'reject') {
+        incomingCall.hangup();
+        rejectedByPushAction = true;
       } else {
         const callIdentity = this.getCallKitIdentity(incomingCall);
-        const answerKey = this.pendingAnswerActions.has(callIdentity)
-          ? callIdentity
-          : this.pendingAnswerActions.has(TelnyxRTC.LEGACY_PENDING_ACTION_KEY)
-            ? TelnyxRTC.LEGACY_PENDING_ACTION_KEY
-            : null;
-        const endKey = this.pendingEndActions.has(callIdentity)
-          ? callIdentity
-          : this.pendingEndActions.has(TelnyxRTC.LEGACY_PENDING_ACTION_KEY)
-            ? TelnyxRTC.LEGACY_PENDING_ACTION_KEY
-            : null;
-
-        if (answerKey) {
-          log.debug('[TelnyxRTC] Found pending answer action, executing...');
-          // Execute pending answer asynchronously to allow call setup to complete first
-          setTimeout(() => void this.executePendingAnswer(incomingCall, answerKey), 100);
-        } else if (endKey) {
-          log.debug('[TelnyxRTC] Found pending end action, executing...');
-          setTimeout(() => this.executePendingEnd(incomingCall, endKey), 100);
-          // Same reasoning as the inline `action === 'reject'` branch above —
-          // we've decided to end this call before the user sees it.
+        const legacyKey = TelnyxRTC.LEGACY_PENDING_ACTION_KEY;
+        const answerKey = this.pendingAnswerActions.has(callIdentity) ? callIdentity : legacyKey;
+        const endKey = this.pendingEndActions.has(callIdentity) ? callIdentity : legacyKey;
+        if (this.pendingAnswerActions.has(answerKey)) {
+          void this.executePendingAnswer(incomingCall, answerKey);
+        } else if (this.pendingEndActions.has(endKey)) {
+          this.executePendingEnd(incomingCall, endKey);
           rejectedByPushAction = true;
-        } else {
-          log.debug('[TelnyxRTC] No pending actions to execute for push notification call');
-          // No pending actions yet - keep isCallFromPush alive so that a
-          // UUID-targeted CallKit action can resolve this call later.
         }
       }
-    } else {
-      log.debug('[TelnyxRTC] Not a push notification call, no pending actions to check');
+      this.clearPushContext(pushGeneration);
     }
 
     if (rejectedByPushAction) {
@@ -1438,11 +1209,6 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       call: incomingCall,
     });
 
-    // The INVITE now owns the durable app-facing UUID. If no pre-INVITE
-    // action is pending, the global push context is no longer needed and
-    // must not leak into the next call.
-    this.resetPushContextIfActionsComplete();
-
     log.debug('[TelnyxRTC] ====== CALL INVITE HANDLING COMPLETE ======');
   };
 
@@ -1455,6 +1221,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       return;
     }
 
+    const connectionGeneration = this.connectionGeneration;
     if (!this.sessionId) {
       log.error('[TelnyxRTC] No session ID available for attach.');
       return;
@@ -1470,6 +1237,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     const attachedCall = await Call.createInboundCall({
       connection: this.connection!,
       remoteSDP: msg.params.sdp,
+      pushCallKitUUID: null,
       sessionId: this.sessionId!,
       callId: msg.params.callID,
       telnyxLegId: msg.params.telnyx_leg_id,
@@ -1497,6 +1265,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       recoveryHooks: this.buildRecoveryHooks(),
     });
 
+    if (connectionGeneration !== this.connectionGeneration) {
+      attachedCall.disposePeer();
+      return;
+    }
+
     // Add to calls tracking (matches iOS SDK behavior)
     this.addCall(attachedCall);
 
@@ -1506,6 +1279,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     } catch (error) {
       log.error('[TelnyxRTC] Failed to execute answerAttach:', error);
       attachedCall.disposePeer();
+      if (connectionGeneration !== this.connectionGeneration || this.getCall(attachedCall.callId) !== attachedCall) return;
       this.removeCall(attachedCall.callId);
       this.emit(
         'telnyx.client.error',
@@ -1513,6 +1287,8 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       );
       return;
     }
+
+    if (connectionGeneration !== this.connectionGeneration || this.getCall(attachedCall.callId) !== attachedCall) return;
 
     log.debug('[TelnyxRTC] Emitting telnyx.call.reattached event for reattached call');
     log.debug(
@@ -1798,7 +1574,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       log.debug('[TelnyxRTC] Starting reconnection process...');
 
       // Connect (this will create new connection and login)
-      await this.connect();
+      await this.connectSession(true);
 
       log.debug('[TelnyxRTC] Reconnection and relogin successful');
       this.cancelReconnectionTimer();
@@ -1962,7 +1738,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
             settle(false, { silent: true });
             return;
           }
-          await this.connect();
+          await this.connectSession(true);
           if (!isCurrent()) {
             log.debug('[TelnyxRTC] Recovery fallback: cancelled after reconnect');
             settle(false, { silent: true });

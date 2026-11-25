@@ -56,6 +56,7 @@ class CallKitCoordinator {
 
   private isCallFromPush = false;
   private pendingPushCallUUIDs = new Set<string>();
+  private pushDeliveryGeneration = 0;
   private selectedCallKitUUID: string | null = null;
   private restoreHeldCallPromise: Promise<void> | null = null;
   private pendingSwap: PendingSwap | null = null;
@@ -602,7 +603,7 @@ class CallKitCoordinator {
       }
 
       if (wasPendingPush) {
-        await VoicePnBridge.clearPendingVoipPush().catch((error) => {
+        await this.clearMatchingPendingVoipPush(callKitUUID).catch((error) => {
           console.warn('CallKitCoordinator: Failed to clear ended call push data', error);
         });
       }
@@ -658,7 +659,9 @@ class CallKitCoordinator {
       return false;
     }
 
+    const delivery = ++this.pushDeliveryGeneration;
     const isRegistered = await CallKit.isCallRegistered(callKitUUID);
+    if (delivery !== this.pushDeliveryGeneration) return false;
     if (!isRegistered) {
       console.warn(
         'CallKitCoordinator: Ignoring push because its CallKit registration was rejected',
@@ -699,8 +702,12 @@ class CallKitCoordinator {
       const pendingPush = JSON.parse(pendingPushJson);
       const realPushData = pendingPush?.payload;
 
-      if (!realPushData?.metadata) {
-        throw new Error('CallKitCoordinator: Invalid push data structure');
+      const metadataCallId = realPushData?.metadata?.call_id ?? realPushData?.metadata?.callId;
+      if (
+        typeof metadataCallId !== 'string' ||
+        this.normalizeUUID(metadataCallId) !== callKitUUID
+      ) {
+        throw new Error('CallKitCoordinator: Pending push does not match the CallKit UUID');
       }
 
       // Prepare push metadata with CallKit flag
@@ -709,21 +716,22 @@ class CallKitCoordinator {
         from_callkit: true,
       };
 
-      // This app-facing UUID is attached to the next inbound Call while the
-      // socket INVITE retains its own signaling callID.
-      voipClient.setPushNotificationCallKitUUID(callKitUUID);
-
       // Restore an answer that native CallKit received before React Native had
       // attached listeners. Never apply an answer UUID to a different incoming call.
       try {
-        const pendingAnswer = await VoicePnBridge.getPendingCallKitAnswer();
-        if (pendingAnswer && this.normalizeUUID(pendingAnswer) === callKitUUID) {
+        if (await VoicePnBridge.takePendingCallKitAnswerIfMatches(callKitUUID)) {
           console.log('CallKitCoordinator: Restoring pending CallKit answer for matching UUID');
           this.autoAnswerCallUUIDs.add(callKitUUID);
-          await VoicePnBridge.clearPendingCallKitAnswer();
         }
       } catch {
         // The bridge method is unavailable on older native builds.
+      }
+
+      if (delivery !== this.pushDeliveryGeneration || !this.pendingPushCallUUIDs.has(callKitUUID)) {
+        this.pendingPushCallUUIDs.delete(callKitUUID);
+        this.autoAnswerCallUUIDs.delete(callKitUUID);
+        this.isCallFromPush = this.pendingPushCallUUIDs.size > 0;
+        return false;
       }
 
       // A pre-INVITE CallKit answer is represented only by the UUID-keyed
@@ -749,6 +757,7 @@ class CallKitCoordinator {
       return true;
     } catch (error) {
       this.pendingPushCallUUIDs.delete(callKitUUID);
+      this.autoAnswerCallUUIDs.delete(callKitUUID);
       this.isCallFromPush = this.pendingPushCallUUIDs.size > 0;
       console.error('CallKitCoordinator: Error processing push received event:', error);
       return false;
@@ -858,12 +867,9 @@ class CallKitCoordinator {
 
         this.getSDKClient()?.queueEndFromCallKit(callKitUUID);
 
-        // Clean up push notification state
-        await this.cleanupPushNotificationState();
-
         // Clear push data now that rejection is handled
         try {
-          await VoicePnBridge.clearPendingVoipPush();
+          await this.clearMatchingPendingVoipPush(callKitUUID);
           console.log('CallKitCoordinator: Cleared pending VoIP push after rejection handled');
         } catch (_) {}
 
@@ -1064,13 +1070,6 @@ class CallKitCoordinator {
    */
   setVoipClient(voipClient: TelnyxVoipClient): void {
     this.voipClient = voipClient;
-  }
-
-  /**
-   * Helper method to clean up push notification state
-   */
-  private async cleanupPushNotificationState(): Promise<void> {
-    console.log('CallKitCoordinator: Push notification state cleaned up');
   }
 
   private async rejectUnregisteredIncomingCall(callKitUUID: string, call: Call): Promise<void> {

@@ -143,3 +143,21 @@ describe('VoicePnBridge pending push cleanup', () => {
     jest.restoreAllMocks();
   });
 });
+
+describe('VoicePnBridge pending CallKit answer', () => {
+  it('claims the pending answer by UUID in one native call', async () => {
+    jest.resetModules();
+    const { NativeModules } = require('react-native');
+    const take = jest.fn().mockResolvedValue(false);
+    const clear = jest.fn();
+    NativeModules.VoicePnBridge = {
+      takePendingCallKitAnswerIfMatches: take,
+      clearPendingCallKitAnswer: clear,
+    };
+    const { VoicePnBridge } = await import('../../src/internal/voice-pn-bridge');
+
+    await expect(VoicePnBridge.takePendingCallKitAnswerIfMatches('old-call')).resolves.toBe(false);
+    expect(take).toHaveBeenCalledWith('old-call');
+    expect(clear).not.toHaveBeenCalled();
+  });
+});

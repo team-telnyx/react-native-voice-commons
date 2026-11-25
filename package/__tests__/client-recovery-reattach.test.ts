@@ -99,7 +99,7 @@ describe('Recovery reattach fallback (VSDK-679 review fixes)', () => {
     client = new TelnyxRTC({ logLevel: 'debug' });
     // Isolate the fallback from the real connect/disconnect flow: the
     // reattach event and the window expiry drive the outcome.
-    connectSpy = jest.spyOn(client as any, 'connect').mockResolvedValue(undefined);
+    connectSpy = jest.spyOn(client as any, 'connectSession').mockResolvedValue(undefined);
     jest.spyOn(client as any, 'disconnect').mockImplementation(() => {});
   });
 

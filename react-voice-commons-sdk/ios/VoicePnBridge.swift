@@ -94,6 +94,11 @@ class VoicePnBridge: NSObject {
     }
 
     @objc
+    func takePendingCallKitAnswerIfMatches(_ callId: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        resolve(TelnyxCallKitManager.shared.takePendingCallKitAnswer(ifMatches: callId))
+    }
+
+    @objc
     func getPendingVoipAction(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         let pending = UserDefaults.standard.string(forKey: "pending_voip_action")
         NSLog("[VoicePnBridge] getPendingVoipAction called. pending=\(pending ?? "(nil)")")

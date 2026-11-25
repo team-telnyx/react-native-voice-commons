@@ -363,8 +363,15 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
           log('JSON parse failed, trying Android key-value format');
         }
 
-        await VoicePnBridge.clearPendingPushAction();
-        log('Cleared pending push action after retrieval');
+        if (typeof VoicePnBridge.clearPendingPushActionIfMatches === 'function') {
+          const claimed = await VoicePnBridge.clearPendingPushActionIfMatches(
+            pendingAction.action,
+            pendingAction.metadata
+          );
+          if (!claimed) return { pushData: null, earlyReturn: true };
+        } else {
+          await VoicePnBridge.clearPendingPushAction();
+        }
 
         return {
           pushData: { action: pendingAction.action, metadata, from_notification: true },
@@ -484,7 +491,15 @@ const TelnyxVoiceAppComponent: React.FC<TelnyxVoiceAppProps> = ({
               call.currentState === TelnyxCallState.HELD
           );
 
-        if (isConnectedOrConnecting && !isActiveIOSCallWaitingPush) {
+        const isAndroidNotificationAction =
+          Platform.OS === 'android' &&
+          (pushData.action === 'answer' || pushData.action === 'reject');
+
+        if (
+          isConnectedOrConnecting &&
+          !isActiveIOSCallWaitingPush &&
+          !isAndroidNotificationAction
+        ) {
           log(
             `SKIPPING - Already ${voipClient.currentConnectionState}, preventing duplicate processing`
           );

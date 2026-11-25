@@ -40,6 +40,7 @@ export interface VoicePnBridgeInterface {
   setIncomingCallRingtone(resourceName: string | null): Promise<boolean>;
 
   // CallKit answer persistence (iOS only)
+  takePendingCallKitAnswerIfMatches?(callId: string): Promise<boolean>;
   getPendingCallKitAnswer(): Promise<string | null>;
   clearPendingCallKitAnswer(): Promise<boolean>;
 
@@ -207,6 +208,14 @@ export class VoicePnBridge {
       console.error('VoicePnBridge: Error setting incoming call ringtone:', error);
       return false;
     }
+  }
+
+  static async takePendingCallKitAnswerIfMatches(callId: string): Promise<boolean> {
+    if (typeof NativeBridge?.takePendingCallKitAnswerIfMatches === 'function') {
+      return NativeBridge.takePendingCallKitAnswerIfMatches(callId);
+    }
+    const pending = await this.getPendingCallKitAnswer();
+    return pending?.toLowerCase() === callId.toLowerCase();
   }
 
   /**
