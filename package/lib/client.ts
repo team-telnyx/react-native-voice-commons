@@ -137,6 +137,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
   private pushGeneration = 0;
   private pushVoiceSDKId?: string;
   private pushConnection: Connection | null = null;
+  private pushInviteReserved = false;
 
   private clearPushContext(generation: number) {
     if (generation !== this.pushGeneration) return;
@@ -154,6 +155,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     this.pushNotificationCallKitUUID = null;
     this.pushVoiceSDKId = undefined;
     this.pushConnection = null;
+    this.pushInviteReserved = false;
   }
 
   constructor(opts: ClientOptions) {
@@ -817,21 +819,27 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     this.keepAliveHandler = new KeepAliveHandler(connection);
     this.keepAliveHandler.start();
 
-    const sessionId = await this.loginHandler.login(this.options, (id, voiceSDKId) => {
-      if (isCurrent()) {
-        this.sessionId = id;
-        this.confirmedSession = {
-          id,
-          voiceSDKId: typeof voiceSDKId === 'string' && voiceSDKId ? voiceSDKId : route,
-          pushGeneration: fromPush ? pushGeneration : undefined,
-        };
-      }
-    }, { fromPush, sessionId: recoverySessionId });
+    const registeredSession = await this.loginHandler.login(
+      this.options,
+      (id) => {
+        // ATTACH can arrive between the login reply and REGED.
+        if (isCurrent()) this.sessionId = id;
+      },
+      { fromPush, sessionId: recoverySessionId }
+    );
     this.throwIfConnectCanceled(connectionGeneration);
-    if (!sessionId) {
+    if (!registeredSession?.id) {
       throw new Error('Login failed. Please check your credentials and try again.');
     }
-    this.sessionId = sessionId;
+    this.sessionId = registeredSession.id;
+    this.confirmedSession = {
+      id: registeredSession.id,
+      voiceSDKId:
+        typeof registeredSession.voiceSDKId === 'string' && registeredSession.voiceSDKId
+          ? registeredSession.voiceSDKId
+          : route,
+      pushGeneration: fromPush ? pushGeneration : undefined,
+    };
 
     // Process any pending invite that arrived during login (matching iOS SDK behavior)
     if (this.pendingInvite) {
@@ -905,6 +913,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     this.connection = null;
     this.sessionId = null;
     this.pendingInvite = null;
+    this.pushInviteReserved = false;
     this.loginHandler?.cancelPendingLogin();
     this.loginHandler = null;
     this.keepAliveHandler?.stop();
@@ -1093,9 +1102,15 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
 
     const pushGeneration = this.pushGeneration;
     const connectionGeneration = this.connectionGeneration;
-    const pushPayload = this.isCallFromPush && this.pushConnection === this.connection
-      ? this.pushNotificationPayload
-      : null;
+    // Reserve the push before constructing the call. Keep its context visible
+    // to native action handlers until the owning INVITE finishes.
+    const ownsPush =
+      this.isCallFromPush &&
+      this.pushConnection === this.connection &&
+      !this.pushInviteReserved &&
+      (!this.pushNotificationCallKitUUID ||
+        !this.isCallKitUUIDOwnedByAnotherCall(this.pushNotificationCallKitUUID, msg.params.callID));
+    if (ownsPush) this.pushInviteReserved = true;
 
     // Check if we have SDP from invite or from a pending media event
     let remoteSDP = msg.params.sdp;
@@ -1119,7 +1134,7 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       incomingCall = await Call.createInboundCall({
         connection: this.connection!,
         remoteSDP,
-        pushCallKitUUID: pushPayload ? this.pushNotificationCallKitUUID : null,
+        pushCallKitUUID: ownsPush ? this.pushNotificationCallKitUUID : null,
         sessionId: this.sessionId!,
         callId: msg.params.callID,
         telnyxLegId: msg.params.telnyx_leg_id,
@@ -1142,7 +1157,9 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
       });
     } catch (error) {
       log.error('[TelnyxRTC] Failed to create inbound call:', error);
-      if (pushPayload) this.clearPushContext(pushGeneration);
+      if (ownsPush && connectionGeneration === this.connectionGeneration) {
+        this.clearPushContext(pushGeneration);
+      }
       return;
     }
 
@@ -1171,9 +1188,15 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
     // ringing screen for a call that's already dead.
     let rejectedByPushAction = false;
 
-    if (pushPayload && pushGeneration === this.pushGeneration) {
+    if (ownsPush && pushGeneration === this.pushGeneration) {
       const { from_notification, action } = this.pushNotificationPayload;
-      if (from_notification && action === 'answer') {
+      const callIdentity = this.getCallKitIdentity(incomingCall);
+      if (this.pendingAnswerActions.has(callIdentity)) {
+        void this.executePendingAnswer(incomingCall, callIdentity);
+      } else if (this.pendingEndActions.has(callIdentity)) {
+        this.executePendingEnd(incomingCall, callIdentity);
+        rejectedByPushAction = true;
+      } else if (from_notification && action === 'answer') {
         void incomingCall.answer().catch((error) => {
           log.error('[TelnyxRTC] Failed to answer from push notification:', error);
         });
@@ -1181,14 +1204,11 @@ export class TelnyxRTC extends EventEmitter<TelnyxRTCEvents> {
         incomingCall.hangup();
         rejectedByPushAction = true;
       } else {
-        const callIdentity = this.getCallKitIdentity(incomingCall);
         const legacyKey = TelnyxRTC.LEGACY_PENDING_ACTION_KEY;
-        const answerKey = this.pendingAnswerActions.has(callIdentity) ? callIdentity : legacyKey;
-        const endKey = this.pendingEndActions.has(callIdentity) ? callIdentity : legacyKey;
-        if (this.pendingAnswerActions.has(answerKey)) {
-          void this.executePendingAnswer(incomingCall, answerKey);
-        } else if (this.pendingEndActions.has(endKey)) {
-          this.executePendingEnd(incomingCall, endKey);
+        if (this.pendingAnswerActions.has(legacyKey)) {
+          void this.executePendingAnswer(incomingCall, legacyKey);
+        } else if (this.pendingEndActions.has(legacyKey)) {
+          this.executePendingEnd(incomingCall, legacyKey);
           rejectedByPushAction = true;
         }
       }

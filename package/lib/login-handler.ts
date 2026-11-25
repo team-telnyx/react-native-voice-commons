@@ -36,7 +36,7 @@ export class LoginHandler {
     options: ClientOptions,
     onSessionId?: (sessionId: string, voiceSDKId?: string) => void,
     { fromPush = false, sessionId }: { fromPush?: boolean; sessionId?: string } = {}
-  ): Promise<string | null> => {
+  ): Promise<{ id: string; voiceSDKId?: string } | null> => {
     const message = this.createLoginMessage(options, fromPush, sessionId);
     this.clientIsReady = createDeferredPromise<boolean>();
 
@@ -74,7 +74,14 @@ export class LoginHandler {
       log.warn('[LoginHandler] No call_report_id found in REGED params');
     }
 
-    return gatewayResponse.result.sessid;
+    const registeredRoute = gatewayResponse.voice_sdk_id;
+    return {
+      id: gatewayResponse.result.sessid,
+      voiceSDKId:
+        typeof registeredRoute === 'string' && registeredRoute
+          ? registeredRoute
+          : resp.voice_sdk_id,
+    };
   };
 
   public cancelPendingLogin(reason = 'Connection closed') {

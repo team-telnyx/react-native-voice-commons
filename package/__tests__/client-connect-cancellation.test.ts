@@ -53,17 +53,17 @@ describe('TelnyxRTC signaling ownership', () => {
     mockSocketReady = true;
     mockLogin = jest.fn(async (_options, confirm) => {
       confirm('confirmed-session', 'confirmed-route');
-      return 'registered-session';
+      return { id: 'registered-session', voiceSDKId: 'registered-route' };
     });
   });
 
   afterEach(() => jest.restoreAllMocks());
 
   it('publishes early session identity and ignores an old login completion after reconnect', async () => {
-    let finishLogin: (id: string) => void;
+    let finishLogin: (session: { id: string; voiceSDKId: string }) => void;
     mockLogin.mockImplementationOnce((_options, confirm) => {
       confirm('old-session', 'old-route');
-      return new Promise<string>((resolve) => {
+      return new Promise<{ id: string; voiceSDKId: string }>((resolve) => {
         finishLogin = resolve;
       });
     });
@@ -71,17 +71,36 @@ describe('TelnyxRTC signaling ownership', () => {
     const client = new TelnyxRTC({ login_token: 'test-token' });
     const stale = expect(client.connect()).rejects.toThrow('connection has been canceled');
     expect(client.sessionId).toBe('old-session');
+    const answerAttach = jest.fn().mockResolvedValue(undefined);
+    const createInboundCall = jest.spyOn(Call, 'createInboundCall').mockResolvedValueOnce({
+      callId: 'early-attach',
+      state: 'connecting',
+      answerAttach,
+      cancelRecovery: jest.fn(),
+      on: jest.fn(),
+    } as unknown as Call);
+    const reattached = jest.fn();
+    client.on('telnyx.call.reattached', reattached);
+    await socket(0).listeners('telnyx.socket.message')[0]({
+      method: 'telnyx_rtc.attach',
+      params: { callID: 'early-attach', sdp: 'sdp' },
+    });
+    expect(createInboundCall).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'old-session' })
+    );
+    expect(answerAttach).toHaveBeenCalledTimes(1);
+    expect(reattached).toHaveBeenCalledTimes(1);
 
     client.disconnect();
     await client.connect();
-    finishLogin('stale-session');
+    finishLogin({ id: 'stale-session', voiceSDKId: 'stale-route' });
     await stale;
     expect(client.sessionId).toBe('registered-session');
     expect(Connection).toHaveBeenLastCalledWith(undefined, undefined);
     expect(mockLogin.mock.calls[1][2]).toEqual({ fromPush: false, sessionId: undefined });
   });
 
-  it('recovers with the confirmed session and route on the same client and environment', async () => {
+  it('recovers with the REGED session and route on the same client and environment', async () => {
     const client = new TelnyxRTC({
       login: 'sip-user',
       password: 'test-password',
@@ -91,23 +110,26 @@ describe('TelnyxRTC signaling ownership', () => {
     (client as any).onNetworkUnavailable();
     await (client as any).attemptReconnection();
 
-    expect(Connection).toHaveBeenLastCalledWith('confirmed-route', 'development');
-    expect(mockLogin.mock.calls[1][2]).toEqual({ fromPush: false, sessionId: 'confirmed-session' });
+    expect(Connection).toHaveBeenLastCalledWith('registered-route', 'development');
+    expect(mockLogin.mock.calls[1][2]).toEqual({
+      fromPush: false,
+      sessionId: 'registered-session',
+    });
   });
 
   it('preserves a pending push route and answer across network recovery before INVITE', async () => {
     const client = new TelnyxRTC({ login_token: 'test-token' });
     mockLogin.mockImplementationOnce(async (_options, confirm) => {
       confirm('confirmed-session', 'push-route');
-      return 'registered-session';
+      return { id: 'registered-session', voiceSDKId: 'registered-push-route' };
     });
     client.processVoIPNotification(push('a', 'push-route'));
     await client.connect();
     (client as any).onNetworkUnavailable();
     await (client as any).attemptReconnection();
 
-    expect(Connection).toHaveBeenLastCalledWith('push-route', undefined);
-    expect(mockLogin.mock.calls[1][2]).toEqual({ fromPush: true, sessionId: 'confirmed-session' });
+    expect(Connection).toHaveBeenLastCalledWith('registered-push-route', undefined);
+    expect(mockLogin.mock.calls[1][2]).toEqual({ fromPush: true, sessionId: 'registered-session' });
     expect(client.getPushNotificationCallKitUUID()).toBe('a');
   });
 
@@ -129,6 +151,65 @@ describe('TelnyxRTC signaling ownership', () => {
     expect(mockLogin.mock.calls[0][2]).toEqual({ fromPush: true, sessionId: undefined });
     expect(client.getPushNotificationCallKitUUID()).toBe('b');
   });
+
+  it.each(['answer', 'end'])(
+    'reserves the push UUID for one concurrent INVITE and routes a late %s to its owner',
+    async (action) => {
+      const client = new TelnyxRTC({ login_token: 'test-token' });
+      let finishPushCall: () => void;
+      const pushCallPending = new Promise<void>((resolve) => {
+        finishPushCall = resolve;
+      });
+      const createInboundCall = Call.createInboundCall;
+      jest.spyOn(Call, 'createInboundCall').mockImplementation(async (options) => {
+        const call = await createInboundCall(options);
+        jest.spyOn(call, 'answer').mockResolvedValue(undefined);
+        jest.spyOn(call, 'hangup').mockImplementation(() => {});
+        if (options.callId === 'push-signaling-id') await pushCallPending;
+        return call;
+      });
+      const incoming = jest.fn();
+      client.on('telnyx.call.incoming', incoming);
+      client.processVoIPNotification(push('native-uuid', 'push-route'));
+      await client.connect();
+
+      const invite = (callID: string) =>
+        socket(0).listeners('telnyx.socket.message')[0]({
+          method: 'telnyx_rtc.invite',
+          params: { callID, sdp: 'sdp' },
+        });
+      const pushInvite = invite('push-signaling-id');
+      await invite('other-signaling-id');
+      expect(client.getCall('push-signaling-id')).toBeNull();
+      expect(client.getPushNotificationCallKitUUID()).toBe('native-uuid');
+      if (action === 'answer') {
+        client.queueAnswerFromCallKit('NATIVE-UUID', { 'X-Test': 'late' });
+      } else {
+        client.queueEndFromCallKit('NATIVE-UUID');
+      }
+      finishPushCall();
+      await pushInvite;
+
+      const owner = client.getCall('push-signaling-id');
+      const other = client.getCall('other-signaling-id');
+      expect((owner as any)._callKitUUID).toBe('native-uuid');
+      expect(other).not.toBeNull();
+      expect((other as any)._callKitUUID).toBeUndefined();
+      expect(client.getPushNotificationCallKitUUID()).toBeNull();
+      expect(other.answer).not.toHaveBeenCalled();
+      expect(other.hangup).not.toHaveBeenCalled();
+      if (action === 'answer') {
+        expect(owner.answer).toHaveBeenCalledTimes(1);
+        expect(owner.answer).toHaveBeenCalledWith([{ name: 'X-Test', value: 'late' }]);
+        expect(owner.hangup).not.toHaveBeenCalled();
+        expect(incoming).toHaveBeenCalledTimes(2);
+      } else {
+        expect(owner.hangup).toHaveBeenCalledTimes(1);
+        expect(owner.answer).not.toHaveBeenCalled();
+        expect(incoming.mock.calls.map(([call]) => call)).toEqual([other]);
+      }
+    }
+  );
 
   it('consumes notification answer for its INVITE, and an asynchronous answer failure leaves the next push intact', async () => {
     const client = new TelnyxRTC({ login_token: 'test-token' });
