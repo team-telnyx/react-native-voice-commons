@@ -291,7 +291,9 @@ class TelnyxNotificationHelper(private val context: Context) {
 
     private fun clearFallbackPushAction(callId: String) {
         try {
-            VoicePnManager.clearPendingPushAction(context)
+            // Clear only this call's flow so a push that arrived after the fallback
+            // launch kept its own metadata.
+            VoicePnManager.clearPendingPushActionForCall(context, callId)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to clear preserved incoming-call metadata after fallback launch failure for call: $callId", e)
         }

@@ -28,19 +28,46 @@ class VoicePnBridgeModule(reactContext: ReactApplicationContext) : ReactContextB
     fun getPendingPushAction(promise: Promise) {
         try {
             val (action, metadata) = VoicePnManager.getPendingPushAction(reactApplicationContext)
+            val callId = VoicePnManager.getPendingPushActionCallId(reactApplicationContext)
             
-            Log.d(TAG, "Retrieved pending action: '$action'")
+            Log.d(TAG, "Retrieved pending action: '$action' for callId: '$callId'")
             Log.d(TAG, "Retrieved metadata: '$metadata'")
             Log.d(TAG, "Metadata length: ${metadata?.length ?: 0}")
             
             val result = Arguments.createMap()
             result.putString("action", action)
             result.putString("metadata", metadata)
+            result.putString("callId", callId)
             
             promise.resolve(result)
         } catch (e: Exception) {
             Log.e(TAG, "Error getting pending push action", e)
             promise.reject("GET_PENDING_PUSH_ACTION_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * React Native → Android: Get the retained push flow owned by a specific call.
+     * Unlike a global read, this never returns another call's metadata.
+     */
+    @ReactMethod
+    fun getPendingPushActionForCall(callId: String, promise: Promise) {
+        try {
+            val (action, metadata) = VoicePnManager.getPendingPushAction(
+                reactApplicationContext,
+                callId
+            )
+            Log.d(TAG, "Retrieved pending action: '$action' for callId: '$callId'")
+
+            val result = Arguments.createMap()
+            result.putString("action", action)
+            result.putString("metadata", metadata)
+            result.putString("callId", callId)
+
+            promise.resolve(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting pending push action for call", e)
+            promise.reject("GET_PENDING_PUSH_ACTION_FOR_CALL_ERROR", e.message, e)
         }
     }
     
@@ -55,6 +82,26 @@ class VoicePnBridgeModule(reactContext: ReactApplicationContext) : ReactContextB
             promise.reject("SET_PENDING_PUSH_ACTION_ERROR", e.message, e)
         }
     }
+
+    /**
+     * React Native → Android: Retain a push action with the call that owns it.
+     */
+    @ReactMethod
+    fun setPendingPushActionForCall(
+        action: String,
+        metadata: String,
+        callId: String,
+        promise: Promise
+    ) {
+        try {
+            Log.d(TAG, "Setting pending push action: '$action' for callId: '$callId'")
+            VoicePnManager.setPendingPushAction(reactApplicationContext, action, metadata, callId)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting pending push action for call", e)
+            promise.reject("SET_PENDING_PUSH_ACTION_FOR_CALL_ERROR", e.message, e)
+        }
+    }
     
     @ReactMethod
     fun clearPendingPushAction(promise: Promise) {
@@ -63,6 +110,33 @@ class VoicePnBridgeModule(reactContext: ReactApplicationContext) : ReactContextB
             promise.resolve(result)
         } catch (e: Exception) {
             promise.reject("CLEAR_PENDING_PUSH_ACTION_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * React Native → Android: Clear only the push flow owned by a specific call.
+     */
+    @ReactMethod
+    fun clearPendingPushActionForCall(callId: String, promise: Promise) {
+        try {
+            val result = VoicePnManager.clearPendingPushActionForCall(
+                reactApplicationContext,
+                callId
+            )
+            promise.resolve(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing pending push action for call", e)
+            promise.reject("CLEAR_PENDING_PUSH_ACTION_FOR_CALL_ERROR", e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun getPendingPushActionCallId(promise: Promise) {
+        try {
+            promise.resolve(VoicePnManager.getPendingPushActionCallId(reactApplicationContext))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting pending push action call id", e)
+            promise.reject("GET_PENDING_PUSH_CALL_ID_ERROR", e.message, e)
         }
     }
 
@@ -111,6 +185,13 @@ class VoicePnBridgeModule(reactContext: ReactApplicationContext) : ReactContextB
         try {
             Log.d(TAG, "endCall called from React Native for callId: $callId")
             
+            // The call ended: its push flow is complete, so its metadata must not
+            // be available to a later fresh login. Scoped by call id so another
+            // still-active push keeps its own state.
+            if (callId != null) {
+                VoicePnManager.clearPendingPushActionForCall(reactApplicationContext, callId)
+            }
+
             // Hide any ongoing call notification and stop the foreground service
             TelnyxNotificationHelper.hideOngoingCallNotificationFromContext(reactApplicationContext)
             
